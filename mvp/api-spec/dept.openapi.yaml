@@ -1,0 +1,361 @@
+# OpenAPI 3.1 片段 —— 部门管理
+# 与 packages/contracts/src/schemas/dept.ts 1:1 对齐（手工对齐，MVP 不装 zod-to-openapi）。
+# 字段名、类型、约束、枚举值、必填项均与 Zod schema 一致；变更须同步两处 + Tech-Spec + errors.ts。
+# 错误码 ErrorCode 对齐 user.ts 的 errorCodeSchema（全局 SSOT，含跨域 user/role/dept 码）。
+# PermissionCode 对齐 role.ts 的 permissionCodeSchema（已含 dept:read/dept:write 跨域扩展）。
+# 跨域说明：User schema（PATCH 归属的响应）镜像 user.ts 的 userSchema（含 department_id 联动字段）。
+# 引用 Tech-Spec: TECH-DEPT-001 / PRD-DEPT-001
+openapi: 3.1.0
+info:
+  title: Admin Department API
+  version: 0.1.0
+  description: 部门管理 API 片段（部门树 / 新建 / 删除 / 维护用户部门归属）。查看类需 dept:read，变更类需 dept:write（SEC-001 默认受保护；SEC-002 service 层 requirePermission）。
+servers:
+  - url: /v1
+    description: 本地 / 默认前缀
+
+paths:
+  /departments/tree:
+    get:
+      operationId: getDepartmentTree
+      summary: 查看部门树（F2，树形结构，无分页）
+      tags: [dept]
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: 部门树查询成功；无任何部门时 items 为空数组（F2 验收）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentTreeResult'
+        '401':
+          description: 未认证（UNAUTHORIZED，SEC-001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 dept:read，SEC-002）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /departments:
+    post:
+      operationId: createDepartment
+      summary: 新建部门（F1，同父下名称唯一 Q3，层级上限 3 Q4）
+      tags: [dept]
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentInput'
+      responses:
+        '201':
+          description: 创建成功；id/created_at 由服务端生成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，如 name 空/超 64、parent_id 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 dept:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 父部门不存在（DEPT_NOT_FOUND，parent_id 合法但无记录）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 创建子部门将超过最大层级 3（DEPT_DEPTH_EXCEEDED，Q4）或同父下名称已存在（DEPT_NAME_DUPLICATE，Q3）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /departments/{id}:
+    delete:
+      operationId: deleteDepartment
+      summary: 删除部门（F3，禁止级联删子部门 Q2；其下用户解除归属 Q1）
+      tags: [dept]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 部门 ID（z.string().uuid()）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 删除成功，无 body；若该部门下有归属用户，其 department_id 被置空（Q1 解除归属，账号保留）
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，id 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 dept:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 部门不存在（DEPT_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 待删部门仍有子部门（DEPT_HAS_CHILDREN，Q2 禁止级联，须先清空子部门）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/department:
+    patch:
+      operationId: assignUserDepartment
+      summary: 维护用户部门归属（F4，分配/变更/解除；一个用户仅属一个部门）
+      tags: [dept]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: userId
+          in: path
+          description: 用户 ID（z.string().uuid()）。对应契约 assignUserDepartmentInputSchema.userId（path+body 合并）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignUserDepartmentRequestBody'
+      responses:
+        '200':
+          description: 归属维护成功，返回更新后的用户（含 department_id，对齐 userSchema）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，userId/departmentId 非 uuid 且非 null）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 dept:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在（USER_NOT_FOUND）或部门不存在（DEPT_NOT_FOUND，departmentId 非 null 但无记录）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员凭证（SEC-001 默认受保护路由）。本期 MVP 鉴权桩：ctx.user.role==='admin' 视为具备 dept:read+dept:write（admin 角色持全部权限码，Q4）；非 admin → FORBIDDEN。dept:read/dept:write 端到端区分待 Auth 模块富化 Ctx。
+  schemas:
+    PermissionCode:
+      type: string
+      description: 权限码枚举（对齐 permissionCodeSchema，Q2 决策固定枚举）。dept:read/dept:write 为 TECH-DEPT-001 跨域扩展。
+      enum: [user:read, user:write, role:read, role:write, dept:read, dept:write]
+
+    Department:
+      type: object
+      description: 部门实体（对齐 departmentSchema，带 .strict()）。字段 snake_case 与 DB schema 一致。name/parent_id 创建后不可编辑（Q6）。
+      required: [id, name, parent_id, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: z.string().uuid()
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: z.string().min(1).max(64)，同父下唯一（Q3）
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+          description: z.string().uuid().nullable()，null=根部门（第 1 层）
+        created_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，ISO 8601
+
+    CreateDepartmentInput:
+      type: object
+      description: 新建部门入参（对齐 createDepartmentInputSchema，带 .strict()）。id/created_at 由服务端生成，不入输入。parent_id 缺省/null 表示根部门。
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: z.string().min(1).max(64)
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+          description: z.string().uuid().nullable().optional()，缺省/null=根部门（第 1 层）
+
+    DepartmentTreeNode:
+      type: object
+      description: 部门树节点（对齐 departmentTreeNodeSchema，递归，带 .strict()）。children 为直接子部门，叶节点为空数组。
+      required: [id, name, parent_id, created_at, children]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        children:
+          type: array
+          description: z.array(z.lazy(() => departmentTreeNodeSchema))，直接子部门节点
+          items:
+            $ref: '#/components/schemas/DepartmentTreeNode'
+
+    DepartmentTreeResult:
+      type: object
+      description: 部门树查询结果（对齐 departmentTreeResultSchema，带 .strict()）。items 为根部门（parent_id=null）构成的树数组；无部门时为空数组。
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentTreeNode'
+
+    AssignUserDepartmentRequestBody:
+      type: object
+      description: 维护用户部门归属请求体（对应契约 assignUserDepartmentInputSchema 的 body 部分；userId 由 path 提供，契约 AssignUserDepartmentInput = path userId + body departmentId 合并）。departmentId=null 表示解除归属。
+      required: [departmentId]
+      additionalProperties: false
+      properties:
+        departmentId:
+          type: [string, "null"]
+          format: uuid
+          description: z.string().uuid().nullable()（assignUserDepartmentInputSchema.departmentId）；null=解除归属
+
+    User:
+      type: object
+      description: 用户实体（跨域镜像 user.ts 的 userSchema，带 .strict()）。department_id 为 TECH-DEPT-001 联动字段，可空（未归属部门）。仅 PATCH 归属端点返回此 schema。
+      required: [id, name, email, status, created_at, updated_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, disabled]
+          description: userStatusSchema
+        department_id:
+          type: [string, "null"]
+          format: uuid
+          description: z.string().uuid().nullable().optional()，跨域联动字段；null=未归属部门
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorCode:
+      type: string
+      description: 错误码枚举（对齐 errorCodeSchema 全局 SSOT，含 user/role/dept 跨域码）。与 Tech-Spec §边界与异常 一一对应。DEPT_HAS_USERS 为预留码本期不触发（Q1 解除归属）。
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - USER_NOT_FOUND
+        - USER_EMAIL_DUPLICATE
+        - USER_DISABLE_SELF_FORBIDDEN
+        - USER_ALREADY_DISABLED
+        - USER_ALREADY_ACTIVE
+        - ROLE_NOT_FOUND
+        - ROLE_NAME_DUPLICATE
+        - ROLE_BUILTIN_FORBIDDEN
+        - ROLE_IN_USE
+        - USER_ROLE_ALREADY_ASSIGNED
+        - DEPT_NOT_FOUND
+        - DEPT_NAME_DUPLICATE
+        - DEPT_HAS_CHILDREN
+        - DEPT_HAS_USERS
+        - DEPT_DEPTH_EXCEEDED
+
+    ErrorResponse:
+      type: object
+      description: 统一错误响应（对齐 errorResponseSchema）。
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 人类可读错误描述（含字段级 detail）

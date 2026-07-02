@@ -6,7 +6,7 @@ alwaysApply: true
 ## SEC-003a · 响应不返回未声明 PII
 - 触发条件：API 响应序列化时。
 - 期望行为：响应体字段必须与 contracts 中声明的输出 schema 1:1；输出 schema 须 `.strict()` 拒绝多余字段；禁止返回密码/角色/部门等未声明字段。
-- 校验方式：契约测用 `outputSchema.parse(response)` 断言不抛 + `outputSchema.strict()` 校验多余字段被拒；`scripts/check-rules.mjs` 扫描 contracts 输出 schema 是否带 `.strict()`。
+- 校验方式：契约测用 `outputSchema.parse(response)` 断言不抛 + `outputSchema.strict()` 校验多余字段被拒；`scripts/check-rules.mjs` SEC-003a 分支扫描 contracts 输出 schema 是否带 `.strict()`。
 
 ## SEC-003b · 错误消息与日志的 PII 边界
 - 触发条件：抛出错误消息或写日志时。

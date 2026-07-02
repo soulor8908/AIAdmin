@@ -16,7 +16,10 @@ export type UserStatus = z.infer<typeof userStatusSchema>;
 
 /**
  * 用户实体：DB users 表行的契约投影。
- * 字段命名沿用 snake_case 以与 DB schema 对齐（created_at / updated_at）。
+ * 字段命名沿用 snake_case 以与 DB schema 对齐（created_at / updated_at / department_id）。
+ * [约束] department_id 为跨域联动字段（TECH-DEPT-001 引入）：可空，空表示用户未归属任何部门；
+ *        一个用户至多归属一个部门（PRD-DEPT-001 F4 / 跨域依赖）。createUserInputSchema 不含此字段
+ *        （创建时不指定部门，默认未归属），归属维护经 PATCH /v1/users/{userId}/department（dept 域）。
  */
 export const userSchema = z
   .object({
@@ -24,6 +27,7 @@ export const userSchema = z
     name: z.string().min(1),
     email: z.string().email(),
     status: userStatusSchema,
+    department_id: z.string().uuid().nullable().optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
   })
@@ -116,6 +120,18 @@ export const errorCodeSchema = z.enum([
   'ROLE_IN_USE',
   // 用户已持有该角色，重复分配（F4：已持有此角色）
   'USER_ROLE_ALREADY_ASSIGNED',
+  // ===== 部门域（TECH-DEPT-001）=====
+  // 目标部门不存在（F1 父部门校验 / F3 删除 / F4 归属：department_id 合法但无记录）
+  'DEPT_NOT_FOUND',
+  // 同父下部门名称重复（F1 创建：Q3 同父唯一约束）
+  'DEPT_NAME_DUPLICATE',
+  // 待删部门仍有子部门（F3 删除：Q2 禁止级联，须先清空子部门）
+  'DEPT_HAS_CHILDREN',
+  // [advisory] 预留码——删除部门时其下仍有归属用户。本期 Q1 决策为「解除归属」（置空而非阻断），
+  //            故删除路径不抛此码；保留以备未来「严格删除模式」或显式阻断场景，service 层本期不抛出。
+  'DEPT_HAS_USERS',
+  // 创建子部门将超过最大层级 3（F1：Q4 层级上限，按父部门链路推导）
+  'DEPT_DEPTH_EXCEEDED',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

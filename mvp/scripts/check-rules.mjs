@@ -1,8 +1,8 @@
-// scripts/check-rules.mjs —— MVP 规则自动校验脚本（复盘 P0 补强版）
-// 落实"规则可机器校验"原则 + META-001 元约束。
-// 覆盖：ARCH-001(扩面)/ARCH-002/CODE-001/CODE-002(增强)/CODE-003(增强)/CODE-004(新增)/SEC-003a/META-001
+// scripts/check-rules.mjs —— MVP 规则自动校验脚本（第三轮：META-003/004 双向绑定）
+// 落实"规则可机器校验"原则 + META-001/003/004 元约束。
+// 每个 enforcement 分支以 `// === XXX-NNN ===` 注释标记，META-004 据此与规则文档双向绑定。
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const errors = [];
@@ -25,13 +25,19 @@ const allTs = [
   ...walk(join(ROOT, 'apps/api/test')),
 ];
 
+// 记录本脚本内所有 enforcement 分支的规则 ID（供 META-004 反向缺口校验）
+const SCRIPT_ENFORCEMENT_IDS = new Set();
+function markEnforcement(id) {
+  SCRIPT_ENFORCEMENT_IDS.add(id);
+}
+
 // ============ ARCH-001 扩面：四层反向依赖 ============
-// 层级表：目录 → 禁止 import 的更高层路径片段
+markEnforcement('ARCH-001');
 const LAYER_RULES = {
   domain: ['service', 'repository', 'router', 'controller'],
   repository: ['service', 'router', 'controller'],
   service: ['router', 'controller'],
-  router: [], // router 是最高层
+  router: [],
 };
 function layerOf(filePath) {
   const m = filePath.match(/apps\/api\/src\/(domain|repository|service|router)\b/);
@@ -43,7 +49,6 @@ for (const f of allTs) {
   const forbidden = LAYER_RULES[layer] || [];
   const src = readFileSync(f, 'utf8');
   for (const upper of forbidden) {
-    // 匹配相对路径 import 上层，或 @admin/api 包内上层
     const re = new RegExp(`from\\s+['"](?:\\.\\./)+${upper}(/|['"])`);
     if (re.test(src)) {
       errors.push(`ARCH-001 违规：${rel(f)}（${layer}）反向 import 了上层 ${upper}`);
@@ -52,6 +57,7 @@ for (const f of allTs) {
 }
 
 // ============ ARCH-002：contracts 纯净 ============
+markEnforcement('ARCH-002');
 for (const f of allTs) {
   if (!rel(f).startsWith('packages/contracts/')) continue;
   const src = readFileSync(f, 'utf8');
@@ -61,6 +67,7 @@ for (const f of allTs) {
 }
 
 // ============ CODE-001：禁止 any ============
+markEnforcement('CODE-001');
 for (const f of allTs) {
   const src = readFileSync(f, 'utf8');
   if (/: any\b/.test(src) || /as any\b/.test(src)) {
@@ -69,13 +76,12 @@ for (const f of allTs) {
 }
 
 // ============ CODE-002 增强：空 catch + 仅 console catch ============
+markEnforcement('CODE-002');
 for (const f of allTs) {
   const src = readFileSync(f, 'utf8');
-  // 空 catch
   if (/catch\s*\([^)]*\)\s*\{\s*\}/.test(src)) {
     errors.push(`CODE-002 违规：${rel(f)} 存在空 catch（吞错）`);
   }
-  // 仅含 console 的 catch（多行容忍）
   const consoleCatch = /catch\s*\([^)]*\)\s*\{\s*console\.[^}]*\}/s;
   if (consoleCatch.test(src)) {
     errors.push(`CODE-002 违规：${rel(f)} catch 仅含 console（吞错）`);
@@ -83,6 +89,7 @@ for (const f of allTs) {
 }
 
 // ============ CODE-003 增强：eval + new Function + 裸 Function( ============
+markEnforcement('CODE-003');
 for (const f of allTs) {
   const src = readFileSync(f, 'utf8');
   if (/\beval\s*\(/.test(src)) {
@@ -93,8 +100,8 @@ for (const f of allTs) {
   }
 }
 
-// ============ CODE-004 新增：Zod schema 命名后缀 ============
-// 匹配 export const xxx = z.(object|enum|array|tuple|union|intersection|record)...
+// ============ CODE-004：Zod schema 命名后缀 ============
+markEnforcement('CODE-004');
 const SCHEMA_DECL_RE =
   /export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*z\.(object|enum|array|tuple|union|intersection|record|discriminatedUnion|lazy)\b/g;
 for (const f of allTs) {
@@ -108,12 +115,54 @@ for (const f of allTs) {
   }
 }
 
+// ============ SEC-001：procedure 必须声明 auth 元数据 ============
+markEnforcement('SEC-001');
+for (const f of allTs) {
+  if (!rel(f).startsWith('apps/api/src/router/')) continue;
+  const src = readFileSync(f, 'utf8');
+  const blockRe = /\{[^{}]*input:[^{}]*handler:[^{}]*\}/gs;
+  let m;
+  while ((m = blockRe.exec(src)) !== null) {
+    const block = m[0];
+    if (!/\bauth\s*:/.test(block)) {
+      const upto = src.slice(0, m.index);
+      const line = upto.split('\n').length;
+      errors.push(`SEC-001 违规：${rel(f)}:${line} procedure 对象缺少 auth 元数据`);
+    }
+  }
+}
+
+// ============ SEC-002：service public 方法须调 requireAdmin/requirePermission ============
+markEnforcement('SEC-002');
+for (const f of allTs) {
+  if (!rel(f).startsWith('apps/api/src/service/')) continue;
+  const src = readFileSync(f, 'utf8');
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const KW = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'constructor', 'static']);
+    const methodRe = /^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*[:{]/;
+    const m = methodRe.exec(line);
+    if (!m) continue;
+    const name = m[1];
+    if (KW.has(name)) continue;
+    if (/private|#/.test(line)) continue;
+    let body = '';
+    for (let j = i; j < Math.min(i + 40, lines.length); j++) {
+      body += lines[j] + '\n';
+      if (j > i && /^\s*(?:async\s+)?\w+\s*\([^)]*\)\s*[:{]/.test(lines[j])) break;
+    }
+    if (!/requireAdmin|requirePermission/.test(body)) {
+      errors.push(`SEC-002 违规：${rel(f)}:${i + 1} service 方法 ${name}() 未调用 requireAdmin/requirePermission`);
+    }
+  }
+}
+
 // ============ SEC-003a：输出 schema 须 .strict() ============
-// 仅检查 contracts 中名为 xxxResultSchema / xxxResponseSchema 的输出 schema 定义块
+markEnforcement('SEC-003a');
 for (const f of allTs) {
   if (!rel(f).startsWith('packages/contracts/')) continue;
   const src = readFileSync(f, 'utf8');
-  // 找 export const xxxResultSchema = z.object({...}) 然后检查同行/下两行是否有 .strict()
   const outSchemaRe =
     /export\s+const\s+(\w*(Result|Response)\w*Schema)\s*=\s*z\.object\([^)]*\)(\s*\.\s*\w+)*/gs;
   let m;
@@ -125,57 +174,10 @@ for (const f of allTs) {
   }
 }
 
-// ============ SEC-001：procedure 必须声明 auth 元数据 ============
-for (const f of allTs) {
-  if (!rel(f).startsWith('apps/api/src/router/')) continue;
-  const src = readFileSync(f, 'utf8');
-  // 匹配 procedure 对象字面量：{ input: ..., handler: ..., } 形式
-  // 简化策略：找 handler: 紧邻的对象块，检查同对象内是否含 auth:
-  const procRe = /\{\s*input:\s*[^,]+,\s*handler:\s*[^,}]+,\s*\}/gs;
-  // 上面匹配不含 auth 的三键对象；改用反向逻辑：找所有 procedure 对象块，逐块检查 auth
-  const blockRe = /\{[^{}]*input:[^{}]*handler:[^{}]*\}/gs;
-  let m;
-  while ((m = blockRe.exec(src)) !== null) {
-    const block = m[0];
-    if (!/\bauth\s*:/.test(block)) {
-      // 定位行号
-      const upto = src.slice(0, m.index);
-      const line = upto.split('\n').length;
-      errors.push(`SEC-001 违规：${rel(f)}:${line} procedure 对象缺少 auth 元数据`);
-    }
-  }
-}
-
-// ============ SEC-002：service public 方法须调 requireAdmin/requirePermission ============
-for (const f of allTs) {
-  if (!rel(f).startsWith('apps/api/src/service/')) continue;
-  const src = readFileSync(f, 'utf8');
-  const lines = src.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // 匹配 public 方法定义（async methodName(...) 或 methodName(...)），排除关键字与 private/#
-    const KW = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'constructor', 'static']);
-    const methodRe = /^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*[:{]/;
-    const m = methodRe.exec(line);
-    if (!m) continue;
-    const name = m[1];
-    if (KW.has(name)) continue;
-    // 私有方法豁免：上一行或同行含 private 或方法名以 # 开头
-    if (/private|#/.test(line)) continue;
-    // 取方法体（到下一个顶层方法定义或类结束），简化为向下扫描 40 行
-    let body = '';
-    for (let j = i; j < Math.min(i + 40, lines.length); j++) {
-      body += lines[j] + '\n';
-      // 遇到下一个方法定义则停
-      if (j > i && /^\s*(?:async\s+)?\w+\s*\([^)]*\)\s*[:{]/.test(lines[j])) break;
-    }
-    if (!/requireAdmin|requirePermission/.test(body)) {
-      errors.push(`SEC-002 违规：${rel(f)}:${i + 1} service 方法 ${name}() 未调用 requireAdmin/requirePermission`);
-    }
-  }
-}
-
-// ============ META-001：规则文件必须有可机器校验方式 ============
+// ============ META-001/003/004：规则文档与脚本双向绑定 ============
+markEnforcement('META-001');
+markEnforcement('META-003');
+markEnforcement('META-004');
 function walkMd(dir, acc = []) {
   if (!existsSync(dir)) return acc;
   for (const name of readdirSync(dir)) {
@@ -187,22 +189,52 @@ function walkMd(dir, acc = []) {
 }
 const ruleFiles = walkMd(join(ROOT, '.trae/rules'));
 const META_KW = /check-rules|tsc|eslint|vitest|ci|pino|git\s+diff|契约测|编排者实跑|扫描|diff|Reviewer subagent|pre-commit/i;
+
+// 收集规则文档中所有规则 ID，以及"声称用 check-rules.mjs 校验"的规则 ID
+const ALL_DOC_RULE_IDS = new Set();
+const DOC_CLAIMS_CHECKRULES = new Set(); // 校验方式段含 check-rules.mjs 的规则 ID
 for (const f of ruleFiles) {
   const src = readFileSync(f, 'utf8');
-  // 提取每个 ## XXX-NNN 规则块
   const blocks = src.split(/\n##\s+/).slice(1);
   for (const block of blocks) {
-    const idMatch = block.match(/^([A-Z]+-\d+)/);
+    // 规则 ID 支持字母后缀，如 SEC-003a / SEC-003b
+    const idMatch = block.match(/^([A-Z]+-\d+[a-z]?)/);
     if (!idMatch) continue;
     const id = idMatch[1];
-    // META-001/META-002 自身豁免（它们校验的就是自己）
-    if (id.startsWith('META-')) continue;
-    if (!META_KW.test(block)) {
-      errors.push(`META-001 违规：规则 ${id}（${rel(f)}）"校验方式"段无机器校验关键词`);
-    }
+    ALL_DOC_RULE_IDS.add(id);
+    // META-001：校验方式段须含机器校验关键词
+    if (id.startsWith('META-')) continue; // META 自身豁免 META-001 关键词检查
     if (!/校验方式/.test(block)) {
       errors.push(`META-001 违规：规则 ${id}（${rel(f)}）缺少"校验方式"段`);
+    } else if (!META_KW.test(block)) {
+      errors.push(`META-001 违规：规则 ${id}（${rel(f)}）"校验方式"段无机器校验关键词`);
     }
+    // META-003：若校验方式段声称由 check-rules.mjs 专属分支校验，记录以供差集。
+    // 精确模式：校验方式段含 "`scripts/check-rules.mjs` <RULE-ID> 分支" 或以 `scripts/check-rules.mjs` 为主语扫描。
+    // 排除：仅"在 check-rules.mjs 新增分支""由 CI 执行 check-rules.mjs 整体"等非专属分支声明。
+    const verifySection = block.split(/校验方式/)[1] || '';
+    // 精确模式：校验方式段含 "check-rules.mjs ... <ID> ... 分支"（容忍反引号/空格）。
+    // 排除：仅"在 check-rules.mjs 新增分支""由 CI 执行 check-rules.mjs 整体"等非专属分支声明。
+    const claimsExclusive = new RegExp(
+      `check-rules\\.mjs[^\\n]*?\\b${id}\\b[^\\n]*?分支`
+    ).test(verifySection);
+    if (claimsExclusive) {
+      DOC_CLAIMS_CHECKRULES.add(id);
+    }
+  }
+}
+
+// META-003：声明漂移 —— 规则文档声称用 check-rules.mjs，但脚本无对应 enforcement 分支
+for (const id of DOC_CLAIMS_CHECKRULES) {
+  if (!SCRIPT_ENFORCEMENT_IDS.has(id)) {
+    errors.push(`META-003 声明漂移：规则 ${id} 校验方式声称用 check-rules.mjs，但脚本无 // === ${id} === enforcement 分支`);
+  }
+}
+
+// META-004：反向缺口 —— 脚本有 enforcement 分支，但规则文档无对应规则 ID
+for (const id of SCRIPT_ENFORCEMENT_IDS) {
+  if (!ALL_DOC_RULE_IDS.has(id)) {
+    errors.push(`META-004 反向缺口：脚本有 // === ${id} === enforcement 分支，但 .trae/rules 无对应规则文档`);
   }
 }
 
@@ -218,6 +250,7 @@ if (errors.length) {
   process.exit(1);
 } else {
   console.log('✅ 规则校验通过');
-  console.log('   覆盖：ARCH-001(四层)/ARCH-002/CODE-001/CODE-002(空+console)/CODE-003(eval+Function)/CODE-004(schema后缀)/SEC-001(auth元数据)/SEC-002(service权限)/SEC-003a(strict)/META-001(元约束)');
+  console.log('   enforcement 覆盖：' + [...SCRIPT_ENFORCEMENT_IDS].sort().join('/'));
+  console.log('   双向绑定：META-003(声明即实现) + META-004(实现即声明) 已校验');
   if (warnings.length) console.log(`   另有 ${warnings.length} 条建议`);
 }

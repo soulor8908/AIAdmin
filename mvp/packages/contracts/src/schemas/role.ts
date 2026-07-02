@@ -8,15 +8,19 @@
 import { z } from 'zod';
 
 /**
- * 权限码枚举（Q2 决策：固定枚举，当前 4 项）。
+ * 权限码枚举（Q2 决策：固定枚举）。
  * [约束] 创建角色时对 permission_codes 逐项校验，未知码拒绝 → VALIDATION_ERROR。
  * [约束] 后续新增模块时随对应 PRD 扩展该枚举；内置 admin 权限范围随枚举扩展自动覆盖（Q4）。
+ * [约束] dept:read / dept:write 为跨域联动扩展（TECH-DEPT-001 引入）：dept:read 查看部门树，
+ *        dept:write 创建/删除部门及维护用户归属。内置 admin 随枚举扩展自动覆盖这两个码。
  */
 export const permissionCodeSchema = z.enum([
   'user:read',
   'user:write',
   'role:read',
   'role:write',
+  'dept:read',
+  'dept:write',
 ]);
 export type PermissionCode = z.infer<typeof permissionCodeSchema>;
 
