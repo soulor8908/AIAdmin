@@ -126,8 +126,8 @@ describe('单测 · domain 常量', () => {
     expect(BUILTIN_ADMIN_ROLE_NAME).toBe('admin');
   });
 
-  it('ALL_PERMISSION_CODES 包含全部 4 个权限码', () => {
-    expect(ALL_PERMISSION_CODES).toEqual(['user:read', 'user:write', 'role:read', 'role:write']);
+  it('ALL_PERMISSION_CODES 包含全部 6 个权限码', () => {
+    expect(ALL_PERMISSION_CODES).toEqual(['user:read', 'user:write', 'role:read', 'role:write', 'dept:read', 'dept:write']);
   });
 });
 

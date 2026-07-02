@@ -14,11 +14,11 @@ alwaysApply: true
 - 校验方式：CI 检测 rules 与 check-rules.mjs 的同 PR 改动关联。
 
 ## META-003 · 声明即实现（无声明漂移）
-- 触发条件：规则文档"校验方式"段声称由 `check-rules.mjs` 校验时。
-- 期望行为：若规则文档的校验方式段含 `check-rules.mjs` 关键词，则 `scripts/check-rules.mjs` 中必须存在以该规则 ID 标记的 enforcement 分支（注释形如 `// === XXX-NNN ===` 或 `// XXX-NNN`）。声称有校验但脚本无对应分支 = 声明漂移，报错。
-- 校验方式：`scripts/check-rules.mjs` META-003 分支提取所有"校验方式段含 check-rules.mjs"的规则 ID，与脚本内 `// === (\w+-\d+) ===` 注释集合做差集；规则文档声称但脚本无分支即报 META-003 漂移。
+- 触发条件：规则文档"校验方式"段声称由 `check-rules.mjs` 专属分支校验时。
+- 期望行为：若规则文档的校验方式段声称用 `check-rules.mjs` 专属分支（措辞含"check-rules.mjs ... <规则ID> ... 分支"），则 `scripts/check-rules.mjs` 中必须存在以该规则 ID 注册的 enforcement 分支（通过 `markEnforcement('<规则ID>')` 调用注册）。声称有专属分支但脚本无对应 markEnforcement 注册 = 声明漂移，报错。
+- 校验方式：`scripts/check-rules.mjs` META-003 分支提取所有"校验方式段声称用 check-rules.mjs 专属分支"的规则 ID（精确模式：含 check-rules.mjs + 规则ID + 分支），与脚本内 `markEnforcement('<ID>')` 注册集合做差集；规则文档声称但脚本无注册即报 META-003 漂移。
 
 ## META-004 · 实现即声明（无反向缺口）
-- 触发条件：`scripts/check-rules.mjs` 新增 enforcement 分支时。
-- 期望行为：脚本中每个 `// === XXX-NNN ===` enforcement 分支必须对应 `.trae/rules` 下一条同名规则 ID 的 `## XXX-NNN` 块。脚本在查但无规则文档定义 = 反向缺口，报错。
-- 校验方式：`scripts/check-rules.mjs` META-004 分支提取脚本内所有 `// === (\w+-\d+) ===` 注释 ID，与规则文档 `## XXX-NNN` 集合做差集；脚本有分支但无规则文档即报 META-004 缺口。
+- 触发条件：`scripts/check-rules.mjs` 新增 `markEnforcement('<ID>')` 注册时。
+- 期望行为：脚本中每个 `markEnforcement('<ID>')` 注册必须对应 `.trae/rules` 下一条同名规则 ID 的 `## XXX-NNN` 块。脚本有注册但无规则文档定义 = 反向缺口，报错。
+- 校验方式：`scripts/check-rules.mjs` META-004 分支提取脚本内所有 `markEnforcement('<ID>')` 注册的规则 ID，与规则文档 `## XXX-NNN` 集合做差集；脚本有注册但无规则文档即报 META-004 缺口。

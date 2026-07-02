@@ -48,6 +48,7 @@ export class UserService {
       name: input.name,
       email: input.email,
       status: 'active', // F2: 新建默认 active，不接受创建时指定 status
+      department_id: null, // 跨域联动（TECH-DEPT-001）：新建用户默认无部门归属
       created_at: now,
       updated_at: now,
     };

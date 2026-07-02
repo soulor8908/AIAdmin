@@ -31,4 +31,10 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   ROLE_BUILTIN_FORBIDDEN: 403,
   ROLE_IN_USE: 409,
   USER_ROLE_ALREADY_ASSIGNED: 409,
+  // 部门域（TECH-DEPT-001）
+  DEPT_NOT_FOUND: 404,
+  DEPT_NAME_DUPLICATE: 409,
+  DEPT_HAS_CHILDREN: 409,
+  DEPT_HAS_USERS: 409, // [advisory] 预留码（B11 本期不触发），仍穷举映射以维持 Record<ErrorCode>
+  DEPT_DEPTH_EXCEEDED: 409,
 };

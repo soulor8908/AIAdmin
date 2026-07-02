@@ -53,4 +53,26 @@ export class UserRepository {
     this.store.set(id, updated);
     return updated;
   }
+
+  /** 跨域联动（TECH-DEPT-001）：查归属某部门的全部用户（保持插入顺序）。 */
+  findByDepartmentId(deptId: string): UserEntity[] {
+    const result: UserEntity[] = [];
+    for (const u of this.store.values()) {
+      if (u.department_id === deptId) result.push(u);
+    }
+    return result;
+  }
+
+  /** 跨域联动（TECH-DEPT-001）：更新用户的 department_id（null=解除归属）；不存在返回 undefined。 */
+  updateDepartmentId(
+    userId: string,
+    departmentId: string | null,
+    updatedAt: string,
+  ): UserEntity | undefined {
+    const u = this.store.get(userId);
+    if (!u) return undefined;
+    const updated: UserEntity = { ...u, department_id: departmentId, updated_at: updatedAt };
+    this.store.set(userId, updated);
+    return updated;
+  }
 }
