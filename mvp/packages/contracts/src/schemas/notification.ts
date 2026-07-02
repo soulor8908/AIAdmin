@@ -38,6 +38,9 @@ export const notificationSchema = z
     updated_at: z.string().datetime(),
     sent_at: z.string().datetime().nullable(),
     read_at: z.string().datetime().nullable(),
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D1：乐观锁版本号，初始 0，update/send/markRead/delete 时 +1。
+    // sent/read 态因 append-only 守卫不可达更新路径，但 version 仍随状态转移 +1。
+    version: z.number().int().min(0),
   })
   .strict();
 export type Notification = z.infer<typeof notificationSchema>;

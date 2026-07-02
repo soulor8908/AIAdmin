@@ -45,6 +45,8 @@ export class RoleRepository {
       // 同时禁止被设为父（ROLE_BUILTIN_PARENT_FORBIDDEN）与被设继承（ROLE_BUILTIN_FORBIDDEN）。
       parent_role_id: null,
       created_at: new Date().toISOString(),
+      // [约束] TECH-OPTIMISTIC-LOCKING-001 D8：seed 数据 version=0（内置 admin 不可更新，version 恒 0）。
+      version: 0,
     };
     this.roles.set(admin.id, admin);
   }
@@ -76,14 +78,15 @@ export class RoleRepository {
   }
 
   /**
-   * 原地更新角色字段（用于 setParent/unsetParent 修改 parent_role_id）。
+   * 原地更新角色字段（用于 setParent/unsetParent 修改 parent_role_id）+ version+1。
    * [约束] TECH-ROLE-INHERITANCE-001 D1：仅更新传入字段，未传字段保留原值。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次 update 递增 version（service 层已校验 If-Match）。
    * @returns 更新后的角色；若 id 不存在返回 undefined。
    */
   update(id: string, patch: Partial<RoleEntity>): RoleEntity | undefined {
     const existing = this.roles.get(id);
     if (!existing) return undefined;
-    const updated: RoleEntity = { ...existing, ...patch, id: existing.id };
+    const updated: RoleEntity = { ...existing, ...patch, id: existing.id, version: existing.version + 1 };
     this.roles.set(id, updated);
     return updated;
   }

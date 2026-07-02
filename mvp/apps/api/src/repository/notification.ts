@@ -40,16 +40,18 @@ export class NotificationRepository {
     return notification;
   }
 
-  /** 全字段覆盖更新（update draft 用，service 层已守卫仅 draft 允许）；不存在返回 undefined。 */
+  /** 全字段覆盖更新（update draft 用，service 层已守卫仅 draft 允许）+ version+1；不存在返回 undefined。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次 update 递增 version。 */
   update(id: string, patch: Partial<Omit<NotificationEntity, 'id'>>): NotificationEntity | undefined {
     const n = this.store.get(id);
     if (!n) return undefined;
-    const updated: NotificationEntity = { ...n, ...patch };
+    const updated: NotificationEntity = { ...n, ...patch, version: n.version + 1 };
     this.store.set(id, updated);
     return updated;
   }
 
-  /** send（draft→sent）：仅置 status=sent + sent_at + updated_at；不存在返回 undefined。 */
+  /** send（draft→sent）：仅置 status=sent + sent_at + updated_at + version+1；不存在返回 undefined。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次状态转移递增 version。 */
   updateStatusAndSentAt(
     id: string,
     sentAt: string,
@@ -62,12 +64,14 @@ export class NotificationRepository {
       status: 'sent',
       sent_at: sentAt,
       updated_at: updatedAt,
+      version: n.version + 1,
     };
     this.store.set(id, updated);
     return updated;
   }
 
-  /** markRead（sent→read）：仅置 status=read + read_at + updated_at；不存在返回 undefined。 */
+  /** markRead（sent→read）：仅置 status=read + read_at + updated_at + version+1；不存在返回 undefined。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次状态转移递增 version。 */
   updateStatusAndReadAt(
     id: string,
     readAt: string,
@@ -80,6 +84,7 @@ export class NotificationRepository {
       status: 'read',
       read_at: readAt,
       updated_at: updatedAt,
+      version: n.version + 1,
     };
     this.store.set(id, updated);
     return updated;

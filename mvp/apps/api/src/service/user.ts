@@ -1,5 +1,6 @@
 // apps/api/src/service/user.ts —— 业务层：编排 repository + domain + 权限校验 + 抛 AppError
 // 校验顺序（Tech-Spec）：鉴权(B3) → 业务规则(B4/B5/B6) → 状态守卫(B7/B8)，先到先返。
+// [约束] TECH-OPTIMISTIC-LOCKING-001 D9：写操作守卫顺序 B5 实体存在 → B_version 版本匹配 → B6/B7/B8 业务规则。
 // D3：写操作返回 {entity, changes, before?}（WriteResult），供 router 层 withAudit 提取 entity + 旁路记日志。
 import { randomUUID } from 'node:crypto';
 import type {
@@ -12,6 +13,7 @@ import type {
 import type { UserRepository } from '../repository/user.js';
 import type { Ctx } from '../context.js';
 import { transitionStatus } from '../domain/user.js';
+import { validateVersion } from '../domain/version.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
 
@@ -64,6 +66,7 @@ export class UserService {
       department_id: null, // 跨域联动（TECH-DEPT-001）：新建用户默认无部门归属
       created_at: now,
       updated_at: now,
+      version: 0, // TECH-OPTIMISTIC-LOCKING-001 D1：新建实体 version 初始 0
     };
     const inserted = this.repo.insert(user);
     // D3：changes 为 after 快照（经 markPii 标记 pii），create 无 before
@@ -76,12 +79,21 @@ export class UserService {
     return { entity: inserted, changes };
   }
 
-  async updateStatus(targetId: string, newStatus: UserStatus, ctx: Ctx): Promise<WriteResult<User>> {
+  /**
+   * F3/F4 更新用户状态（含乐观锁版本校验）。
+   * 守卫顺序（TECH-OPTIMISTIC-LOCKING-001 D9）：B3 鉴权 → B5 用户存在 → B_version 版本匹配 → B6 禁用自身 → B7/B8 状态守卫。
+   */
+  async updateStatus(targetId: string, newStatus: UserStatus, expectedVersion: number, ctx: Ctx): Promise<WriteResult<User>> {
     this.requireAdmin(ctx);
-    // B5: 目标不存在（先于 B6/B7）
+    // B5: 目标不存在（先于 B_version / B6/B7）
     const target = this.repo.findById(targetId);
     if (!target) {
       throw new AppError('USER_NOT_FOUND', `用户不存在: ${targetId}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6/B7/B8 业务规则，D9）
+    const versionCheck = validateVersion(expectedVersion, target.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${target.version}`, { current_version: target.version });
     }
     // B6: 禁用自身禁止（权限校验先于状态校验；仅禁用场景，启用自身不禁止）
     if (newStatus === 'disabled' && targetId === ctx.user.id) {
@@ -98,12 +110,14 @@ export class UserService {
       // 极小竞态：刚查到又被并发删除，按不存在处理
       throw new AppError('USER_NOT_FOUND', `用户不存在: ${targetId}`);
     }
-    // D3：update 含 before/after 快照（仅 status 变更）
+    // D3：update 含 before/after 快照（status + version 变更，TECH-OPTIMISTIC-LOCKING-001 D12）
     const before = markPii('user', [
       { field: 'status', value: target.status, pii: false },
+      { field: 'version', value: target.version, pii: false },
     ]);
     const changes = markPii('user', [
       { field: 'status', value: updated.status, pii: false },
+      { field: 'version', value: updated.version, pii: false },
     ]);
     return { entity: updated, changes, before };
   }

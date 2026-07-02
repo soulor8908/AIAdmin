@@ -2,13 +2,17 @@
 // 错误码取自 contracts 的 ErrorCode（SSOT）。
 import type { ErrorCode } from '@admin/contracts';
 
-/** 业务层统一错误：携带 ErrorCode，供 router/上层转 errorResponseSchema。 */
+/** 业务层统一错误：携带 ErrorCode，供 router/上层转 errorResponseSchema。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D13：meta 为可选附加字段（如 VERSION_CONFLICT 的 current_version），
+ *        server.ts 错误处理将 meta 合并到响应体。 */
 export class AppError extends Error {
   readonly code: ErrorCode;
-  constructor(code: ErrorCode, message: string) {
+  readonly meta?: Record<string, unknown>;
+  constructor(code: ErrorCode, message: string, meta?: Record<string, unknown>) {
     super(message);
     this.name = 'AppError';
     this.code = code;
+    this.meta = meta;
   }
 }
 
@@ -57,4 +61,7 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   ROLE_BUILTIN_PARENT_FORBIDDEN: 403, // 父角色为内置 admin（与 ROLE_BUILTIN_FORBIDDEN 同层）
   ROLE_INHERITANCE_CYCLE: 409, // 继承关系形成环（结构冲突，与 ROLE_IN_USE 同层）
   ROLE_HAS_CHILDREN: 409, // 删除守卫 B8（结构冲突，与 ROLE_IN_USE 同层）
+  // 乐观锁域（TECH-OPTIMISTIC-LOCKING-001）
+  VERSION_REQUIRED: 400, // 写操作缺失 If-Match header（入参校验失败，与 VALIDATION_ERROR 同层）
+  VERSION_CONFLICT: 409, // If-Match version 不匹配（状态冲突，与 USER_ALREADY_* 409 同层）
 };

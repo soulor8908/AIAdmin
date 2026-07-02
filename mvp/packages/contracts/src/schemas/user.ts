@@ -30,6 +30,9 @@ export const userSchema = z
     department_id: z.string().uuid().nullable().optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D1：乐观锁版本号，初始 0，每次 update +1。
+    // If-Match header 携带的 expected_version 须与实体当前 version 匹配，否则 VERSION_CONFLICT。
+    version: z.number().int().min(0),
   })
   .strict();
 export type User = z.infer<typeof userSchema>;
@@ -169,16 +172,24 @@ export const errorCodeSchema = z.enum([
   'ROLE_INHERITANCE_CYCLE',
   // 删除守卫 B8：待删角色仍有子角色引用（须先解除全部子角色继承，B5→B6→B8→B7）
   'ROLE_HAS_CHILDREN',
+  // ===== 乐观锁域（TECH-OPTIMISTIC-LOCKING-001）=====
+  // 写操作缺失 If-Match header（Q4 决策：必填，缺失 → 400）
+  'VERSION_REQUIRED',
+  // If-Match version 与实体当前 version 不匹配（409，状态冲突，响应含 current_version 供重试）
+  'VERSION_CONFLICT',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 /**
  * 统一错误响应体。所有 procedure 失败均回包此结构，code 取自 errorCodeSchema。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D3：current_version 为可选字段，
+ *        仅 VERSION_CONFLICT 时填充（供客户端 GET 最新资源后重试）。不破坏既有消费者。
  */
 export const errorResponseSchema = z
   .object({
     code: errorCodeSchema,
     message: z.string(),
+    current_version: z.number().int().min(0).optional(),
   })
   .strict();
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

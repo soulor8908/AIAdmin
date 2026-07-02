@@ -60,11 +60,12 @@ export class UserRepository {
     return user;
   }
 
-  /** 仅更新 status 与 updated_at；不存在返回 undefined。 */
+  /** 仅更新 status 与 updated_at + version+1；不存在返回 undefined。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次 update 递增 version。 */
   updateStatus(id: string, status: UserStatus, updatedAt: string): UserEntity | undefined {
     const u = this.store.get(id);
     if (!u) return undefined;
-    const updated: UserEntity = { ...u, status, updated_at: updatedAt };
+    const updated: UserEntity = { ...u, status, updated_at: updatedAt, version: u.version + 1 };
     this.store.set(id, updated);
     return updated;
   }
@@ -78,7 +79,8 @@ export class UserRepository {
     return result;
   }
 
-  /** 跨域联动（TECH-DEPT-001）：更新用户的 department_id（null=解除归属）；不存在返回 undefined。 */
+  /** 跨域联动（TECH-DEPT-001）：更新用户的 department_id（null=解除归属）+ version+1；不存在返回 undefined。
+   * [约束] TECH-OPTIMISTIC-LOCKING-001 D7：每次 update 递增 version。 */
   updateDepartmentId(
     userId: string,
     departmentId: string | null,
@@ -86,7 +88,7 @@ export class UserRepository {
   ): UserEntity | undefined {
     const u = this.store.get(userId);
     if (!u) return undefined;
-    const updated: UserEntity = { ...u, department_id: departmentId, updated_at: updatedAt };
+    const updated: UserEntity = { ...u, department_id: departmentId, updated_at: updatedAt, version: u.version + 1 };
     this.store.set(userId, updated);
     return updated;
   }

@@ -55,6 +55,9 @@ export const roleSchema = z
     // 校验由 service 层 setParent 编排（ROLE_NOT_FOUND/ROLE_SELF_INHERITANCE/ROLE_BUILTIN_PARENT_FORBIDDEN/ROLE_INHERITANCE_CYCLE）。
     parent_role_id: z.string().uuid().nullable(),
     created_at: z.string().datetime(),
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D1：乐观锁版本号，初始 0，setParent/unsetParent 时 +1。
+    // 内置 admin version 恒 0（ROLE_BUILTIN_FORBIDDEN 不可达更新路径）。
+    version: z.number().int().min(0),
   })
   .strict();
 export type Role = z.infer<typeof roleSchema>;
