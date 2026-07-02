@@ -30,3 +30,5 @@ export { createReportRouter } from './report.js';
 export type { ReportRouter, ReportProcedure } from './report.js';
 export { createNotificationRouter, notificationIdProcedureInputSchema, updateNotificationProcedureInputSchema } from './notification.js';
 export type { NotificationRouter, NotificationProcedure } from './notification.js';
+export { createTransferRouter, transferProcedureInputSchema } from './transfer.js';
+export type { TransferRouter, TransferProcedure } from './transfer.js';

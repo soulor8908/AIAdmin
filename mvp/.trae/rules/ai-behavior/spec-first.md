@@ -25,13 +25,17 @@ alwaysApply: true
   - 例外：单领域内不可变的固定值（如某测试 fixture 的固定 id）可硬编码；但跨域共享的枚举/集合一律派生。
 - 校验方式：`scripts/check-rules.mjs` AI-005 分支扫描 `apps/api/test/**/*.ts` 中 `.toEqual(\[` 或 `.toStrictEqual(\[` 后紧跟多个字符串字面量（≥3 个）且字面量匹配已知跨域枚举值模式（如 `xxx:xxx` 权限码、`XXX_XXX` 大写下划线错误码）的断言，标记为 suggestion 待人工确认是否应改为派生；Reviewer subagent 复核。
 
-## AI-003 · 禁止越界发挥（复盘细化：advisory 偏离须反向同步）
+## AI-003 · 禁止越界发挥（复盘细化：advisory 偏离须反向同步 + [约束] 项偏离处理流程）
 - 触发条件：AI 欲新增 Spec 未提及的字段、路由、依赖时。
 - 期望行为：
-  - 对 Spec 的 `[约束]` 项：禁止偏离，偏离即越界，停下回报。
+  - 对 Spec 的 `[约束]` 项：默认禁止偏离，偏离即越界，停下回报。**例外（[约束] 项偏离处理流程，RETRO-ROUND7-001 S-2 反推）**：impl-writer 实现期发现 [约束] 项设计不足须偏离时，禁止默默偏离，须按以下流程处理：
+    1. impl-writer 在交付报告显式标注"[约束] 项偏离 + 偏离项 + 偏离理由 + 反向同步 Spec"。
+    2. impl-writer 反向同步 Tech-Spec：将偏离项从 `[约束]` 降级为 `[advisory]`（或保留 [约束] 但追加 `[advisory]` 偏离说明），附偏离理由 + 合规论证（如与其他 [约束] 项的权衡）+ 测试影响同步声明。
+    3. Reviewer 逐条确认 [约束] 项偏离的理由是否成立：理由成立 + Spec 已同步 + 验收对齐（PRD Given/When/Then 逐条对齐）+ 三件套全绿 → 视为 Spec 已演进（非越界，不记 blocker）；理由不成立 或 Spec 未同步 或 验收偏离 → 记 blocker。
+    4. 该流程将"严格禁止 [约束] 偏离"演进为"[约束] 偏离须经 Reviewer 确认理由成立 + Spec 同步 + 验收对齐后方可合规"，更贴近工程实际（实现期发现 Spec 设计不足时的合理演进路径），同时保留 [约束] 项的强约束力（默认禁止 + 显式标注 + Reviewer 把关）。
   - 对 Spec 的 `[advisory]` 项：允许偏离，但必须在 PR 描述写"反向同步 Spec：{{项}}"，并相应更新 Tech-Spec，消除单向漂移。
   - 对 Spec 未提及项：一律禁止，停下回报"超出 Spec 范围：{{项}}"。
-- 校验方式：Reviewer subagent 扫描 diff 新增导出符号在 `docs/spec` + contracts 有来源；advisory 偏离检查 PR 描述含"反向同步 Spec"字样，无则记 blocker。
+- 校验方式：Reviewer subagent 扫描 diff 新增导出符号在 `docs/spec` + contracts 有来源；advisory 偏离检查 PR 描述含"反向同步 Spec"字样，无则记 blocker；[约束] 项偏离检查 impl-writer 交付报告是否含"[约束] 项偏离"显式标注 + Tech-Spec 是否已反向同步（[advisory] 标注 + 理由），缺失或理由不成立记 blocker。
 
 ## AI-004 · 每次改动必跑三件套
 - 触发条件：AI 完成一批代码改动、提交前。

@@ -228,7 +228,7 @@ function setupShared(): {
   const userService = new UserService(userRepo);
   const roleService = new RoleService(roleRepo, userRepo);
   const deptService = new DepartmentService(deptRepo, userRepo);
-  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo);
+  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, auditService, transferService, router };
 }
@@ -262,6 +262,7 @@ function setupWithThrowingRole(failStep: 'remove' | 'assign'): {
     throwingRoleService,
     userRepo,
     roleRepo,
+    deptRepo,
   );
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, transferService, router };
@@ -296,6 +297,7 @@ function setupWithCompensationFailure(): {
     throwingRoleService,
     userRepo,
     roleRepo,
+    deptRepo,
   );
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, router };

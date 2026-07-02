@@ -51,11 +51,12 @@ prd_ref: RETRO-ROUND6-001
   2. **执行步骤 A**：改用户部门（`from = user.department_id`，调 deptService.assignUserDepartment 或直接 userRepo.updateDepartmentId）。
   3. **执行步骤 B**：移除旧角色（调 roleService.remove(userId, oldRoleId)）。
   4. **执行步骤 C**：分配新角色（调 roleService.assign(userId, newRoleId)）。
-- **补偿闭包（F2，每步记录逆操作）**：
+- **补偿闭包（F2，每步记录逆操作，Q10 决策：直接调 repo 绕过 service，避免 requireAdmin/withAudit 埋点/额外校验污染补偿）**：
   - 步骤 A 补偿：`userRepo.updateDepartmentId(userId, from, now)`（改回原部门）。
-  - 步骤 B 补偿：`roleService.assign(userId, oldRoleId, ctx)`（重新分配旧角色）。
-  - 步骤 C 补偿：`roleService.remove(userId, newRoleId, ctx)`（移除刚分配的新角色）。
+  - 步骤 B 补偿：`roleRepo.insertUserRole({ user_id: userId, role_id: oldRoleId, assigned_at: now })`（重新分配旧角色）。
+  - 步骤 C 补偿：`roleRepo.deleteUserRole(userId, newRoleId)`（移除刚分配的新角色）。
   - 逆序执行：若步骤 C 失败 → 补偿 B + 补偿 A；若步骤 B 失败 → 补偿 A；若步骤 A 失败 → 无需补偿。
+  - 注：补偿闭包不调 service（与 §Q&A Q10 推荐答案 + Tech-Spec §3.4 D4 [约束] 一致；本节早期版本误写为 `roleService.assign`/`roleService.remove`，已反向同步，见 RETRO-ROUND7-001 S-1）。
 - **聚合审计日志（F3，事务成功后一条）**：
   - entity_type=`user`, action=`update`, entity_id=`userId`
   - before：`[{field:'department_id', value:<旧部门id|null>, pii:false}, {field:'role_id', value:<旧角色id>, pii:false}]`

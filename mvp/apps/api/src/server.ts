@@ -42,6 +42,7 @@ import { DepartmentService } from './service/dept.js';
 import { AuditLogService } from './service/audit.js';
 import { ReportService } from './service/report.js';
 import { NotificationService } from './service/notification.js';
+import { TransferService } from './service/transfer.js';
 import { createUserRouter, updateUserStatusProcedureInputSchema } from './router/user.js';
 import { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema } from './router/role.js';
 import { createDeptRouter, deptDeleteProcedureInputSchema } from './router/dept.js';
@@ -52,6 +53,7 @@ import {
   notificationIdProcedureInputSchema,
   updateNotificationProcedureInputSchema,
 } from './router/notification.js';
+import { createTransferRouter, transferProcedureInputSchema } from './router/transfer.js';
 import { AppError, errorCodeToHttpStatus } from './errors.js';
 import type { Ctx } from './context.js';
 import type { Procedure } from './router/user.js';
@@ -78,6 +80,8 @@ const deptRouter = createDeptRouter(deptService, auditService);
 const auditRouter = createAuditRouter(auditService);
 const reportRouter = createReportRouter(reportService);
 const notificationRouter = createNotificationRouter(notificationService, auditService);
+const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
+const transferRouter = createTransferRouter(transferService, auditService);
 
 // ============ Seed（演示数据，让 list 不为空） ============
 const ADMIN_USER_ID = '00000000-0000-4000-8000-000000000001';
@@ -157,6 +161,21 @@ const routes: Route[] = [
     input: updateUserStatusProcedureInputSchema,
     handler: userRouter.updateStatus.handler,
     auth: userRouter.updateStatus.auth,
+  }),
+
+  // ---- transfer（调岗事务，POST /v1/users/:userId/transfer） ----
+  defineRoute('POST', '/v1/users/:userId/transfer', (m) => {
+    const body = (m.body ?? {}) as Record<string, string>;
+    return {
+      userId: m.path.userId,
+      toDepartmentId: body.toDepartmentId,
+      oldRoleId: body.oldRoleId,
+      newRoleId: body.newRoleId,
+    };
+  }, {
+    input: transferProcedureInputSchema,
+    handler: transferRouter.transfer.handler,
+    auth: transferRouter.transfer.auth,
   }),
 
   // ---- role ----

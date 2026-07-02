@@ -35,7 +35,7 @@ extends: TECH-NOTIFICATION-001
 - `packages/contracts/src/schemas/transfer.ts`（本期新增，F1 契约 SSOT）：`transferInputSchema`（含 userId/toDepartmentId/oldRoleId/newRoleId + oldRoleId!==newRoleId superRefine）+ `transferResultSchema`（= userSchema，复用；输出 strict）。`[约束]` CODE-004 命名后缀；SEC-003a 输出 strict。
 - `packages/contracts/src/index.ts`（既有，编辑）：追加 `export * from './schemas/transfer.js'`。`[约束]`
 - `apps/api/src/domain/transfer.ts`（本期新增，F1 校验纯函数）：`validateTransferInput(input, deps)` 纯函数，编排校验顺序（§5），返回 `{ok:true} | {ok:false, errorCode}`。`[约束]` ARCH-001：domain 仅 import contracts。
-- `apps/api/src/service/transfer.ts`（本期新增，F1/F2/F3）：`TransferService` 注入 `UserService` + `DepartmentService` + `RoleService` + `UserRepository` + `RoleRepository`（补偿闭包直接调 repo，§3.4 D4）；`transfer(input, ctx)` 方法调 requireAdmin + validateTransferInput + 三步执行 + 补偿闭包 + 返回 WriteResult<User>。`[约束]` ARCH-001：service 不 import router/AuditLogService。
+- `apps/api/src/service/transfer.ts`（本期新增，F1/F2/F3）：`TransferService` 注入 `UserService` + `DepartmentService` + `RoleService` + `UserRepository` + `RoleRepository` + `DepartmentRepository`（补偿闭包直接调 repo，§3.4 D4；`DepartmentRepository` 仅用于校验 `toDeptExists`，`[advisory]` 实现期偏离原 5 依赖设计，详见 §3.1）；`transfer(input, ctx)` 方法调 requireAdmin + validateTransferInput + 三步执行 + 补偿闭包 + 返回 WriteResult<User>。`[约束]` ARCH-001：service 不 import router/AuditLogService。
 - `apps/api/src/router/transfer.ts`（本期新增，F3）：createTransferRouter + transfer procedure（经 withAudit 包装，entity_type=user/action=update）。`[约束]` SEC-001。
 - `apps/api/src/router/index.ts`（既有，编辑）：聚合 router 追加 transfer 导出。
 - `apps/api/src/errors.ts`（既有，编辑，跨域联动①）：errorCodeToHttpStatus 补齐 4 码（TRANSFER_SAME_ROLE=400 / TRANSFER_OLD_ROLE_NOT_ASSIGNED=409 / TRANSFER_COMPENSATION_FAILED=500 / TRANSFER_FAILED=500）。`[约束]` 否则 tsc TS2741。
@@ -47,7 +47,7 @@ extends: TECH-NOTIFICATION-001
 
 ### 3.1 TransferService 依赖注入（D1 · service→service→service 三层横向依赖）
 
-**决策 D1（`[约束]`）**：TransferService 构造注入 5 个依赖：
+**决策 D1（`[约束]` + `[advisory]` 实现期偏离）**：TransferService 构造注入 6 个依赖：
 ```ts
 constructor(
   private readonly userService: UserService,
@@ -55,12 +55,16 @@ constructor(
   private readonly roleService: RoleService,
   private readonly userRepo: UserRepository,      // 补偿闭包直接调（D4）
   private readonly roleRepo: RoleRepository,      // 补偿闭包直接调（D4）
+  private readonly deptRepo: DepartmentRepository, // [advisory] 校验 toDeptExists（读，不写入）
 ) {}
 ```
+
+**`[advisory]` 反向同步（impl-writer 实现期偏离）**：原 Spec 写 5 依赖（不含 `DepartmentRepository`）。实现期发现：校验阶段前置校验 `toDeptExists` 需直接查部门存在性，而 `DepartmentService` 无 public 只读查询方法（仅 `tree(ctx)` 返回树结构，成本高且语义不匹配）。为遵守 SEC-002（不为查询新增 service public 方法）+ 校验前置不写入（D6）+ ARCH-001（service→repo 横向读，ReportService 注入 AuditLogRepository 先例），额外注入 `DepartmentRepository`（第 6 依赖）仅用于校验 `toDeptExists`（读，不写入）。补偿闭包不调 `deptRepo`（部门变更的补偿是 `userRepo.updateDepartmentId` 改回，不涉及 dept 表）。测试文件（transfer.test.ts / transfer-embedding.test.ts）的 `new TransferService(...)` 调用已同步为 6 参数。
 
 **理由**：
 - service→service→service 三层横向依赖（TransferService→UserService/DeptService/RoleService），沿用 R6 NotificationService→UserService 先例。ARCH-001 仅禁 service→router，不禁 service→service（横向依赖同层）。
 - 补偿闭包需直接调 repo（D4），故额外注入 UserRepository + RoleRepository。这与 ReportService 注入 AuditLogRepository 先例一致（service→repo 横向读，ARCH-001 不禁）。
+- `deptRepo` 仅做读校验（`findById`），不参与补偿写入，故不污染补偿闭包语义。
 
 ### 3.2 补偿闭包机制（D2 · 每步记录逆操作，失败逆序执行）
 
