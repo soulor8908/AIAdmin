@@ -151,6 +151,15 @@ export const errorCodeSchema = z.enum([
   'NOTIFICATION_RECIPIENT_DISABLED',
   // 状态转移/状态守卫操作非法（跳过/同态/回退/update|delete|send|markRead 状态守卫违规，B6，单码覆盖所有状态非法）
   'NOTIFICATION_INVALID_TRANSITION',
+  // ===== 调岗事务域（TECH-TRANSFER-001）=====
+  // oldRoleId === newRoleId（无意义操作，避免同角色调岗）
+  'TRANSFER_SAME_ROLE',
+  // 用户当前未分配 oldRoleId（前置状态不满足，无法移除）
+  'TRANSFER_OLD_ROLE_NOT_ASSIGNED',
+  // 补偿回滚自身失败（数据一致性告警，须运维介入，非静默吞）
+  'TRANSFER_COMPENSATION_FAILED',
+  // 调岗执行阶段失败已回滚（聚合错误码，message 含失败步骤+底层原因；校验阶段错误码直接传播不聚合）
+  'TRANSFER_FAILED',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

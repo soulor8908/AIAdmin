@@ -10,3 +10,4 @@ export * from './schemas/dept.js';
 export * from './schemas/audit.js';
 export * from './schemas/report.js';
 export * from './schemas/notification.js';
+export * from './schemas/transfer.js';

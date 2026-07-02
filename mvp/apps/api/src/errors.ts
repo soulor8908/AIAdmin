@@ -47,4 +47,9 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   NOTIFICATION_RECIPIENT_NOT_FOUND: 404, // B7 send 时收件人不存在
   NOTIFICATION_RECIPIENT_DISABLED: 409, // B8 send 时收件人禁用（收件人状态冲突，与 USER_ALREADY_* 409 同层级）
   NOTIFICATION_INVALID_TRANSITION: 409, // B6 状态转移/状态守卫操作非法（与 USER_ALREADY_* 409 同层级）
+  // 调岗事务域（TECH-TRANSFER-001）
+  TRANSFER_SAME_ROLE: 400, // oldRoleId===newRoleId 语义冲突（避免无意义操作）
+  TRANSFER_OLD_ROLE_NOT_ASSIGNED: 409, // 用户未分配 oldRole（前置状态不满足）
+  TRANSFER_COMPENSATION_FAILED: 500, // 补偿回滚失败（数据一致性告警）
+  TRANSFER_FAILED: 500, // 执行阶段失败已回滚（聚合错误码）
 };
