@@ -174,6 +174,32 @@ for (const f of allTs) {
   }
 }
 
+// ============ AI-005：禁止硬编码跨域可变集合断言 ============
+markEnforcement('AI-005');
+// 扫描测试文件中 .toEqual([字面量, 字面量, ...]) 形式，若字面量匹配跨域枚举模式则 suggestion
+// 权限码模式：xxx:xxx ；错误码模式：全大写下划线含下划线且长度≥6
+const PERMISSION_CODE_LIT = /['"]([a-z]+:[a-z]+)['"]/g;
+const ERROR_CODE_LIT = /['"]([A-Z][A-Z_]{4,}_[A-Z]+)['"]/g;
+for (const f of allTs) {
+  if (!rel(f).startsWith('apps/api/test/')) continue;
+  const src = readFileSync(f, 'utf8');
+  // 找 .toEqual([...]) 或 .toStrictEqual([...]) 块（贪婪到匹配的 ])
+  const assertRe = /\.(toEqual|toStrictEqual)\(\s*\[([\s\S]*?)\]\s*\)/g;
+  let m;
+  while ((m = assertRe.exec(src)) !== null) {
+    const arrContent = m[2];
+    // 统计匹配的跨域枚举字面量数
+    const permMatches = [...arrContent.matchAll(PERMISSION_CODE_LIT)];
+    const errMatches = [...arrContent.matchAll(ERROR_CODE_LIT)];
+    const total = permMatches.length + errMatches.length;
+    if (total >= 3) {
+      const upto = src.slice(0, m.index);
+      const line = upto.split('\n').length;
+      warnings.push(`AI-005 建议：${rel(f)}:${line} 疑似硬编码跨域可变集合（${total} 个枚举字面量），考虑改用 SSOT 派生（如 [...schema.options]）`);
+    }
+  }
+}
+
 // ============ META-001/003/004：规则文档与脚本双向绑定 ============
 markEnforcement('META-001');
 markEnforcement('META-003');

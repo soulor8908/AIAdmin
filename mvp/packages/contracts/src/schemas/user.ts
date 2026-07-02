@@ -132,6 +132,11 @@ export const errorCodeSchema = z.enum([
   'DEPT_HAS_USERS',
   // 创建子部门将超过最大层级 3（F1：Q4 层级上限，按父部门链路推导）
   'DEPT_DEPTH_EXCEEDED',
+  // ===== 操作日志域（TECH-AUDIT-001）=====
+  // [advisory] 预留码——单条日志详情查询（GET /v1/audit-logs/{id}）时 id 合法但无记录。
+  //            本期仅提供列表查询 GET /v1/audit-logs（F2），列表空结果返回 items=[] 而非 404，故本期 service 层不抛此码；
+  //            保留以备未来单条详情端点，append-only 无 update/delete 错误码（日志不可修改/删除，F4）。
+  'AUDIT_LOG_NOT_FOUND',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

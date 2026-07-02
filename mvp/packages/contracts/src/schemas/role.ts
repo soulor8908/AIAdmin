@@ -13,6 +13,9 @@ import { z } from 'zod';
  * [约束] 后续新增模块时随对应 PRD 扩展该枚举；内置 admin 权限范围随枚举扩展自动覆盖（Q4）。
  * [约束] dept:read / dept:write 为跨域联动扩展（TECH-DEPT-001 引入）：dept:read 查看部门树，
  *        dept:write 创建/删除部门及维护用户归属。内置 admin 随枚举扩展自动覆盖这两个码。
+ * [约束] audit:read 为跨域联动扩展（TECH-AUDIT-001 引入）：查询操作日志（GET /v1/audit-logs）。
+ *        内置 admin 随枚举扩展自动覆盖该码（Q4）；ALL_PERMISSION_CODES 由 [...permissionCodeSchema.options]
+ *        派生，枚举扩展后自动含 audit:read，无需手改（AI-005 价值：role.test.ts 断言自动跟随，见 TECH-AUDIT-001 §受影响测试清单）。
  */
 export const permissionCodeSchema = z.enum([
   'user:read',
@@ -21,6 +24,7 @@ export const permissionCodeSchema = z.enum([
   'role:write',
   'dept:read',
   'dept:write',
+  'audit:read',
 ]);
 export type PermissionCode = z.infer<typeof permissionCodeSchema>;
 

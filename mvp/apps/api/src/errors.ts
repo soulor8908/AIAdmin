@@ -37,4 +37,6 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   DEPT_HAS_CHILDREN: 409,
   DEPT_HAS_USERS: 409, // [advisory] 预留码（B11 本期不触发），仍穷举映射以维持 Record<ErrorCode>
   DEPT_DEPTH_EXCEEDED: 409,
+  // 操作日志域（TECH-AUDIT-001）
+  AUDIT_LOG_NOT_FOUND: 404, // [advisory] 预留码（B4 本期不触发），仍穷举映射以维持 Record<ErrorCode>
 };

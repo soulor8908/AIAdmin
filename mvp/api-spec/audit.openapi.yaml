@@ -1,0 +1,227 @@
+# OpenAPI 3.1 片段 —— 操作日志
+# 与 packages/contracts/src/schemas/audit.ts 1:1 对齐（手工对齐，MVP 不装 zod-to-openapi）。
+# 字段名、类型、约束、枚举值、必填项均与 Zod schema 一致；变更须同步两处 + Tech-Spec + errors.ts。
+# 错误码 ErrorCode 对齐 user.ts 的 errorCodeSchema（全局 SSOT，含跨域 user/role/dept/audit 码）。
+# PermissionCode 对齐 role.ts 的 permissionCodeSchema（已含 audit:read 跨域扩展）。
+# 跨域说明：audit_log 被动旁路记录 user/role/dept 三域写操作（F1），不在本片段暴露写入端点（旁路，无独立 API）。
+# 引用 Tech-Spec: TECH-AUDIT-001 / PRD-AUDIT-001
+openapi: 3.1.0
+info:
+  title: Admin Audit Log API
+  version: 0.1.0
+  description: 操作日志 API 片段（分页查询操作日志）。查询需 audit:read（SEC-001 默认受保护；SEC-002 service 层 requirePermission）。日志 append-only（F4），仅本查询端点；F1 自动记录为三域 service 旁路，无独立写入 API。查询返回的 before/after 中邮箱已脱敏（SEC-003b，保留首 2 字符 + *** + @ + 域名）。
+servers:
+  - url: /v1
+    description: 本地 / 默认前缀
+
+paths:
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: 分页查询操作日志（F2，按时间范围/操作者/实体类型过滤，默认 operated_at 倒序）
+      tags: [audit]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 起，默认 1（z.coerce.number().int().min(1).default(1)）。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数，默认 20，上限 100。超上限按 Q4「按上限处理」钳制为 100（非拒绝，transform Math.min(n,100)）；返回结果的 pageSize 反映钳制后的值作为提示。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - name: operated_from
+          in: query
+          description: 操作时间下界（闭区间，ISO 8601 datetime，z.string().datetime().optional()）。
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: operated_to
+          in: query
+          description: 操作时间上界（闭区间，ISO 8601 datetime，z.string().datetime().optional()）。
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: operator_id
+          in: query
+          description: 操作者 ID 过滤（z.string().uuid().optional()）。
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: entity_type
+          in: query
+          description: 目标实体类型过滤（闭合枚举 user/role/dept，Q3；auditLogEntityTypeSchema.optional()）。
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuditLogEntityType'
+      responses:
+        '200':
+          description: 查询成功；items 按 operated_at 倒序，before/after 中邮箱已脱敏（redactedAuditLogSchema）；无匹配日志时 items=[] + total=0 + totalPages=0（不触发 404）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResult'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，如 page<1、pageSize<1、operated_from/to 非 datetime、operator_id 非 uuid、entity_type 非枚举值）。注：pageSize 超 100 不触发 400，由 transform 钳制（Q4）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED，SEC-001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 audit:read，SEC-002）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员凭证（SEC-001 默认受保护路由）。本期 MVP 鉴权桩：ctx.user.role==='admin' 视为具备 audit:read（admin 角色持全部权限码，Q4）；非 admin → FORBIDDEN。audit:read 端到端区分待 Auth 模块富化 Ctx。
+  schemas:
+    PermissionCode:
+      type: string
+      description: 权限码枚举（对齐 permissionCodeSchema，Q2 决策固定枚举）。audit:read 为 TECH-AUDIT-001 跨域扩展（查询操作日志）。
+      enum: [user:read, user:write, role:read, role:write, dept:read, dept:write, audit:read]
+
+    AuditLogEntityType:
+      type: string
+      description: 操作日志目标实体类型（对齐 auditLogEntityTypeSchema，Q3 本期固定闭合枚举）。后续新增领域时由对应 PRD 同步扩展。
+      enum: [user, role, dept]
+
+    AuditLogAction:
+      type: string
+      description: 操作日志动作（对齐 auditLogActionSchema，仅记录写操作 Q1）。update/delete 指对目标实体的写动作，非对日志本身的修改/删除（日志 append-only，F4）。
+      enum: [create, update, delete]
+
+    RedactedEmail:
+      type: string
+      description: 脱敏邮箱格式（对齐 redactedEmailSchema，SEC-003b）。保留首 2 字符 + *** + @ + 域名（如 ab***@example.com）。查询返回的 before/after 中邮箱字段值须符合此格式。
+      pattern: '^.{2}\*\*\*@[^\s@]+$'
+
+    BeforeAfterSnapshot:
+      type: object
+      description: 变更前/后字段快照（对齐 z.record(z.unknown())）。仅含本次实际变更字段（未变更字段不出现）；create 时 before={}，delete 时 after={}（F1）。其中「邮箱」类型字段值在查询返回时已脱敏（符合 RedactedEmail 格式）。
+      additionalProperties: true
+
+    RedactedAuditLog:
+      type: object
+      description: 操作日志查询返回实体（对齐 redactedAuditLogSchema，带 .strict()，脱敏态）。字段集与 auditLogSchema 一致，语义为 before/after 中邮箱已脱敏。存储保留原始 PII（Q2），本期查询入口仅返回脱敏值。
+      required: [id, operator_id, operator_name, entity_type, entity_id, action, operated_at, before, after, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: z.string().uuid()
+        operator_id:
+          type: string
+          format: uuid
+          description: z.string().uuid()，操作者 ID（外键 users.id，弱引用）
+        operator_name:
+          type: string
+          minLength: 1
+          description: z.string().min(1)，操作者姓名快照（写入时冻结，append-only 不随后续改名漂移）
+        entity_type:
+          $ref: '#/components/schemas/AuditLogEntityType'
+        entity_id:
+          type: string
+          format: uuid
+          description: z.string().uuid()，目标实体标识（弱引用，实体可能已删除，日志保留历史痕迹）
+        action:
+          $ref: '#/components/schemas/AuditLogAction'
+        operated_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，被审计操作的发生时间
+        before:
+          $ref: '#/components/schemas/BeforeAfterSnapshot'
+        after:
+          $ref: '#/components/schemas/BeforeAfterSnapshot'
+        created_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，日志落库时间（供 90 天保留期清理，PRD Q6，清理任务本期不实现）
+
+    AuditLogListResult:
+      type: object
+      description: 分页查询操作日志结果（对齐 auditLogListResultSchema，带 .strict()）。items 按 operated_at 倒序（Q4），元素为 RedactedAuditLog（邮箱已脱敏）。空列表 totalPages=0。
+      required: [items, total, page, pageSize, totalPages]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RedactedAuditLog'
+        total:
+          type: integer
+          minimum: 0
+          description: 满足筛选条件的总条数（非当前页条数）
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          description: 每页条数（反映钳制后的值：若入参 pageSize>100 则返回 100，Q4 提示）
+        totalPages:
+          type: integer
+          minimum: 0
+          description: ceil(total/pageSize)；空列表为 0
+
+    ErrorCode:
+      type: string
+      description: 错误码枚举（对齐 errorCodeSchema 全局 SSOT，含 user/role/dept/audit 跨域码）。与 Tech-Spec §边界与异常 一一对应。AUDIT_LOG_NOT_FOUND 为预留码本期不触发（仅列表查询，空结果返回 items=[] 而非 404）；append-only 无 update/delete 错误码（F4）。
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - USER_NOT_FOUND
+        - USER_EMAIL_DUPLICATE
+        - USER_DISABLE_SELF_FORBIDDEN
+        - USER_ALREADY_DISABLED
+        - USER_ALREADY_ACTIVE
+        - ROLE_NOT_FOUND
+        - ROLE_NAME_DUPLICATE
+        - ROLE_BUILTIN_FORBIDDEN
+        - ROLE_IN_USE
+        - USER_ROLE_ALREADY_ASSIGNED
+        - DEPT_NOT_FOUND
+        - DEPT_NAME_DUPLICATE
+        - DEPT_HAS_CHILDREN
+        - DEPT_HAS_USERS
+        - DEPT_DEPTH_EXCEEDED
+        - AUDIT_LOG_NOT_FOUND
+
+    ErrorResponse:
+      type: object
+      description: 统一错误响应（对齐 errorResponseSchema）。
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 人类可读错误描述（含字段级 detail）

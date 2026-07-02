@@ -24,3 +24,5 @@ export { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedur
 export type { RoleRouter } from './role.js';
 export { createDeptRouter, deptDeleteProcedureInputSchema } from './dept.js';
 export type { DeptRouter, DeptProcedure } from './dept.js';
+export { createAuditRouter } from './audit.js';
+export type { AuditRouter, AuditProcedure } from './audit.js';
