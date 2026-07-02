@@ -266,7 +266,7 @@ components:
 
     ErrorCode:
       type: string
-      description: 错误码枚举（对齐 errorCodeSchema）。与 Tech-Spec §边界与异常 一一对应。
+      description: 错误码枚举（对齐 errorCodeSchema 全局 SSOT，含 user 与 role 跨域码；user 域端点仅返回前 8 项）。与各域 Tech-Spec §边界与异常 一一对应。
       enum:
         - VALIDATION_ERROR
         - UNAUTHORIZED
@@ -276,6 +276,11 @@ components:
         - USER_DISABLE_SELF_FORBIDDEN
         - USER_ALREADY_DISABLED
         - USER_ALREADY_ACTIVE
+        - ROLE_NOT_FOUND
+        - ROLE_NAME_DUPLICATE
+        - ROLE_BUILTIN_FORBIDDEN
+        - ROLE_IN_USE
+        - USER_ROLE_ALREADY_ASSIGNED
 
     ErrorResponse:
       type: object

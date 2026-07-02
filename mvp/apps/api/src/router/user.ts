@@ -19,6 +19,7 @@ import type { Ctx } from '../context.js';
 export type Procedure<I, O> = {
   input: z.ZodType<I, z.ZodTypeDef, unknown>;
   handler: (input: I, ctx: Ctx) => Promise<O>;
+  auth: 'admin' | 'public';
 };
 
 /**
@@ -41,14 +42,17 @@ export function createUserRouter(service: UserService): UserRouter {
     list: {
       input: listUserQuerySchema,
       handler: (input, ctx) => service.list(input, ctx),
+      auth: 'admin',
     },
     create: {
       input: createUserInputSchema,
       handler: (input, ctx) => service.create(input, ctx),
+      auth: 'admin',
     },
     updateStatus: {
       input: updateUserStatusProcedureInputSchema,
       handler: (input, ctx) => service.updateStatus(input.id, input.body.status, ctx),
+      auth: 'admin',
     },
   };
 }

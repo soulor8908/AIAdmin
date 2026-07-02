@@ -84,8 +84,9 @@ export const userListResultSchema = z
 export type UserListResult = z.infer<typeof userListResultSchema>;
 
 /**
- * 错误码枚举：与 Tech-Spec §边界与异常 一一对应。
- * 新增错误码须同步更新 Tech-Spec 与 OpenAPI 片段，保持三处一致。
+ * 错误码枚举：全局 SSOT，聚合 user 与 role 域错误码。
+ * 各域 Tech-Spec §边界与异常 引用本枚举的子集；新增错误码须同步更新对应 Tech-Spec、
+ * errors.ts 的 errorCodeToHttpStatus 穷举映射与 OpenAPI 片段，保持四处一致。
  */
 export const errorCodeSchema = z.enum([
   // 入参校验失败（Zod 解析失败）
@@ -104,6 +105,17 @@ export const errorCodeSchema = z.enum([
   'USER_ALREADY_DISABLED',
   // 重复启用（F4：目标已是启用状态）
   'USER_ALREADY_ACTIVE',
+  // ===== 角色域（TECH-ROLE-001）=====
+  // 目标角色不存在（F3 删除 / F4 分配：role_id 合法但无记录）
+  'ROLE_NOT_FOUND',
+  // 角色名称重复（F1 创建：Q3 全局唯一约束）
+  'ROLE_NAME_DUPLICATE',
+  // 内置角色不可删除（F3/F5：admin 无论是否分配都禁止删除）
+  'ROLE_BUILTIN_FORBIDDEN',
+  // 角色已被分配给用户，禁止删除（F3：Q1 决策方案 B，需先解除全部分配）
+  'ROLE_IN_USE',
+  // 用户已持有该角色，重复分配（F4：已持有此角色）
+  'USER_ROLE_ALREADY_ASSIGNED',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

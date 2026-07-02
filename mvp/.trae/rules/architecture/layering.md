@@ -3,10 +3,14 @@ alwaysApply: true
 ---
 # 分层依赖方向（后端）
 
-## ARCH-001 · 单向依赖
+## ARCH-001 · 单向依赖（复盘扩面：覆盖全部四层，不限于 domain）
 - 触发条件：在 apps/api/src 下新增/修改 import 时。
-- 期望行为：依赖方向 controller/router → service → repository → domain；domain 不得 import 任何上层；禁止反向 import。
-- 校验方式：scripts/check-rules.mjs 检测 import 方向，违规即报错。
+- 期望行为：依赖方向 router → service → repository → domain；四层各自不得反向 import 上层：
+  - domain 不得 import service/repository/router。
+  - repository 不得 import service/router。
+  - service 不得 import router。
+  - 横向：同层之间允许（如同 service 互调），但推荐通过 domain 协作。
+- 校验方式：`scripts/check-rules.mjs` 按目录分层扫描——对每个层目录文件，检查是否 import 了更高层目录路径（`../service`、`../router`、`apps/api/src/router` 等）；违规即报 ARCH-001。
 
 ## ARCH-002 · 契约层纯净
 - 触发条件：在 packages/contracts/src 下编辑文件时。

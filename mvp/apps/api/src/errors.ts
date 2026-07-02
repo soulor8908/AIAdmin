@@ -12,7 +12,10 @@ export class AppError extends Error {
   }
 }
 
-/** 错误码 → HTTP 状态映射（与 Tech-Spec §边界与异常 B 表一一对应）。 */
+/**
+ * 错误码 → HTTP 状态映射（Record<ErrorCode, number> 穷举，新增码必须补齐）。
+ * user 域对齐 TECH-USER-001 §边界与异常；role 域对齐 TECH-ROLE-001 §边界与异常。
+ */
 export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   VALIDATION_ERROR: 400,
   UNAUTHORIZED: 401,
@@ -22,4 +25,10 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   USER_DISABLE_SELF_FORBIDDEN: 403,
   USER_ALREADY_DISABLED: 409,
   USER_ALREADY_ACTIVE: 409,
+  // 角色域（TECH-ROLE-001）
+  ROLE_NOT_FOUND: 404,
+  ROLE_NAME_DUPLICATE: 409,
+  ROLE_BUILTIN_FORBIDDEN: 403,
+  ROLE_IN_USE: 409,
+  USER_ROLE_ALREADY_ASSIGNED: 409,
 };
