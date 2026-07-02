@@ -82,6 +82,7 @@ function seed(
     description: 'Engineer role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
   roleRepo.insert({
@@ -90,6 +91,7 @@ function seed(
     description: 'Sales role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
   roleRepo.insertUserRole({
@@ -336,6 +338,7 @@ describe('service · transfer 校验失败（前置校验，不产生写入）',
       description: 'builtin',
       permission_codes: ['user:read'],
       is_builtin: true,
+      parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
       created_at: SEED_TS,
     });
     const input = makeInput();

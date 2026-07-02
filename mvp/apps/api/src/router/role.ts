@@ -7,6 +7,11 @@ import {
   assignRoleInputSchema,
   createRoleInputSchema,
   listRoleQuerySchema,
+  setParentInputSchema,
+  unsetParentInputSchema,
+  inheritanceChainInputSchema,
+  effectivePermissionsInputSchema,
+  type PermissionCode,
   type Role,
   type RoleListResult,
   type UserRole,
@@ -35,6 +40,31 @@ export const listUserRolesProcedureInputSchema = z.object({
   userId: z.string().uuid(),
 });
 
+/**
+ * setParent procedure 入参 = path roleId + body { parentRoleId }。
+ * 复用 contracts 的 setParentInputSchema（含 superRefine 自继承拒绝 + .strict）。
+ * 单独导出以便契约测直接对该 schema 跑 safeParse。
+ */
+export const setParentProcedureInputSchema = setParentInputSchema;
+
+/**
+ * unsetParent procedure 入参 = path roleId。
+ * 复用 contracts 的 unsetParentInputSchema。
+ */
+export const unsetParentProcedureInputSchema = unsetParentInputSchema;
+
+/**
+ * getInheritanceChain procedure 入参 = path roleId。
+ * 复用 contracts 的 inheritanceChainInputSchema。
+ */
+export const inheritanceChainProcedureInputSchema = inheritanceChainInputSchema;
+
+/**
+ * getEffectivePermissions procedure 入参 = path userId。
+ * 复用 contracts 的 effectivePermissionsInputSchema。
+ */
+export const effectivePermissionsProcedureInputSchema = effectivePermissionsInputSchema;
+
 export type RoleRouter = {
   list: Procedure<z.infer<typeof listRoleQuerySchema>, RoleListResult>;
   create: Procedure<z.infer<typeof createRoleInputSchema>, Role>;
@@ -43,6 +73,11 @@ export type RoleRouter = {
   assign: Procedure<z.infer<typeof assignRoleInputSchema>, UserRole>;
   listUserRoles: Procedure<z.infer<typeof listUserRolesProcedureInputSchema>, UserRole[]>;
   remove: Procedure<z.infer<typeof assignRoleInputSchema>, void>;
+  // 角色继承（TECH-ROLE-INHERITANCE-001 F1/F2/F3）
+  setParent: Procedure<z.infer<typeof setParentProcedureInputSchema>, Role>;
+  unsetParent: Procedure<z.infer<typeof unsetParentProcedureInputSchema>, Role>;
+  getInheritanceChain: Procedure<z.infer<typeof inheritanceChainProcedureInputSchema>, Role[]>;
+  getEffectivePermissions: Procedure<z.infer<typeof effectivePermissionsProcedureInputSchema>, PermissionCode[]>;
 };
 
 /**
@@ -102,6 +137,37 @@ export function createRoleRouter(service: RoleService, auditService?: AuditLogSe
         audit,
         { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
       ),
+      auth: 'admin',
+    },
+    // 角色继承（TECH-ROLE-INHERITANCE-001 F1/F2/F3）
+    // setParent/unsetParent 经 withAudit 包装（entity_type=role/action=update，D5）
+    setParent: {
+      input: setParentProcedureInputSchema,
+      handler: withAudit(
+        (input, ctx) => service.setParent(input.roleId, input.parentRoleId, ctx),
+        audit,
+        { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
+      ),
+      auth: 'admin',
+    },
+    unsetParent: {
+      input: unsetParentProcedureInputSchema,
+      handler: withAudit(
+        (input, ctx) => service.unsetParent(input.roleId, ctx),
+        audit,
+        { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
+      ),
+      auth: 'admin',
+    },
+    // 读操作（getInheritanceChain/getEffectivePermissions）不经 withAudit
+    getInheritanceChain: {
+      input: inheritanceChainProcedureInputSchema,
+      handler: (input, ctx) => service.getInheritanceChain(input.roleId, ctx),
+      auth: 'admin',
+    },
+    getEffectivePermissions: {
+      input: effectivePermissionsProcedureInputSchema,
+      handler: (input, ctx) => service.getEffectivePermissions(input.userId, ctx),
       auth: 'admin',
     },
   };

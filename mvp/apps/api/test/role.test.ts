@@ -75,6 +75,7 @@ function makeRole(i: number, overrides: Partial<Role> = {}): Role {
     description: `desc${i}`,
     permission_codes: ['user:read'],
     is_builtin: false,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）：roleSchema 追加 parent_role_id 字段
     created_at: SEED_TS,
     ...overrides,
   };

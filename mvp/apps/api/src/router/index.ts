@@ -20,7 +20,7 @@ export function createRouter(
 
 export { createUserRouter, updateUserStatusProcedureInputSchema } from './user.js';
 export type { Procedure, UserRouter } from './user.js';
-export { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema } from './role.js';
+export { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './role.js';
 export type { RoleRouter } from './role.js';
 export { createDeptRouter, deptDeleteProcedureInputSchema } from './dept.js';
 export type { DeptRouter, DeptProcedure } from './dept.js';

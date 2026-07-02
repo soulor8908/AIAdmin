@@ -52,4 +52,9 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   TRANSFER_OLD_ROLE_NOT_ASSIGNED: 409, // 用户未分配 oldRole（前置状态不满足）
   TRANSFER_COMPENSATION_FAILED: 500, // 补偿回滚失败（数据一致性告警）
   TRANSFER_FAILED: 500, // 执行阶段失败已回滚（聚合错误码）
+  // 角色继承域（TECH-ROLE-INHERITANCE-001）
+  ROLE_SELF_INHERITANCE: 400, // 自继承语义冲突（与 TRANSFER_SAME_ROLE 同层）
+  ROLE_BUILTIN_PARENT_FORBIDDEN: 403, // 父角色为内置 admin（与 ROLE_BUILTIN_FORBIDDEN 同层）
+  ROLE_INHERITANCE_CYCLE: 409, // 继承关系形成环（结构冲突，与 ROLE_IN_USE 同层）
+  ROLE_HAS_CHILDREN: 409, // 删除守卫 B8（结构冲突，与 ROLE_IN_USE 同层）
 };

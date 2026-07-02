@@ -44,7 +44,7 @@ import { ReportService } from './service/report.js';
 import { NotificationService } from './service/notification.js';
 import { TransferService } from './service/transfer.js';
 import { createUserRouter, updateUserStatusProcedureInputSchema } from './router/user.js';
-import { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema } from './router/role.js';
+import { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './router/role.js';
 import { createDeptRouter, deptDeleteProcedureInputSchema } from './router/dept.js';
 import { createAuditRouter } from './router/audit.js';
 import { createReportRouter } from './router/report.js';
@@ -205,6 +205,31 @@ const routes: Route[] = [
     input: assignRoleInputSchema,
     handler: roleRouter.remove.handler,
     auth: roleRouter.remove.auth,
+  }),
+  // ---- role-inheritance（TECH-ROLE-INHERITANCE-001 F1/F2/F3）----
+  // [advisory] 工程脚手架同步（AI-003 advisory 偏离：补齐 HTTP 路由入口，非业务功能）
+  defineRoute('POST', '/v1/roles/:roleId/parent', (m) => {
+    const body = (m.body ?? {}) as Record<string, string>;
+    return { roleId: m.path.roleId, parentRoleId: body.parentRoleId };
+  }, {
+    input: setParentProcedureInputSchema,
+    handler: roleRouter.setParent.handler,
+    auth: roleRouter.setParent.auth,
+  }),
+  defineRoute('DELETE', '/v1/roles/:roleId/parent', (m) => ({ roleId: m.path.roleId }), {
+    input: unsetParentProcedureInputSchema,
+    handler: roleRouter.unsetParent.handler,
+    auth: roleRouter.unsetParent.auth,
+  }),
+  defineRoute('GET', '/v1/roles/:roleId/inheritance-chain', (m) => ({ roleId: m.path.roleId }), {
+    input: inheritanceChainProcedureInputSchema,
+    handler: roleRouter.getInheritanceChain.handler,
+    auth: roleRouter.getInheritanceChain.auth,
+  }),
+  defineRoute('GET', '/v1/users/:userId/effective-permissions', (m) => ({ userId: m.path.userId }), {
+    input: effectivePermissionsProcedureInputSchema,
+    handler: roleRouter.getEffectivePermissions.handler,
+    auth: roleRouter.getEffectivePermissions.auth,
   }),
 
   // ---- dept ----

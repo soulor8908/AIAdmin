@@ -160,6 +160,15 @@ export const errorCodeSchema = z.enum([
   'TRANSFER_COMPENSATION_FAILED',
   // 调岗执行阶段失败已回滚（聚合错误码，message 含失败步骤+底层原因；校验阶段错误码直接传播不聚合）
   'TRANSFER_FAILED',
+  // ===== 角色继承域（TECH-ROLE-INHERITANCE-001）=====
+  // 自继承：parentRoleId === roleId（避免无意义继承自身）
+  'ROLE_SELF_INHERITANCE',
+  // 父角色为内置 admin（admin 是根角色，禁止被设为父）
+  'ROLE_BUILTIN_PARENT_FORBIDDEN',
+  // 新继承关系形成环（祖先遍历检测到环，message 含环路径 A→B→A）
+  'ROLE_INHERITANCE_CYCLE',
+  // 删除守卫 B8：待删角色仍有子角色引用（须先解除全部子角色继承，B5→B6→B8→B7）
+  'ROLE_HAS_CHILDREN',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

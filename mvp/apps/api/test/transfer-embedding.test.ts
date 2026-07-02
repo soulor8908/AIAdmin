@@ -185,6 +185,7 @@ function seedSharedData(
     description: 'Engineer role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
   roleRepo.insert({
@@ -193,6 +194,7 @@ function seedSharedData(
     description: 'Sales role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
   // seed userRole(userId, oldRole) —— 用户当前已分配 oldRole（调岗前置状态）

@@ -51,6 +51,9 @@ export const roleSchema = z
     description: z.string().max(512),
     permission_codes: z.array(permissionCodeSchema),
     is_builtin: z.boolean(),
+    // [约束] TECH-ROLE-INHERITANCE-001 D1：parent_role_id 为继承链字段（单继承，null=根角色）。
+    // 校验由 service 层 setParent 编排（ROLE_NOT_FOUND/ROLE_SELF_INHERITANCE/ROLE_BUILTIN_PARENT_FORBIDDEN/ROLE_INHERITANCE_CYCLE）。
+    parent_role_id: z.string().uuid().nullable(),
     created_at: z.string().datetime(),
   })
   .strict();

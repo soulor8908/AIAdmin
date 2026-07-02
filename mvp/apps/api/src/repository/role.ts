@@ -41,6 +41,9 @@ export class RoleRepository {
       description: 'Built-in administrator role with all permissions',
       permission_codes: [...ALL_PERMISSION_CODES],
       is_builtin: true,
+      // [约束] TECH-ROLE-INHERITANCE-001 D1：admin 是根角色，parent_role_id=null。
+      // 同时禁止被设为父（ROLE_BUILTIN_PARENT_FORBIDDEN）与被设继承（ROLE_BUILTIN_FORBIDDEN）。
+      parent_role_id: null,
       created_at: new Date().toISOString(),
     };
     this.roles.set(admin.id, admin);
@@ -70,6 +73,31 @@ export class RoleRepository {
   insert(role: RoleEntity): RoleEntity {
     this.roles.set(role.id, role);
     return role;
+  }
+
+  /**
+   * 原地更新角色字段（用于 setParent/unsetParent 修改 parent_role_id）。
+   * [约束] TECH-ROLE-INHERITANCE-001 D1：仅更新传入字段，未传字段保留原值。
+   * @returns 更新后的角色；若 id 不存在返回 undefined。
+   */
+  update(id: string, patch: Partial<RoleEntity>): RoleEntity | undefined {
+    const existing = this.roles.get(id);
+    if (!existing) return undefined;
+    const updated: RoleEntity = { ...existing, ...patch, id: existing.id };
+    this.roles.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * 查询引用某角色作为 parent_role_id 的全部子角色（用于 delete 守卫 B8 ROLE_HAS_CHILDREN）。
+   * [约束] TECH-ROLE-INHERITANCE-001 §2 / D6：B8 守卫需检测待删角色是否仍有子角色引用。
+   */
+  findChildren(roleId: string): RoleEntity[] {
+    const result: RoleEntity[] = [];
+    for (const r of this.roles.values()) {
+      if (r.parent_role_id === roleId) result.push(r);
+    }
+    return result;
   }
 
   /** 删除角色行；返回是否曾存在。 */
