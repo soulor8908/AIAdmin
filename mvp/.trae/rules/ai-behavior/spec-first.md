@@ -38,10 +38,20 @@ alwaysApply: true
 - 期望行为：必须执行 `npm run typecheck && npm run lint:rules && npm test`，全绿方可提交。
 - 校验方式：CI（GitHub Actions）执行 `tsc --noEmit` + `node scripts/check-rules.mjs`（整体脚本，非专属校验）+ `vitest run`，任一失败阻断合入；本地 pre-commit hook 同步。AI-004 本身无 check-rules.mjs 专属 enforcement，其"必跑三件套"由 CI 整体执行保障（不触发 META-003）。
 
-## AI-006 · Tech Lead 须产出受影响测试清单（复盘 RETRO-ROUND3 P1 反推）
-- 触发条件：Tech Lead 改动 `packages/contracts`（共享契约层）时。
+## AI-006 · Tech Lead 须产出受影响测试清单（复盘 RETRO-ROUND3 P1 反推 + RETRO-ROUND5 P1 增强）
+- 触发条件：Tech Lead 改动 `packages/contracts`（共享契约层）**或** 改动既有 `apps/api/src/{service,repository}/*.ts` 的 public 方法签名（返回类型/参数/抛错契约）时。
 - 期望行为：
   - 当 Tech-Spec 涉及 contracts 的联动改动（新增/修改字段、扩展枚举、改错误码），Tech Lead 必须在 Tech-Spec 中产出"受影响测试清单"章节。
+  - 当 Tech-Spec 涉及既有 service/repository 的 public 方法签名变更（如返回类型从 `Promise<Entity>` 扩展为 `Promise<{entity, changes}>`），Tech Lead 必须额外 grep `apps/api/test/**/*.ts` 中消费该方法返回值/参数的断言点（如 `await service.create(...)` 后访问 `.xxx` 的行），纳入同一"受影响测试清单"章节。
   - 清单生成方式：grep 引用被改符号的测试文件（如改了 `permissionCodeSchema`，则 grep 所有 import/引用 `permissionCodeSchema` 的 `apps/api/test/**/*.ts`），列出文件 + 受影响的断言位置 + 需同步更新的方向（硬编码→派生 / 数据补齐 / 类型对齐）。
-  - test-writer 据此清单同步更新既有测试的断言数据，避免跨域联动击穿既有测试。
-- 校验方式：Reviewer subagent 检查 Tech-Spec 是否含"受影响测试清单"章节（若 contracts 有联动改动）；清单缺失记 blocker。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。
+  - 清单分两类标注：①contracts 联动驱动（grep 命中）②apps/api 内部签名变更驱动（Tech Lead 手动分析）。两类均须覆盖，缺一记 blocker。
+  - test-writer 据此清单同步更新既有测试的断言数据；**test-writer 须反向核实清单完整性**——若发现清单外的影响点（如 Tech Lead 遗漏的签名变更影响），须在交付报告显式列出差异并修正，编排者据此判断清单准确性。
+- 校验方式：Reviewer subagent 检查 Tech-Spec 是否含"受影响测试清单"章节（若 contracts 有联动改动或既有 service/repository 签名变更）；清单缺失或两类标注缺一记 blocker；test-writer 交付报告若含"清单遗漏差异"记录，编排者将该差异回填至复盘（验证 AI-006 增强是否真闭合）。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。
+
+## AI-007 · 端到端验收测试 + Reviewer PRD 逐条核对（复盘 RETRO-ROUND5 P0 反推）
+- 触发条件：PRD 含"验收标准（Given/When/Then）"且涉及跨层行为（如埋点、联动、聚合等无法由单层断言覆盖的场景）时。
+- 期望行为：
+  - **test-writer 须产出端到端验收测试**：对照 PRD 每条 Given/When/Then，编写从入口（router/handler）到可观测副作用（如审计日志落库、报表聚合结果、跨域状态变更）的端到端断言，而不仅断言单层 service 返回值。端到端测试须注入共享依赖（如共享 AuditLogRepository）以观测旁路副作用，而非依赖隔离的自建实例导致副作用不可见。
+  - **Reviewer 须按 PRD 验收标准逐条核对**：审查时不仅查规则合规（tsc/check-rules/断言通过），还须对照 PRD 的每条 Given/When/Then 逐条核对实现行为是否对齐；发现 [约束] 偏离记 blocker，[advisory] 偏离核对反向同步说明。
+  - 根因回顾（RETRO-ROUND5 P0）：tsc/check-rules/vitest 校验"代码正确性"（类型/规则/断言），不校验"业务验收对齐"；impl-writer 的语义偏离可隐身于"全绿"假象下，只有端到端验收测试 + Reviewer PRD 逐条核对才能抓出。
+- 校验方式：Reviewer subagent 检查测试文件是否覆盖 PRD 每条 Given/When/Then（端到端断言，非仅单层）；Reviewer 报告须含"PRD 验收逐条核对"章节，列出每条验收点的对齐结论（对齐/偏离）；端到端测试缺失或 PRD 核对章节缺失记 blocker。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。

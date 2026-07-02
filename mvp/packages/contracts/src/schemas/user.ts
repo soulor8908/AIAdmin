@@ -142,6 +142,15 @@ export const errorCodeSchema = z.enum([
   'REPORT_GROUP_BY_REQUIRED',
   // 时间范围无效（operated_from 晚于 operated_to，D10：schema superRefine 检测 + service 层语义判定 → 400）
   'REPORT_TIME_RANGE_INVALID',
+  // ===== 通知域（TECH-NOTIFICATION-001）=====
+  // 通知不存在（id 合法 uuid 但无记录，任意写操作 update/delete/send/markRead 触发，B5）
+  'NOTIFICATION_NOT_FOUND',
+  // send 时收件人不存在（findByIds 结果为空，B7，区别于 B5 通知本身不存在）
+  'NOTIFICATION_RECIPIENT_NOT_FOUND',
+  // send 时收件人存在但 status=disabled（B8，收件人状态冲突）
+  'NOTIFICATION_RECIPIENT_DISABLED',
+  // 状态转移/状态守卫操作非法（跳过/同态/回退/update|delete|send|markRead 状态守卫违规，B6，单码覆盖所有状态非法）
+  'NOTIFICATION_INVALID_TRANSITION',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

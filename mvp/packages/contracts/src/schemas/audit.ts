@@ -11,11 +11,13 @@
 import { z } from 'zod';
 
 /**
- * 操作日志目标实体类型枚举（Q3 决策：本期固定闭合枚举 user/role/dept）。
+ * 操作日志目标实体类型枚举（Q3 决策：闭合枚举，随领域 PRD 扩展）。
  * [约束] 后续新增领域时由对应领域 PRD 同步扩展该枚举（参照 permissionCodeSchema 随模块 PRD 扩展哲学）；
  *        枚举扩展须同步本 schema、Tech-Spec §API 契约、OpenAPI 的 AuditLogEntityType 与各域写操作埋点。
+ * [约束] notification 为跨域联动扩展（TECH-NOTIFICATION-001 引入）：notification 5 类写操作经 withAudit 埋点，
+ *        entity_type=notification；枚举扩展后 SSOT 派生断言（AI-005）自动跟随（role/audit/report.test.ts 等无需手改）。
  */
-export const auditLogEntityTypeSchema = z.enum(['user', 'role', 'dept']);
+export const auditLogEntityTypeSchema = z.enum(['user', 'role', 'dept', 'notification']);
 export type AuditLogEntityType = z.infer<typeof auditLogEntityTypeSchema>;
 
 /**

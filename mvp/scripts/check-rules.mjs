@@ -7,6 +7,7 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const errors = [];
 const warnings = []; // suggestion 级，不阻断但记录
+const infos = []; // info 级（如 SEC-002 豁免标记审计清单），不阻断
 
 function walk(dir, acc = []) {
   if (!existsSync(dir)) return acc;
@@ -133,6 +134,9 @@ for (const f of allTs) {
 }
 
 // ============ SEC-002：service public 方法须调 requireAdmin/requirePermission ============
+// 既有 SEC-002 分支内增强（TECH-NOTIFICATION-001 §3.3 D5）：
+// 识别方法声明行上方 1~2 行或行尾的 `// SEC-002-exempt: <reason>` 标记，命中则跳过 requireAdmin 检查
+// 并 push info 供 Reviewer 审计。非新增 markEnforcement 分支（META-003 合规）。
 markEnforcement('SEC-002');
 for (const f of allTs) {
   if (!rel(f).startsWith('apps/api/src/service/')) continue;
@@ -147,10 +151,26 @@ for (const f of allTs) {
     const name = m[1];
     if (KW.has(name)) continue;
     if (/private|#/.test(line)) continue;
+    // SEC-002-exempt 标记识别（D5）：检查声明行上方 1~2 行（max(0, i-2) ~ i-1）+ 声明行本身尾注释，
+    // 命中 `SEC-002-exempt:` 则跳过 requireAdmin 检查并 push info 供 Reviewer 逐条核对豁免合理性。
+    const exemptCtx = [];
+    for (let k = Math.max(0, i - 2); k <= i; k++) exemptCtx.push(lines[k]);
+    const exemptMatch = exemptCtx.join('\n').match(/\/\/\s*SEC-002-exempt:\s*(.+)/);
+    if (exemptMatch) {
+      const reason = exemptMatch[1].trim();
+      infos.push(`SEC-002 豁免：${rel(f)}:${i + 1} ${name}() — ${reason}`);
+      continue;
+    }
     let body = '';
     for (let j = i; j < Math.min(i + 40, lines.length); j++) {
       body += lines[j] + '\n';
-      if (j > i && /^\s*(?:async\s+)?\w+\s*\([^)]*\)\s*[:{]/.test(lines[j])) break;
+      // 复盘 RETRO-ROUND5 P2 修复：break 条件须与 methodRe 同步排除控制流关键字
+      // （if/for/while/switch/catch/return/function/constructor/static）与 private/#，
+      // 否则把 `if(...)` 误判为方法声明而提前截断 body，导致 requireAdmin 落出 body 被误报。
+      if (j > i) {
+        const bm = /^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*[:{]/.exec(lines[j]);
+        if (bm && !KW.has(bm[1]) && !/private|#/.test(lines[j])) break;
+      }
     }
     if (!/requireAdmin|requirePermission/.test(body)) {
       errors.push(`SEC-002 违规：${rel(f)}:${i + 1} service 方法 ${name}() 未调用 requireAdmin/requirePermission`);
@@ -265,6 +285,10 @@ for (const id of SCRIPT_ENFORCEMENT_IDS) {
 }
 
 // ============ 输出 ============
+if (infos.length) {
+  console.log('ℹ️  审计清单（不阻断，供 Reviewer 逐条核对）：');
+  for (const i of infos) console.log('  - ' + i);
+}
 if (warnings.length) {
   console.log('⚠️  建议（不阻断）：');
   for (const w of warnings) console.log('  - ' + w);
@@ -278,5 +302,6 @@ if (errors.length) {
   console.log('✅ 规则校验通过');
   console.log('   enforcement 覆盖：' + [...SCRIPT_ENFORCEMENT_IDS].sort().join('/'));
   console.log('   双向绑定：META-003(声明即实现) + META-004(实现即声明) 已校验');
+  if (infos.length) console.log(`   另有 ${infos.length} 条 SEC-002 豁免审计清单`);
   if (warnings.length) console.log(`   另有 ${warnings.length} 条建议`);
 }

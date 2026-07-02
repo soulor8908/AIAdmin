@@ -49,6 +49,9 @@ import { createRoleRouter } from '../src/router/role.js';
 import { createDeptRouter } from '../src/router/dept.js';
 import { createAuditRouter } from '../src/router/audit.js';
 import { createReportRouter } from '../src/router/report.js';
+import { NotificationRepository } from '../src/repository/notification.js';
+import { NotificationService } from '../src/service/notification.js';
+import { createNotificationRouter } from '../src/router/notification.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
@@ -68,9 +71,11 @@ function setup(): {
   userRepo: UserRepository;
   roleRepo: RoleRepository;
   deptRepo: DepartmentRepository;
+  notificationRepo: NotificationRepository;
   userRouter: ReturnType<typeof createUserRouter>;
   roleRouter: ReturnType<typeof createRoleRouter>;
   deptRouter: ReturnType<typeof createDeptRouter>;
+  notificationRouter: ReturnType<typeof createNotificationRouter>;
   auditRouter: ReturnType<typeof createAuditRouter>;
   reportRouter: ReturnType<typeof createReportRouter>;
 } {
@@ -92,10 +97,14 @@ function setup(): {
   const roleService = new RoleService(roleRepo, userRepo);
   const deptService = new DepartmentService(deptRepo, userRepo);
   const reportService = new ReportService(auditRepo);
-  // 方案A：三域 router 共享同一 auditService（→ 同一 auditRepo）
+  // notification 域（跨域联动①）：注入共享 userService（D1 跨 service 依赖）+ 独立 notificationRepo
+  const notificationRepo = new NotificationRepository();
+  const notificationService = new NotificationService(userService, notificationRepo);
+  // 方案A：四域 router 共享同一 auditService（→ 同一 auditRepo，埋点可观测）
   const userRouter = createUserRouter(userService, auditService);
   const roleRouter = createRoleRouter(roleService, auditService);
   const deptRouter = createDeptRouter(deptService, auditService);
+  const notificationRouter = createNotificationRouter(notificationService, auditService);
   const auditRouter = createAuditRouter(auditService);
   const reportRouter = createReportRouter(reportService);
   return {
@@ -104,9 +113,11 @@ function setup(): {
     userRepo,
     roleRepo,
     deptRepo,
+    notificationRepo,
     userRouter,
     roleRouter,
     deptRouter,
+    notificationRouter,
     auditRouter,
     reportRouter,
   };
@@ -523,19 +534,27 @@ describe('F1 端到端 · 读操作与失败场景', () => {
 // ---------------------------------------------------------------------------
 describe('F1 端到端 · SSOT 派生（AI-005）', () => {
   it('所有埋点日志 entity_type ∈ [...auditLogEntityTypeSchema.options]（SSOT 派生，禁硬编码）', async () => {
-    const { userRouter, roleRouter, deptRouter, auditRepo } = setup();
-    // 触发三域写操作各一条
+    const { userRouter, roleRouter, deptRouter, notificationRouter, auditRepo } = setup();
+    // 触发四域写操作各一条（notification 为本期跨域联动①新增，须落库以覆盖 seenTypes 全集断言）
     await callProc(userRouter.create, { email: 'ssot@example.com', name: 'u' }, adminCtx);
     await callProc(roleRouter.create, { name: 'r', description: 'd', permission_codes: [] }, adminCtx);
     await callProc(deptRouter.create, { name: 'd' }, adminCtx);
+    await callProc(
+      notificationRouter.create,
+      { title: 'n', content: 'c', recipient_id: ADMIN_ID },
+      adminCtx,
+    );
     const validTypes = [...auditLogEntityTypeSchema.options];
-    // 全集断言：枚举覆盖 user/role/dept
-    expect(validTypes).toEqual(['user', 'role', 'dept']);
+    // 全集断言（SSOT 派生，AI-005 禁硬编码全集字面量）：跨域联动①使 notification 加入枚举
+    expect(validTypes).toContain('notification');
+    expect(validTypes).toContain('user');
+    expect(validTypes).toContain('role');
+    expect(validTypes).toContain('dept');
     // 每条日志的 entity_type 必在全集内
     for (const log of auditRepo.listAll()) {
       expect(validTypes).toContain(log.entity_type);
     }
-    // 三域日志均已落库（user/role/dept 各至少一条）
+    // 四域日志均已落库（user/role/dept/notification 各至少一条）
     const seenTypes = new Set(auditRepo.listAll().map((l) => l.entity_type));
     for (const t of validTypes) {
       expect(seenTypes.has(t)).toBe(true);

@@ -60,13 +60,17 @@ export class AuditLogService {
   }
 
   /**
-   * 旁路写入日志（F1）：供其他 service 在写操作成功后调用记录日志。
+   * 旁路写入日志（F1）：供 withAudit（router 层）在写操作成功后调用记录日志。
    * 主操作失败则不调用本方法（PRD 兼容性要求：日志记录不影响主操作成败）。
    * 返回存储态 AuditLog（before/after 含原 PII，未脱敏）；查询入口 list 返回脱敏态（存储原值/查询脱敏分离）。
-   * SEC-002：本方法为 public，按硬约束调用 requireAdmin(ctx)（旁路调用方已为 admin，重复校验无害）。
+   * SEC-002 豁免：本方法为框架内部旁路日志写入，由 withAudit 在被审计 service 方法已通过自身鉴权后调用；
+   *   operator_id 取自 input.operator_id（withAudit 从 ctx.user.id 设置），反映真实操作者（admin 或自服务收件人 F2-5）。
+   *   若此处再 requireAdmin 会阻断 markRead 自服务埋点（收件人非 admin → FORBIDDEN 被 withAudit 吞 → 日志不入库），
+   *   使 F2-5（operator_id=收件人 id 的日志须入库）不可达。被审计操作的鉴权由对应 service 方法负责：
+   *   create/update/send/delete/list/detail 调 requireAdmin；markRead 走收件人守卫（ctx.user.id === recipient_id）。
    */
-  async record(input: AuditLogRecordInput, ctx: Ctx): Promise<AuditLog> {
-    this.requireAdmin(ctx);
+  // SEC-002-exempt: framework-internal旁路 logging via withAudit; operator_id=actual operator (admin or self-service recipient F2-5); admin guard would block markRead self-service audit
+  async record(input: AuditLogRecordInput, _ctx: Ctx): Promise<AuditLog> {
     const log: AuditLog = {
       id: randomUUID(),
       operator_id: input.operator_id,

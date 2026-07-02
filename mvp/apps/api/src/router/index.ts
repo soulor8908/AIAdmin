@@ -28,3 +28,5 @@ export { createAuditRouter } from './audit.js';
 export type { AuditRouter, AuditProcedure } from './audit.js';
 export { createReportRouter } from './report.js';
 export type { ReportRouter, ReportProcedure } from './report.js';
+export { createNotificationRouter, notificationIdProcedureInputSchema, updateNotificationProcedureInputSchema } from './notification.js';
+export type { NotificationRouter, NotificationProcedure } from './notification.js';

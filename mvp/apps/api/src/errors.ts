@@ -42,4 +42,9 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   // 报表域（TECH-AUDIT-ENHANCEMENT-001，D10：校验层语义判定 → 400）
   REPORT_GROUP_BY_REQUIRED: 400,
   REPORT_TIME_RANGE_INVALID: 400,
+  // 通知域（TECH-NOTIFICATION-001，§6 边界与异常）
+  NOTIFICATION_NOT_FOUND: 404, // B5 通知不存在（区别于 B7 收件人不存在）
+  NOTIFICATION_RECIPIENT_NOT_FOUND: 404, // B7 send 时收件人不存在
+  NOTIFICATION_RECIPIENT_DISABLED: 409, // B8 send 时收件人禁用（收件人状态冲突，与 USER_ALREADY_* 409 同层级）
+  NOTIFICATION_INVALID_TRANSITION: 409, // B6 状态转移/状态守卫操作非法（与 USER_ALREADY_* 409 同层级）
 };

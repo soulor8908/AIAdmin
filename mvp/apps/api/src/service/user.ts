@@ -37,6 +37,17 @@ export class UserService {
     return { items, total, page: query.page, pageSize: query.pageSize, totalPages };
   }
 
+  /**
+   * 批量查用户（TECH-NOTIFICATION-001 D1/D2 落点）：调 repo.findByIds(ids) + requireAdmin。
+   * [约束] 入口 requireAdmin(ctx)（SEC-002：public 方法须调 requireAdmin；findByIds 为 admin 运营侧调用的批量查询，沿用 list/create 的 admin 守卫语义）。
+   * [约束] 不存在的 id 静默 omitted（repo 层语义）；调用方传唯一 id（去重由调用方负责，PRD Q10）。
+   * [约束] 本期为 NotificationService.send 校验收件人存在与禁用态的唯一消费方（跨 service 依赖新模式 D1）。
+   */
+  async findByIds(ids: string[], ctx: Ctx): Promise<User[]> {
+    this.requireAdmin(ctx);
+    return this.repo.findByIds(ids);
+  }
+
   async create(input: CreateUserInput, ctx: Ctx): Promise<WriteResult<User>> {
     this.requireAdmin(ctx);
     // B4: 邮箱唯一

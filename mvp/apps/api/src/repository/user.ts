@@ -33,6 +33,21 @@ export class UserRepository {
     return this.store.get(id);
   }
 
+  /**
+   * 批量查用户（TECH-NOTIFICATION-001 D2 落点）：遍历 store，返回存在的 UserEntity[]。
+   * [约束] 不存在的 id 静默 omitted（不在结果中），不抛错（与 findById 返回 undefined 的"不存在即无"语义一致）。
+   * [约束] 保持插入顺序（与 findById/findByDepartmentId 一致）。
+   * [约束] 调用方传唯一 id（去重由调用方负责，PRD Q10）；本期 NotificationService.send 传 [recipient_id]。
+   */
+  findByIds(ids: string[]): UserEntity[] {
+    const result: UserEntity[] = [];
+    for (const id of ids) {
+      const u = this.store.get(id);
+      if (u) result.push(u);
+    }
+    return result;
+  }
+
   findByEmail(email: string): UserEntity | undefined {
     for (const u of this.store.values()) {
       if (u.email === email) return u;

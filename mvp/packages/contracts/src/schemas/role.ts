@@ -16,6 +16,10 @@ import { z } from 'zod';
  * [约束] audit:read 为跨域联动扩展（TECH-AUDIT-001 引入）：查询操作日志（GET /v1/audit-logs）。
  *        内置 admin 随枚举扩展自动覆盖该码（Q4）；ALL_PERMISSION_CODES 由 [...permissionCodeSchema.options]
  *        派生，枚举扩展后自动含 audit:read，无需手改（AI-005 价值：role.test.ts 断言自动跟随，见 TECH-AUDIT-001 §受影响测试清单）。
+ * [约束] notification:read / notification:write 为跨域联动扩展（TECH-NOTIFICATION-001 引入）：
+ *        notification:read 查询通知列表/详情，notification:write 创建/编辑/删除/发送通知；markRead 为收件人自服务不走权限码（Q4b）。
+ *        内置 admin 随枚举扩展自动覆盖两码（Q4）；ALL_PERMISSION_CODES 由 [...permissionCodeSchema.options]
+ *        派生，枚举扩展后自动含 notification:read/write，无需手改（AI-005：role.test.ts 断言自动跟随）。
  */
 export const permissionCodeSchema = z.enum([
   'user:read',
@@ -26,6 +30,8 @@ export const permissionCodeSchema = z.enum([
   'dept:write',
   'audit:read',
   'report:read',
+  'notification:read',
+  'notification:write',
 ]);
 export type PermissionCode = z.infer<typeof permissionCodeSchema>;
 
