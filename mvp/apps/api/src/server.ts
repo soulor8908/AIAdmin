@@ -56,6 +56,7 @@ import {
 } from './router/notification.js';
 import { createTransferRouter, transferProcedureInputSchema } from './router/transfer.js';
 import { AppError, errorCodeToHttpStatus } from './errors.js';
+import { detailEtag, listEtag, parseIfNoneMatch } from './etag.js';
 import type { Ctx } from './context.js';
 import type { Procedure } from './router/user.js';
 
@@ -135,17 +136,32 @@ type Route = {
    * 缺失 → VERSION_REQUIRED(400)；格式非法 → VALIDATION_ERROR(400)；合法 → 注入 expected_version。
    */
   versioned: boolean;
+  /**
+   * 是否支持 ETag 协商缓存（TECH-ETAG-CACHING-001 D6）。
+   * cacheable=true 时，handle() 在 handler 成功后生成 ETag + 比对 If-None-Match：
+   * 匹配 → 304 Not Modified（空体 + ETag header）；不匹配/缺失 → 200 + body + ETag header。
+   */
+  cacheable: boolean;
+  /**
+   * ETag 生成函数（cacheable=true 时必填）。输入为 handler 返回值，输出为 ETag 字符串（含引号，如 "0" / "3-5"）。
+   */
+  buildEtag?: (result: unknown) => string;
 };
 
 /** 从 procedure + 路由元数据构造 Route（复用 procedure 的 inputSchema/handler/auth，无重复声明）。
  * [约束] TECH-OPTIMISTIC-LOCKING-001 D17：versioned 标记由 server.ts 声明式注入（路由层 procedure 不感知 HTTP header）。
- * @param versioned 写路由传 true（解析 If-Match），读路由缺省 false。 */
+ * [约束] TECH-ETAG-CACHING-001 D6：cacheable 标记 + buildEtag 由 server.ts 声明式注入。
+ * @param versioned 写路由传 true（解析 If-Match），读路由缺省 false。
+ * @param cacheable 读路由传 true（生成 ETag + 比对 If-None-Match），写路由缺省 false。
+ * @param buildEtag cacheable=true 时传入 ETag 生成函数（detailEtag / listEtag）。 */
 function defineRoute<I>(
   method: string,
   pattern: string,
   buildInput: (m: MatchCtx) => unknown,
   procedure: Procedure<I, unknown>,
   versioned = false,
+  cacheable = false,
+  buildEtag?: (result: unknown) => string,
 ): Route {
   return {
     method,
@@ -155,6 +171,8 @@ function defineRoute<I>(
     handler: procedure.handler as (input: unknown, ctx: Ctx) => Promise<unknown>,
     auth: procedure.auth,
     versioned,
+    cacheable,
+    buildEtag,
   };
 }
 
@@ -170,7 +188,7 @@ function queryToObject(query: URLSearchParams): Record<string, unknown> {
 
 const routes: Route[] = [
   // ---- user ----
-  defineRoute('GET', '/v1/users', (m) => queryToObject(m.query), userRouter.list),
+  defineRoute('GET', '/v1/users', (m) => queryToObject(m.query), userRouter.list, false, true, listEtag),
   defineRoute('POST', '/v1/users', (m) => m.body, userRouter.create),
   defineRoute('PATCH', '/v1/users/:id/status', (m) => ({ id: m.path.id, body: m.body }), {
     input: updateUserStatusProcedureInputSchema,
@@ -194,13 +212,13 @@ const routes: Route[] = [
   }),
 
   // ---- role ----
-  defineRoute('GET', '/v1/roles', (m) => queryToObject(m.query), roleRouter.list),
+  defineRoute('GET', '/v1/roles', (m) => queryToObject(m.query), roleRouter.list, false, true, listEtag),
   defineRoute('POST', '/v1/roles', (m) => m.body, roleRouter.create),
   defineRoute('GET', '/v1/roles/:id', (m) => ({ id: m.path.id }), {
     input: roleDetailProcedureInputSchema,
     handler: roleRouter.detail.handler,
     auth: roleRouter.detail.auth,
-  }),
+  }, false, true, detailEtag),
   defineRoute('DELETE', '/v1/roles/:id', (m) => ({ id: m.path.id }), {
     input: roleDeleteProcedureInputSchema,
     handler: roleRouter.delete.handler,
@@ -277,13 +295,13 @@ const routes: Route[] = [
   }, reportRouter.query),
 
   // ---- notification ----
-  defineRoute('GET', '/v1/notifications', (m) => queryToObject(m.query), notificationRouter.list),
+  defineRoute('GET', '/v1/notifications', (m) => queryToObject(m.query), notificationRouter.list, false, true, listEtag),
   defineRoute('POST', '/v1/notifications', (m) => m.body, notificationRouter.create),
   defineRoute('GET', '/v1/notifications/:id', (m) => ({ id: m.path.id }), {
     input: notificationIdProcedureInputSchema,
     handler: notificationRouter.detail.handler,
     auth: notificationRouter.detail.auth,
-  }),
+  }, false, true, detailEtag),
   defineRoute('PATCH', '/v1/notifications/:id', (m) => ({ id: m.path.id, body: m.body }), {
     input: updateNotificationProcedureInputSchema,
     handler: notificationRouter.update.handler,
@@ -372,6 +390,20 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /**
+ * 发送 JSON 响应 + ETag header（TECH-ETAG-CACHING-001 D10）。
+ * 用于 cacheable 路由的 200 响应（body + ETag header）。
+ */
+function sendJsonWithEtag(res: ServerResponse, status: number, body: unknown, etag: string): void {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(payload),
+    'ETag': etag,
+  });
+  res.end(payload);
+}
+
+/**
  * 解析 If-Match header 为乐观锁 version（TECH-OPTIMISTIC-LOCKING-001 D18）。
  * 接受纯非负整数字符串（如 "3"）；不采用 ETag 引号格式（MVP 简化）。
  * @returns ok=true 携带 version；ok=false 携带 errorCode（VERSION_REQUIRED / VALIDATION_ERROR）。
@@ -451,6 +483,19 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (result === undefined) {
       res.writeHead(204, { 'Content-Length': 0 });
       res.end();
+      return;
+    }
+    // [约束] TECH-ETAG-CACHING-001 D9：cacheable 路由在 handler 成功后生成 ETag + 比对 If-None-Match。
+    // 匹配 → 304 Not Modified（空体 + ETag header，Q3/Q6 决策①）；不匹配/缺失/非法 → 200 + body + ETag header。
+    if (route.cacheable && route.buildEtag) {
+      const etag = route.buildEtag(result);
+      const ifNoneMatch = parseIfNoneMatch(req.headers['if-none-match'] as string | undefined);
+      if (ifNoneMatch !== null && ifNoneMatch === etag) {
+        res.writeHead(304, { 'ETag': etag, 'Content-Length': 0 });
+        res.end();
+        return;
+      }
+      sendJsonWithEtag(res, 200, result, etag);
       return;
     }
     sendJson(res, 200, result);
