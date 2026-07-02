@@ -64,4 +64,9 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   // 乐观锁域（TECH-OPTIMISTIC-LOCKING-001）
   VERSION_REQUIRED: 400, // 写操作缺失 If-Match header（入参校验失败，与 VALIDATION_ERROR 同层）
   VERSION_CONFLICT: 409, // If-Match version 不匹配（状态冲突，与 USER_ALREADY_* 409 同层）
+  // 鉴权域（TECH-AUTH-001，PRD Q10：4 码全 401）
+  INVALID_CREDENTIALS: 401, // 邮箱不存在或密码错（模糊错误，防账号枚举，与 UNAUTHORIZED 同 401 层）
+  TOKEN_INVALID: 401, // token 伪造/格式错/scheme 非 Bearer（与 UNAUTHORIZED 同 401 层）
+  TOKEN_EXPIRED: 401, // token 已过期（与 UNAUTHORIZED 同 401 层）
+  TOKEN_REVOKED: 401, // token 已登出吊销（与 UNAUTHORIZED 同 401 层）
 };

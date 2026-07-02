@@ -38,13 +38,34 @@ export const userSchema = z
 export type User = z.infer<typeof userSchema>;
 
 /**
+ * 用户存储实体：DB users 表行的完整投影（含敏感字段 password_hash）。
+ * [约束] TECH-AUTH-001 D5：拆分存储实体 schema 与输出 schema。
+ *        userSchema（输出）保持完全不变 —— 不含 password_hash（SEC-003a：响应输出 schema 1:1 + .strict() 拒绝多余字段），
+ *        User 类型不变 → 既有 user 响应测试零变更（ARCH-001 闭合）。
+ *        userEntitySchema（存储/内部）含 password_hash，仅供 repository/service 内部使用；
+ *        HTTP 响应输出前须经 userSchema 投影剥离 password_hash（impl-writer 阶段落地）。
+ * [约束] password_hash = scrypt 输出 `salt.hash` 格式（base64，TECH-AUTH-001 D2）。
+ *        禁止在 userSchema 内 optional password_hash（语义混乱且污染 User 类型）。
+ */
+export const userEntitySchema = userSchema
+  .extend({
+    password_hash: z.string().min(1),
+  })
+  .strict();
+export type UserEntity = z.infer<typeof userEntitySchema>;
+
+/**
  * 新建用户输入。
- * Q5 决策：本期新建必填 = email + name；不含密码 / 角色 / 部门。
+ * Q5 决策：本期新建必填 = email + name；不含角色 / 部门。
+ * [约束] TECH-AUTH-001 D6：追加 password optional（z.string().min(8)，PRD Q12 最低 8 位）。
+ *        缺省时 service 层生成临时密码并记审计日志；.strict() 仍拒绝多余字段。
+ *        既有 {email, name} 样本因 password optional 仍合法 → 既有 createUser 测试零变更。
  */
 export const createUserInputSchema = z
   .object({
     email: z.string().email(),
     name: z.string().min(1),
+    password: z.string().min(8).optional(),
   })
   .strict();
 export type CreateUserInput = z.infer<typeof createUserInputSchema>;
@@ -177,6 +198,15 @@ export const errorCodeSchema = z.enum([
   'VERSION_REQUIRED',
   // If-Match version 与实体当前 version 不匹配（409，状态冲突，响应含 current_version 供重试）
   'VERSION_CONFLICT',
+  // ===== 鉴权域（TECH-AUTH-001）=====
+  // 邮箱不存在或密码错（401，模糊错误不区分，防账号枚举，PRD Q9/Q10）
+  'INVALID_CREDENTIALS',
+  // token 伪造/格式错/scheme 非 Bearer（401，PRD Q10）
+  'TOKEN_INVALID',
+  // token 已过期（401，exp ≤ now，PRD Q10）
+  'TOKEN_EXPIRED',
+  // token 已登出吊销（401，命中黑名单，PRD Q10）
+  'TOKEN_REVOKED',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
