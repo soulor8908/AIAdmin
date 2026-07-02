@@ -1,0 +1,81 @@
+// apps/api/src/service/user.ts —— 业务层：编排 repository + domain + 权限校验 + 抛 AppError
+// 校验顺序（Tech-Spec）：鉴权(B3) → 业务规则(B4/B5/B6) → 状态守卫(B7/B8)，先到先返。
+import { randomUUID } from 'node:crypto';
+import type {
+  CreateUserInput,
+  ListUserQuery,
+  User,
+  UserListResult,
+  UserStatus,
+} from '@admin/contracts';
+import type { UserRepository } from '../repository/user.js';
+import type { Ctx } from '../context.js';
+import { transitionStatus } from '../domain/user.js';
+import { AppError } from '../errors.js';
+
+export class UserService {
+  constructor(private readonly repo: UserRepository) {}
+
+  /** SEC-002：service 入口校验调用者必须为 admin，否则 FORBIDDEN。 */
+  private requireAdmin(ctx: Ctx): void {
+    if (ctx.user.role !== 'admin') {
+      throw new AppError('FORBIDDEN', '需要管理员权限');
+    }
+  }
+
+  async list(query: ListUserQuery, ctx: Ctx): Promise<UserListResult> {
+    this.requireAdmin(ctx);
+    const { items, total } = this.repo.list({
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+    });
+    // F1: 空列表 totalPages=0；否则 ceil(total/pageSize)
+    const totalPages = total === 0 ? 0 : Math.ceil(total / query.pageSize);
+    return { items, total, page: query.page, pageSize: query.pageSize, totalPages };
+  }
+
+  async create(input: CreateUserInput, ctx: Ctx): Promise<User> {
+    this.requireAdmin(ctx);
+    // B4: 邮箱唯一
+    const existing = this.repo.findByEmail(input.email);
+    if (existing) {
+      throw new AppError('USER_EMAIL_DUPLICATE', `邮箱已被占用: ${input.email}`);
+    }
+    const now = new Date().toISOString();
+    const user: User = {
+      id: randomUUID(),
+      name: input.name,
+      email: input.email,
+      status: 'active', // F2: 新建默认 active，不接受创建时指定 status
+      created_at: now,
+      updated_at: now,
+    };
+    return this.repo.insert(user);
+  }
+
+  async updateStatus(targetId: string, newStatus: UserStatus, ctx: Ctx): Promise<User> {
+    this.requireAdmin(ctx);
+    // B5: 目标不存在（先于 B6/B7）
+    const target = this.repo.findById(targetId);
+    if (!target) {
+      throw new AppError('USER_NOT_FOUND', `用户不存在: ${targetId}`);
+    }
+    // B6: 禁用自身禁止（权限校验先于状态校验；仅禁用场景，启用自身不禁止）
+    if (newStatus === 'disabled' && targetId === ctx.user.id) {
+      throw new AppError('USER_DISABLE_SELF_FORBIDDEN', '不能禁用自身当前登录账号');
+    }
+    // B7/B8: 状态守卫（domain 纯函数裁决）
+    const result = transitionStatus(target.status, newStatus);
+    if (!result.ok) {
+      throw new AppError(result.errorCode, '状态变更冲突: 目标已是请求状态');
+    }
+    const now = new Date().toISOString();
+    const updated = this.repo.updateStatus(targetId, result.next, now);
+    if (!updated) {
+      // 极小竞态：刚查到又被并发删除，按不存在处理
+      throw new AppError('USER_NOT_FOUND', `用户不存在: ${targetId}`);
+    }
+    return updated;
+  }
+}

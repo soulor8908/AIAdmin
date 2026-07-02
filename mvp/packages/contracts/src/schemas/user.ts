@@ -1,0 +1,119 @@
+// packages/contracts/src/schemas/user.ts —— 用户管理契约层（SSOT）
+// 派生自 Tech-Spec TECH-USER-001（prd_ref: PRD-USER-001）。
+// 约束：所有类型经 z.infer 派生，禁止手写 TS 类型副本（ARCH-002 / CODE-004）。
+// 约束：email 用 z.string().email()；id 用 z.string().uuid()。
+
+import { z } from 'zod';
+
+/**
+ * 用户状态机取值：
+ * - active   = 启用（默认初始态）
+ * - disabled = 禁用
+ * 状态迁移：active ⇄ disabled（详见 Tech-Spec §状态机）
+ */
+export const userStatusSchema = z.enum(['active', 'disabled']);
+export type UserStatus = z.infer<typeof userStatusSchema>;
+
+/**
+ * 用户实体：DB users 表行的契约投影。
+ * 字段命名沿用 snake_case 以与 DB schema 对齐（created_at / updated_at）。
+ */
+export const userSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string().min(1),
+    email: z.string().email(),
+    status: userStatusSchema,
+    created_at: z.string().datetime(),
+    updated_at: z.string().datetime(),
+  })
+  .strict();
+export type User = z.infer<typeof userSchema>;
+
+/**
+ * 新建用户输入。
+ * Q5 决策：本期新建必填 = email + name；不含密码 / 角色 / 部门。
+ */
+export const createUserInputSchema = z
+  .object({
+    email: z.string().email(),
+    name: z.string().min(1),
+  })
+  .strict();
+export type CreateUserInput = z.infer<typeof createUserInputSchema>;
+
+/**
+ * 更新用户状态输入。
+ * F3 禁用 / F4 启用 共用同一 PATCH 端点（/v1/users/{id}/status）。
+ * 具体行为（拒绝重复状态、禁用自身等）由 service 层 + 状态机裁决，不在 schema 层表达。
+ */
+export const updateUserStatusInputSchema = z
+  .object({
+    status: userStatusSchema,
+  })
+  .strict();
+export type UpdateUserStatusInput = z.infer<typeof updateUserStatusInputSchema>;
+
+/**
+ * 分页查询用户列表入参。
+ * - page / pageSize 经 coerce 以兼容 query string 透传。
+ * - status 可选，缺省表示不按状态过滤（F1 验收：未传入则返回所有状态）。
+ * - pageSize 上限 100，防止一次性全量加载（非功能：性能）。
+ */
+export const listUserQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  status: userStatusSchema.optional(),
+});
+export type ListUserQuery = z.infer<typeof listUserQuerySchema>;
+
+/**
+ * 分页查询用户列表结果。
+ * - total = 满足筛选条件的总条数（非当前页条数）。
+ * - totalPages = ceil(total / pageSize)；空列表时为 0（F1 验收：总页数为 0）。
+ */
+export const userListResultSchema = z
+  .object({
+    items: z.array(userSchema),
+    total: z.number().int().min(0),
+    page: z.number().int().min(1),
+    pageSize: z.number().int().min(1),
+    totalPages: z.number().int().min(0),
+  })
+  .strict();
+export type UserListResult = z.infer<typeof userListResultSchema>;
+
+/**
+ * 错误码枚举：与 Tech-Spec §边界与异常 一一对应。
+ * 新增错误码须同步更新 Tech-Spec 与 OpenAPI 片段，保持三处一致。
+ */
+export const errorCodeSchema = z.enum([
+  // 入参校验失败（Zod 解析失败）
+  'VALIDATION_ERROR',
+  // 未认证 / 未登录（SEC-001：路由默认受保护）
+  'UNAUTHORIZED',
+  // 已认证但越权（SEC-002：service 层 requirePermission 拒绝）
+  'FORBIDDEN',
+  // 目标用户不存在（F4：ID 非法或不存在的用户）
+  'USER_NOT_FOUND',
+  // 邮箱已被占用（F2：邮箱唯一约束）
+  'USER_EMAIL_DUPLICATE',
+  // 禁用自身账号（F3：不能禁用自身当前登录账号）
+  'USER_DISABLE_SELF_FORBIDDEN',
+  // 重复禁用（F3：目标已是禁用状态）
+  'USER_ALREADY_DISABLED',
+  // 重复启用（F4：目标已是启用状态）
+  'USER_ALREADY_ACTIVE',
+]);
+export type ErrorCode = z.infer<typeof errorCodeSchema>;
+
+/**
+ * 统一错误响应体。所有 procedure 失败均回包此结构，code 取自 errorCodeSchema。
+ */
+export const errorResponseSchema = z
+  .object({
+    code: errorCodeSchema,
+    message: z.string(),
+  })
+  .strict();
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;

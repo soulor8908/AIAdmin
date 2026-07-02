@@ -1,0 +1,56 @@
+// apps/api/src/repository/user.ts —— 数据访问层：内存实现（Map<string, User>）
+// 本 MVP 不连真实 DB；DB schema SSOT 见 Tech-Spec §DB 变更。
+import type { UserStatus } from '@admin/contracts';
+import type { UserEntity } from '../domain/user.js';
+
+export interface ListOptions {
+  page: number;
+  pageSize: number;
+  status?: UserStatus;
+}
+
+export interface ListResult {
+  items: UserEntity[];
+  total: number;
+}
+
+export class UserRepository {
+  private readonly store = new Map<string, UserEntity>();
+
+  /** 分页查询，可选按 status 过滤；保持插入顺序。 */
+  list(opts: ListOptions): ListResult {
+    let arr = Array.from(this.store.values());
+    if (opts.status) {
+      arr = arr.filter((u) => u.status === opts.status);
+    }
+    const total = arr.length;
+    const start = (opts.page - 1) * opts.pageSize;
+    const items = arr.slice(start, start + opts.pageSize);
+    return { items, total };
+  }
+
+  findById(id: string): UserEntity | undefined {
+    return this.store.get(id);
+  }
+
+  findByEmail(email: string): UserEntity | undefined {
+    for (const u of this.store.values()) {
+      if (u.email === email) return u;
+    }
+    return undefined;
+  }
+
+  insert(user: UserEntity): UserEntity {
+    this.store.set(user.id, user);
+    return user;
+  }
+
+  /** 仅更新 status 与 updated_at；不存在返回 undefined。 */
+  updateStatus(id: string, status: UserStatus, updatedAt: string): UserEntity | undefined {
+    const u = this.store.get(id);
+    if (!u) return undefined;
+    const updated: UserEntity = { ...u, status, updated_at: updatedAt };
+    this.store.set(id, updated);
+    return updated;
+  }
+}
