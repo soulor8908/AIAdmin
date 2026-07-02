@@ -3,12 +3,14 @@
 //   list:   B1（router Zod 解析，含 pageSize 钳制）→ B3 鉴权（requireAdmin）→ 过滤 → 倒序 → 分页 → 脱敏 → 返回
 //   record: B3 鉴权（requireAdmin，旁路调用方已校验，此处 SEC-002 重复校验）→ 写入（append-only）
 // ARCH-001：service 不得 import router。
+// D7：脱敏按 pii 标记（D5 ChangeField.pii）套 redactEmail，移除运行时正则兜底 EMAIL_LIKE_RE（信任标记，不按值猜测）。
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   listAuditLogQuerySchema,
   type AuditLog,
   type AuditLogListResult,
+  type ChangeField,
 } from '@admin/contracts';
 import type { AuditLogRepository } from '../repository/audit.js';
 import type { Ctx } from '../context.js';
@@ -18,11 +20,9 @@ import { AppError } from '../errors.js';
 /**
  * record 入参：AuditLog 去掉服务端生成的 id / created_at（由 service 生成）。
  * 供其他 service（user/role/dept）在写操作成功后被动旁路调用记录日志（F1）。
+ * before/after 为 ChangeField[]（D5 结构化快照，含 pii 标记）。
  */
 export type AuditLogRecordInput = Omit<AuditLog, 'id' | 'created_at'>;
-
-/** 邮箱格式检测（值级兜底）：local@domain.tld 形态，用于 key 不含 email 但值为邮箱的场景。 */
-const EMAIL_LIKE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class AuditLogService {
   constructor(private readonly auditRepo: AuditLogRepository) {}
@@ -39,7 +39,7 @@ export class AuditLogService {
    * service 入口对 query 套用 listAuditLogQuerySchema 以应用默认值（page=1/pageSize=20）与
    * pageSize transform 钳制（≤100，Q4）；router 层已解析时为幂等二次解析。
    * 空结果返回 items=[]/total=0/totalPages=0（不触发 B4 AUDIT_LOG_NOT_FOUND）。
-   * 返回的 items 为脱敏态（redactedAuditLogSchema）：before/after 中邮箱字段已套用 redactEmail（SEC-003b）。
+   * 返回的 items 为脱敏态（redactedAuditLogSchema）：before/after 中 pii=true 字段已套用 redactEmail（SEC-003b，D7）。
    */
   async list(query: z.input<typeof listAuditLogQuerySchema>, ctx: Ctx): Promise<AuditLogListResult> {
     // B1：应用默认值与 pageSize 钳制（与 router 层幂等）
@@ -82,28 +82,26 @@ export class AuditLogService {
     return this.auditRepo.insert(log);
   }
 
-  /** 对单条日志的 before/after 套用邮箱脱敏（返回新对象，不修改存储态原值）。 */
+  /** 对单条日志的 before/after 套用 PII 脱敏（返回新对象，不修改存储态原值）。 */
   private redactLog(log: AuditLog): AuditLog {
     return {
       ...log,
-      before: this.redactSnapshot(log.before),
-      after: this.redactSnapshot(log.after),
+      before: this.redactFields(log.before),
+      after: this.redactFields(log.after),
     };
   }
 
   /**
-   * 遍历快照字段，对邮箱字段（key 含 email 或值为邮箱格式）调 redactEmail；非邮箱字段原样返回。
-   * SEC-003b：查询返回的 before/after 中邮箱须脱敏，避免批量导出 PII。
+   * 遍历 ChangeField[]，对 pii=true 且值为 string 的字段调 redactEmail；其余原样返回（D7：信任标记，不按值猜测）。
+   * SEC-003b：查询返回的 before/after 中 pii 字段须脱敏，避免批量导出 PII。
+   * [约束] 仅 pii=true 的字段脱敏；pii=false 但值像邮箱的字段原样返回（移除 EMAIL_LIKE_RE 正则兜底）。
    */
-  private redactSnapshot(snap: Record<string, unknown>): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(snap)) {
-      if (typeof value === 'string' && (key.toLowerCase().includes('email') || EMAIL_LIKE_RE.test(value))) {
-        result[key] = redactEmail(value);
-      } else {
-        result[key] = value;
+  private redactFields(fields: ChangeField[]): ChangeField[] {
+    return fields.map((f) => {
+      if (f.pii && typeof f.value === 'string') {
+        return { ...f, value: redactEmail(f.value) };
       }
-    }
-    return result;
+      return f;
+    });
   }
 }

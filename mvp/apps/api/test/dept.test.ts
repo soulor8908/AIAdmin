@@ -100,13 +100,14 @@ function makeDept(i: number, overrides: Partial<Department> = {}): Department {
   };
 }
 
-/** 经 service 构建一条根→子→孙的三层链，返回三层节点（R=第1层, C=第2层, G=第3层）。 */
+/** 经 service 构建一条根→子→孙的三层链，返回三层节点（R=第1层, C=第2层, G=第3层）。
+ *  service 写操作签名扩展为 Promise<{entity, changes}>（D3），此处取 .entity 还原为 Department。 */
 async function buildThreeLevelChain(
   service: DepartmentService,
 ): Promise<{ root: Department; child: Department; grandchild: Department }> {
-  const root = await service.create({ name: 'R', parent_id: null }, adminCtx);
-  const child = await service.create({ name: 'C', parent_id: root.id }, adminCtx);
-  const grandchild = await service.create({ name: 'G', parent_id: child.id }, adminCtx);
+  const root = (await service.create({ name: 'R', parent_id: null }, adminCtx)).entity;
+  const child = (await service.create({ name: 'C', parent_id: root.id }, adminCtx)).entity;
+  const grandchild = (await service.create({ name: 'G', parent_id: child.id }, adminCtx)).entity;
   return { root, child, grandchild };
 }
 
@@ -239,7 +240,7 @@ describe('单测 · repository CRUD（内存）', () => {
 describe('单测 · service 裁决', () => {
   it('create 根部门：parent_id 缺省 → 成功，层级=1，parent_id=null', async () => {
     const { service } = setup();
-    const d = await service.create({ name: 'root', parent_id: null }, adminCtx);
+    const d = (await service.create({ name: 'root', parent_id: null }, adminCtx)).entity;
     expect(d.parent_id).toBeNull();
     expect(d.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(d.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -247,7 +248,7 @@ describe('单测 · service 裁决', () => {
 
   it('create 根部门：parent_id 缺省（不传）跳过 B4/B5，仅 B6', async () => {
     const { service } = setup();
-    const d = await service.create({ name: 'root2' }, adminCtx);
+    const d = (await service.create({ name: 'root2' }, adminCtx)).entity;
     expect(d.parent_id).toBeNull();
   });
 
@@ -280,10 +281,10 @@ describe('单测 · service 裁决', () => {
 
   it('create 跨父同名 → 成功（Q3 同父唯一，跨父允许）', async () => {
     const { service } = setup();
-    const r1 = await service.create({ name: 'r1', parent_id: null }, adminCtx);
-    const r2 = await service.create({ name: 'r2', parent_id: null }, adminCtx);
-    const a = await service.create({ name: 'shared', parent_id: r1.id }, adminCtx);
-    const b = await service.create({ name: 'shared', parent_id: r2.id }, adminCtx);
+    const r1 = (await service.create({ name: 'r1', parent_id: null }, adminCtx)).entity;
+    const r2 = (await service.create({ name: 'r2', parent_id: null }, adminCtx)).entity;
+    const a = (await service.create({ name: 'shared', parent_id: r1.id }, adminCtx)).entity;
+    const b = (await service.create({ name: 'shared', parent_id: r2.id }, adminCtx)).entity;
     expect(a.parent_id).toBe(r1.id);
     expect(b.parent_id).toBe(r2.id);
   });
@@ -301,16 +302,18 @@ describe('单测 · service 裁决', () => {
 
   it('delete 含用户部门 → 成功 204（Q1 解除归属，不抛 DEPT_HAS_USERS）+ 用户 department_id 置空', async () => {
     const { service, userRepo } = setup();
-    const d = await service.create({ name: 'withUsers', parent_id: null }, adminCtx);
+    const d = (await service.create({ name: 'withUsers', parent_id: null }, adminCtx)).entity;
     userRepo.updateDepartmentId(ADMIN_ID, d.id, SEED_TS);
-    await expect(service.delete(d.id, adminCtx)).resolves.toBeUndefined();
+    // service.delete 返回 {entity: void, changes}（D3），entity 为 undefined 表 204 无体
+    const deleteResult = await service.delete(d.id, adminCtx);
+    expect(deleteResult.entity).toBeUndefined();
     const u = userRepo.findById(ADMIN_ID);
     expect(u?.department_id).toBeNull();
   });
 
   it('assign 守卫序列 B9→B10：用户不存在 → USER_NOT_FOUND（先于 B10）', async () => {
     const { service } = setup();
-    const d = await service.create({ name: 'd', parent_id: null }, adminCtx);
+    const d = (await service.create({ name: 'd', parent_id: null }, adminCtx)).entity;
     await expectAppError(
       service.assignUserDepartment(MISSING_ID, d.id, adminCtx),
       'USER_NOT_FOUND',
@@ -327,7 +330,7 @@ describe('单测 · service 裁决', () => {
 
   it('assign departmentId=null（解除归属）跳过 B10：即使 departmentId 不存在也不报 DEPT_NOT_FOUND', async () => {
     const { service } = setup();
-    const u = await service.assignUserDepartment(ADMIN_ID, null, adminCtx);
+    const u = (await service.assignUserDepartment(ADMIN_ID, null, adminCtx)).entity;
     expect(u.department_id).toBeNull();
   });
 });
@@ -977,7 +980,7 @@ describe('状态机 · 删除前置链 + Q1 闭环', () => {
     await service.delete(d.id, adminCtx);
     expect(userRepo.findById(ADMIN_ID)?.department_id).toBeNull();
     // 再次 assign null 仍成功（幂等解除）
-    const u = await service.assignUserDepartment(ADMIN_ID, null, adminCtx);
+    const u = (await service.assignUserDepartment(ADMIN_ID, null, adminCtx)).entity;
     expect(u.department_id).toBeNull();
   });
 });

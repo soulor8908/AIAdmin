@@ -4,6 +4,7 @@
 //   delete:  B3 鉴权 → B5 角色存在(ROLE_NOT_FOUND) → B6 内置(ROLE_BUILTIN_FORBIDDEN) → B7 已分配(ROLE_IN_USE)
 //   assign:  B3 鉴权 → B8 用户存在(USER_NOT_FOUND) → B9 角色存在(ROLE_NOT_FOUND) → B10 已持有(USER_ROLE_ALREADY_ASSIGNED)
 //   remove:  B3 鉴权 → B11 用户存在(USER_NOT_FOUND) → 关联不存在幂等 204(B12)
+// D3：写操作返回 {entity, changes, before?}（WriteResult），供 router 层 withAudit 提取 entity + 旁路记日志。
 import { randomUUID } from 'node:crypto';
 import type {
   CreateRoleInput,
@@ -15,6 +16,7 @@ import type {
 import type { RoleRepository } from '../repository/role.js';
 import type { UserRepository } from '../repository/user.js';
 import type { Ctx } from '../context.js';
+import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
 
 export class RoleService {
@@ -51,7 +53,7 @@ export class RoleService {
     return role;
   }
 
-  async create(input: CreateRoleInput, ctx: Ctx): Promise<Role> {
+  async create(input: CreateRoleInput, ctx: Ctx): Promise<WriteResult<Role>> {
     this.requireAdmin(ctx);
     // B4: name 全局唯一（含与内置 admin 冲突，Q3）
     const existing = this.roleRepo.findByName(input.name);
@@ -66,10 +68,17 @@ export class RoleService {
       is_builtin: false, // F1: 新建恒为非内置
       created_at: new Date().toISOString(),
     };
-    return this.roleRepo.insert(role);
+    const inserted = this.roleRepo.insert(role);
+    // D3：changes 为 after 快照（role 本期无 PII，markPii 全 false）
+    const changes = markPii('role', [
+      { field: 'name', value: inserted.name, pii: false },
+      { field: 'description', value: inserted.description, pii: false },
+      { field: 'permission_codes', value: inserted.permission_codes, pii: false },
+    ]);
+    return { entity: inserted, changes };
   }
 
-  async delete(id: string, ctx: Ctx): Promise<void> {
+  async delete(id: string, ctx: Ctx): Promise<WriteResult<void>> {
     this.requireAdmin(ctx);
     // B5: 角色不存在（先于 B6/B7）
     const role = this.roleRepo.findById(id);
@@ -86,9 +95,16 @@ export class RoleService {
       throw new AppError('ROLE_IN_USE', '角色已被分配，需先解除全部分配');
     }
     this.roleRepo.delete(id);
+    // D3：delete 返回 entity=void（204 无体），before 为删除前快照
+    const before = markPii('role', [
+      { field: 'name', value: role.name, pii: false },
+      { field: 'description', value: role.description, pii: false },
+      { field: 'permission_codes', value: role.permission_codes, pii: false },
+    ]);
+    return { entity: undefined, changes: [], before };
   }
 
-  async assign(userId: string, roleId: string, ctx: Ctx): Promise<UserRole> {
+  async assign(userId: string, roleId: string, ctx: Ctx): Promise<WriteResult<UserRole>> {
     this.requireAdmin(ctx);
     // B8: 用户不存在（先于 B9）
     const user = this.userRepo.findById(userId);
@@ -104,24 +120,50 @@ export class RoleService {
     if (this.roleRepo.existsUserRole(userId, roleId)) {
       throw new AppError('USER_ROLE_ALREADY_ASSIGNED', '该用户已持有此角色');
     }
+    // D3 + PRD F1（role.assignRole·removeRole，沿用 PRD-AUDIT-001 Q7：action=update，
+    //   before/after 含虚拟字段 assigned_user_ids: string[] 的旧值/新值）：
+    //   分配前查该角色当前关联的全量用户 id 列表（before 快照）
+    const beforeUserIds = this.roleRepo.findUserRolesByRole(roleId).map((ur) => ur.user_id);
     const userRole: UserRole = {
       id: randomUUID(),
       user_id: userId,
       role_id: roleId,
       assigned_at: new Date().toISOString(),
     };
-    return this.roleRepo.insertUserRole(userRole);
+    const inserted = this.roleRepo.insertUserRole(userRole);
+    // 分配后再查该角色关联的全量用户 id 列表（after 快照）
+    const afterUserIds = this.roleRepo.findUserRolesByRole(roleId).map((ur) => ur.user_id);
+    const before = markPii('role', [
+      { field: 'assigned_user_ids', value: beforeUserIds, pii: false },
+    ]);
+    const changes = markPii('role', [
+      { field: 'assigned_user_ids', value: afterUserIds, pii: false },
+    ]);
+    return { entity: inserted, changes, before };
   }
 
-  async remove(userId: string, roleId: string, ctx: Ctx): Promise<void> {
+  async remove(userId: string, roleId: string, ctx: Ctx): Promise<WriteResult<void>> {
     this.requireAdmin(ctx);
     // B11: 用户不存在
     const user = this.userRepo.findById(userId);
     if (!user) {
       throw new AppError('USER_NOT_FOUND', `用户不存在: ${userId}`);
     }
+    // D3 + PRD F1（role.assignRole·removeRole，沿用 PRD-AUDIT-001 Q7：action=update，
+    //   before/after 含虚拟字段 assigned_user_ids: string[] 的旧值/新值）：
+    //   移除前查该角色当前关联的全量用户 id 列表（before 快照）
+    const beforeUserIds = this.roleRepo.findUserRolesByRole(roleId).map((ur) => ur.user_id);
     // B12: 关联不存在视为幂等成功（204），不抛错
     this.roleRepo.deleteUserRole(userId, roleId);
+    // 移除后再查该角色关联的全量用户 id 列表（after 快照）
+    const afterUserIds = this.roleRepo.findUserRolesByRole(roleId).map((ur) => ur.user_id);
+    const before = markPii('role', [
+      { field: 'assigned_user_ids', value: beforeUserIds, pii: false },
+    ]);
+    const changes = markPii('role', [
+      { field: 'assigned_user_ids', value: afterUserIds, pii: false },
+    ]);
+    return { entity: undefined, changes, before };
   }
 
   async listUserRoles(userId: string, ctx: Ctx): Promise<UserRole[]> {

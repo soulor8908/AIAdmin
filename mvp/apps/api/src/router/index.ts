@@ -26,3 +26,5 @@ export { createDeptRouter, deptDeleteProcedureInputSchema } from './dept.js';
 export type { DeptRouter, DeptProcedure } from './dept.js';
 export { createAuditRouter } from './audit.js';
 export type { AuditRouter, AuditProcedure } from './audit.js';
+export { createReportRouter } from './report.js';
+export type { ReportRouter, ReportProcedure } from './report.js';

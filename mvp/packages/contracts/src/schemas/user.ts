@@ -137,6 +137,11 @@ export const errorCodeSchema = z.enum([
   //            本期仅提供列表查询 GET /v1/audit-logs（F2），列表空结果返回 items=[] 而非 404，故本期 service 层不抛此码；
   //            保留以备未来单条详情端点，append-only 无 update/delete 错误码（日志不可修改/删除，F4）。
   'AUDIT_LOG_NOT_FOUND',
+  // ===== 报表域（TECH-AUDIT-ENHANCEMENT-001）=====
+  // group_by 缺失或空数组（D10：schema 层 optional/max(4) 不拒绝空，service 层语义判定 → 400）
+  'REPORT_GROUP_BY_REQUIRED',
+  // 时间范围无效（operated_from 晚于 operated_to，D10：schema superRefine 检测 + service 层语义判定 → 400）
+  'REPORT_TIME_RANGE_INVALID',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

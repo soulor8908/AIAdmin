@@ -1,5 +1,6 @@
 // apps/api/src/service/user.ts —— 业务层：编排 repository + domain + 权限校验 + 抛 AppError
 // 校验顺序（Tech-Spec）：鉴权(B3) → 业务规则(B4/B5/B6) → 状态守卫(B7/B8)，先到先返。
+// D3：写操作返回 {entity, changes, before?}（WriteResult），供 router 层 withAudit 提取 entity + 旁路记日志。
 import { randomUUID } from 'node:crypto';
 import type {
   CreateUserInput,
@@ -11,6 +12,7 @@ import type {
 import type { UserRepository } from '../repository/user.js';
 import type { Ctx } from '../context.js';
 import { transitionStatus } from '../domain/user.js';
+import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
 
 export class UserService {
@@ -35,7 +37,7 @@ export class UserService {
     return { items, total, page: query.page, pageSize: query.pageSize, totalPages };
   }
 
-  async create(input: CreateUserInput, ctx: Ctx): Promise<User> {
+  async create(input: CreateUserInput, ctx: Ctx): Promise<WriteResult<User>> {
     this.requireAdmin(ctx);
     // B4: 邮箱唯一
     const existing = this.repo.findByEmail(input.email);
@@ -52,10 +54,18 @@ export class UserService {
       created_at: now,
       updated_at: now,
     };
-    return this.repo.insert(user);
+    const inserted = this.repo.insert(user);
+    // D3：changes 为 after 快照（经 markPii 标记 pii），create 无 before
+    const changes = markPii('user', [
+      { field: 'email', value: inserted.email, pii: false },
+      { field: 'name', value: inserted.name, pii: false },
+      { field: 'status', value: inserted.status, pii: false },
+      { field: 'department_id', value: inserted.department_id ?? null, pii: false },
+    ]);
+    return { entity: inserted, changes };
   }
 
-  async updateStatus(targetId: string, newStatus: UserStatus, ctx: Ctx): Promise<User> {
+  async updateStatus(targetId: string, newStatus: UserStatus, ctx: Ctx): Promise<WriteResult<User>> {
     this.requireAdmin(ctx);
     // B5: 目标不存在（先于 B6/B7）
     const target = this.repo.findById(targetId);
@@ -77,6 +87,13 @@ export class UserService {
       // 极小竞态：刚查到又被并发删除，按不存在处理
       throw new AppError('USER_NOT_FOUND', `用户不存在: ${targetId}`);
     }
-    return updated;
+    // D3：update 含 before/after 快照（仅 status 变更）
+    const before = markPii('user', [
+      { field: 'status', value: target.status, pii: false },
+    ]);
+    const changes = markPii('user', [
+      { field: 'status', value: updated.status, pii: false },
+    ]);
+    return { entity: updated, changes, before };
   }
 }

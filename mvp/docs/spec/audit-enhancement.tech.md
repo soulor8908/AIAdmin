@@ -85,6 +85,8 @@ PRD Q5 留 Tech Lead 裁决，业务约束为：(a) 埋点对调用方透明；(
 
 `[advisory]` service 写操作的既有契约测（user/role/dept.test.ts 中断言 `service.create(input, ctx)` 返回 `User` / `Role` / `Department`）须同步改为断言 `result.entity`——列入 §8 受影响测试清单。
 
+`[advisory]` **WriteResult 实现侧扩展 `before?: ChangeField[]` 可选字段（S-2 反向同步）**：D3 声明的返回类型为 `{ entity, changes }`，实现侧（`apps/api/src/domain/audit.ts` 的 `WriteResult<E>` 接口）额外引入可选 `before?` 字段供 wrapper 直接取用，避免 wrapper 从 changes 派生 before 的复杂度（D4 示意用 `extractBefore(changes)` 派生，impl 改为 service 直接产出 before 数组传递）。功能等价（before 仍语义为"变更前快照"，create 时省略 → wrapper 用 `before ?? []` 兜底为 `[]`）。该字段为可选（`before?`），不破坏 D3 的 `{entity, changes}` 形状（未列字段对调用方透明）。Reviewer S-2 已确认此为 advisory 偏离，本条为反向同步说明。
+
 **`withAudit` wrapper 形状 D4（`[约束]`）**：
 
 ```ts
@@ -260,9 +262,11 @@ export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 /** 聚合行 item：含各 group_by 维度的值 + count。 */
 export const reportAggItemSchema = z.record(z.string(), z.union([z.string(), z.number()])).and(
-  z.object({ count: z.number().int().min(0) }).strict(),
+  z.object({ count: z.number().int().min(0) }),
 );
 export type ReportAggItem = z.infer<typeof reportAggItemSchema>;
+
+`[advisory]` **reportAggItemSchema 的 count 子 object 不加 `.strict()`（S-3 反向同步）**：本 Spec D8 示例原写 `.and(z.object({ count }).strict())`，实现侧（`packages/contracts/src/schemas/report.ts`）移除了 count 子 object 的 `.strict()`。理由：`z.object({ count }).strict()` 与外层 `z.record(z.string(), ...)` 交集后，`.strict()` 会拒绝 group_by 维度键（operator_id / entity_type / action / date 等动态字段），导致多维 item（如 `{ operator_id, entity_type, count }`）校验失败。SEC-003a 扫描范围仅覆盖 *Result/*Response 命名 schema，`reportAggItemSchema` 非 *Result/*Response 模式，不在 SEC-003a 强制范围；外层 `reportResultSchema` 仍 `.strict()`（SEC-003a 保留）。Reviewer S-3 已确认此为 advisory 偏离，本条为反向同步说明（实现侧报告 A-2）。
 
 /** 报表查询结果（F2）。[约束] .strict()（SEC-003a）；group_by 原样回显。 */
 export const reportResultSchema = z.object({
@@ -374,6 +378,8 @@ export type ReportResult = z.infer<typeof reportResultSchema>;
 | B5 | F1 埋点环节异常（audit.record 抛错） | （无客户端码） | （主操作仍 200） | `[约束]` best-effort：wrapper 内 try/catch 吞掉，记录内部错误，不抛调用方（PRD Q2）。F1 不引入客户端错误码 |
 
 **决策 D10（`[约束]`）**：为满足 PRD F2 验收"group_by 空 → REPORT_GROUP_BY_REQUIRED"与"时间范围非法 → REPORT_TIME_RANGE_INVALID"的码精确性，`reportQuerySchema.group_by` 改为 `z.array(reportGroupByDimSchema).max(4).optional()`（不在 schema 层用 `.min(1)` 拒绝空），由 router 层在 `safeParse` 后判定：group_by 缺省/空数组 → 抛 `REPORT_GROUP_BY_REQUIRED`；schema superRefine 仅做维度去重 + 时间范围检测，router 层据 `error.issues` 的 message 区分时间范围非法 → 抛 `REPORT_TIME_RANGE_INVALID`，其余 issue → `VALIDATION_ERROR`。`[advisory]` 此为与 audit 列表查询"统一 VALIDATION_ERROR"的有意分歧，依 PRD F2 验收码精确性要求；impl-writer 须在 router 层实现语义判定，service 层不重复判定（service 入口仍 `requirePermission` 后直接聚合）。
+
+`[advisory]` **ReportService.query 校验逻辑提取到私有 `parseAndValidate` 方法（S-4 反向同步）**：实现侧（`apps/api/src/service/report.ts`）将 schema 解析 + 语义判定（B1'/B1''）提取为私有方法 `parseAndValidate(query)`，紧随其后调用 `requireAdmin`（SEC-002）。理由：`scripts/check-rules.mjs` SEC-002 静态扫描的 body 收集 break 条件 `/^\s*(?:async\s+)?\w+\s*\([^)]*\)\s*[:{]/` 会把 `if (...) {` 误判为方法声明并提前截断 body，使位于首个 if 块之后的 `requireAdmin` 落出 body → 误报 SEC-002 违规。提取 `parseAndValidate` 后，`requireAdmin` 紧随 `parseAndValidate(...)` 调用之后、先于任何 `if` 块，扫描通过。根因是 check-rules.mjs SEC-002 break 条件未排除控制流关键字（`if/for/while/switch` 等），属扫描器 bug，建议后续修复扫描器；当前以提取 `parseAndValidate` workaround 规避，本条为反向同步说明（实现侧报告 A-3）。功能等价（校验顺序不变：parseAndValidate → requireAdmin → 聚合），仅结构重组。
 
 **校验顺序（`[约束]` service 层必须遵守，先到先返，不叠加）：**
 

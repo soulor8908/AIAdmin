@@ -25,6 +25,7 @@ export const permissionCodeSchema = z.enum([
   'dept:read',
   'dept:write',
   'audit:read',
+  'report:read',
 ]);
 export type PermissionCode = z.infer<typeof permissionCodeSchema>;
 

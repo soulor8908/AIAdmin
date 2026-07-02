@@ -19,6 +19,7 @@ import type { DepartmentRepository } from '../repository/dept.js';
 import type { UserRepository } from '../repository/user.js';
 import type { Ctx } from '../context.js';
 import { MAX_DEPARTMENT_DEPTH } from '../domain/dept.js';
+import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
 
 export class DepartmentService {
@@ -34,7 +35,7 @@ export class DepartmentService {
     }
   }
 
-  async create(input: CreateDepartmentInput, ctx: Ctx): Promise<Department> {
+  async create(input: CreateDepartmentInput, ctx: Ctx): Promise<WriteResult<Department>> {
     this.requireAdmin(ctx);
     const parentId = input.parent_id ?? null;
     // B4/B5：仅当 parent_id 非空时校验父存在与层级
@@ -60,10 +61,16 @@ export class DepartmentService {
       parent_id: parentId,
       created_at: new Date().toISOString(),
     };
-    return this.deptRepo.insert(dept);
+    const inserted = this.deptRepo.insert(dept);
+    // D3：changes 为 after 快照（dept 本期无 PII，markPii 全 false），create 无 before
+    const changes = markPii('dept', [
+      { field: 'name', value: inserted.name, pii: false },
+      { field: 'parent_id', value: inserted.parent_id, pii: false },
+    ]);
+    return { entity: inserted, changes };
   }
 
-  async delete(id: string, ctx: Ctx): Promise<void> {
+  async delete(id: string, ctx: Ctx): Promise<WriteResult<void>> {
     this.requireAdmin(ctx);
     // B7: 部门不存在（先于 B8）
     const dept = this.deptRepo.findById(id);
@@ -85,13 +92,19 @@ export class DepartmentService {
       }
     }
     this.deptRepo.delete(id);
+    // D3：delete 返回 entity=void（204 无体），before 为删除前快照
+    const before = markPii('dept', [
+      { field: 'name', value: dept.name, pii: false },
+      { field: 'parent_id', value: dept.parent_id, pii: false },
+    ]);
+    return { entity: undefined, changes: [], before };
   }
 
   async assignUserDepartment(
     userId: string,
     departmentId: string | null,
     ctx: Ctx,
-  ): Promise<User> {
+  ): Promise<WriteResult<User>> {
     this.requireAdmin(ctx);
     // B9: 用户不存在（先于 B10）
     const user = this.userRepo.findById(userId);
@@ -112,7 +125,16 @@ export class DepartmentService {
       // 极小竞态：刚查到又被并发删除，按不存在处理
       throw new AppError('USER_NOT_FOUND', `用户不存在: ${userId}`);
     }
-    return updated;
+    // D3 + PRD F1（dept.assignUserDepartment 跨域依赖：归属变更视为 user 的 update，
+    //   entity_type=user，before/after 仅含 department_id 字段）：
+    //   markPii 按 'user' 标记（department_id 非 PII，pii=false，但语义对齐 entity_type=user）
+    const before = markPii('user', [
+      { field: 'department_id', value: user.department_id ?? null, pii: false },
+    ]);
+    const changes = markPii('user', [
+      { field: 'department_id', value: updated.department_id ?? null, pii: false },
+    ]);
+    return { entity: updated, changes, before };
   }
 
   async tree(ctx: Ctx): Promise<DepartmentTreeResult> {

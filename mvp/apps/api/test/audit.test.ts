@@ -36,15 +36,23 @@ import {
   redactedEmailSchema,
   listAuditLogQuerySchema,
   permissionCodeSchema,
+  changeFieldSchema,
+  piiFieldRegistrySchema,
   type ErrorCode,
   type AuditLog,
   type ListAuditLogQuery,
   type AuditLogListResult,
+  type ChangeField,
 } from '@admin/contracts';
 import { AuditLogRepository } from '../src/repository/audit.js';
 import { AuditLogService } from '../src/service/audit.js';
 import { createAuditRouter, type AuditProcedure } from '../src/router/audit.js';
-import { redactEmail, AUDIT_LOG_RETENTION_DAYS } from '../src/domain/audit.js';
+import {
+  redactEmail,
+  AUDIT_LOG_RETENTION_DAYS,
+  markPii,
+  PII_FIELD_REGISTRY,
+} from '../src/domain/audit.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
@@ -68,6 +76,11 @@ function setup(): {
   return { auditRepo, service, router };
 }
 
+/** 从 ChangeField[] 中按字段名取 value（D5 结构化访问辅助）。 */
+function fieldValue(fields: ChangeField[], name: string): unknown {
+  return fields.find((f) => f.field === name)?.value;
+}
+
 function makeLog(i: number, overrides: Partial<AuditLog> = {}): AuditLog {
   return {
     id: `30000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
@@ -77,8 +90,11 @@ function makeLog(i: number, overrides: Partial<AuditLog> = {}): AuditLog {
     entity_id: `00000000-0000-4000-8000-${String(i + 1000).padStart(12, '0')}`,
     action: 'create',
     operated_at: `2024-01-${String((i % 28) + 1).padStart(2, '0')}T10:00:00.000Z`,
-    before: {},
-    after: { email: 'abcdef@example.com', name: `user${i}` },
+    before: [],
+    after: markPii('user', [
+      { field: 'email', value: 'abcdef@example.com', pii: false },
+      { field: 'name', value: `user${i}`, pii: false },
+    ]),
     created_at: SEED_TS,
     ...overrides,
   };
@@ -138,6 +154,95 @@ describe('单测 · redactEmail 纯函数（domain 层）', () => {
   it('redactEmail 输出可被 redactedEmailSchema 解析（SEC-003b 契约对齐）', () => {
     const redacted = redactEmail('abcdef@example.com');
     expect(redactedEmailSchema.safeParse(redacted).success).toBe(true);
+  });
+});
+
+describe('单测 · PII 清单（D6：shape SSOT 在 contracts，data SSOT 在 domain）', () => {
+  it('PII_FIELD_REGISTRY 经 piiFieldRegistrySchema.parse 校验通过（shape SSOT 对齐）', () => {
+    expect(() => piiFieldRegistrySchema.parse(PII_FIELD_REGISTRY)).not.toThrow();
+  });
+
+  it('PII_FIELD_REGISTRY 本期 = { user: Set(["email"]) }（D6 data SSOT）', () => {
+    expect(PII_FIELD_REGISTRY.user).toBeInstanceOf(Set);
+    expect([...(PII_FIELD_REGISTRY.user ?? [])]).toEqual(['email']);
+  });
+
+  it('markPii("user", [...]) → email 项 pii=true、name 项 pii=false（D6 辅助函数）', () => {
+    const marked = markPii('user', [
+      { field: 'email', value: 'x@example.com', pii: false },
+      { field: 'name', value: 'y', pii: false },
+    ]);
+    expect(marked.find((f) => f.field === 'email')?.pii).toBe(true);
+    expect(marked.find((f) => f.field === 'name')?.pii).toBe(false);
+  });
+
+  it('markPii("role", [...]) → 全部 pii=false（role 本期无 PII 字段）', () => {
+    const marked = markPii('role', [
+      { field: 'name', value: 'r', pii: false },
+      { field: 'permission_codes', value: ['user:read'], pii: false },
+    ]);
+    for (const f of marked) {
+      expect(f.pii).toBe(false);
+    }
+  });
+
+  it('markPii 不改原数组项的 field/value，仅覆盖 pii 标记', () => {
+    const input = [
+      { field: 'email', value: 'a@b.com', pii: false },
+      { field: 'status', value: 'active', pii: false },
+    ];
+    const marked = markPii('user', input);
+    expect(marked).toHaveLength(2);
+    expect(marked[0]!.field).toBe('email');
+    expect(marked[0]!.value).toBe('a@b.com');
+    expect(marked[1]!.field).toBe('status');
+    expect(marked[1]!.value).toBe('active');
+  });
+});
+
+describe('契约测 · changeFieldSchema（D5：{field, value, pii}）', () => {
+  it('合法样本通过：{field, value, pii} 三字段齐全', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: 'email', value: 'a@b.com', pii: true }).success,
+    ).toBe(true);
+  });
+
+  it('value 为标量/null/同类型标量数组均通过（Q18）', () => {
+    for (const value of ['s', 1, true, null, ['a', 'b'], [1, 2], [true, false]]) {
+      expect(
+        changeFieldSchema.safeParse({ field: 'f', value, pii: false }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('缺 pii 字段被拒绝（.strict + 必填）', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: 'email', value: 'a@b.com' }).success,
+    ).toBe(false);
+  });
+
+  it('value 为对象被拒绝（Q18 不支持嵌套对象）', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: 'f', value: { nested: 1 }, pii: false }).success,
+    ).toBe(false);
+  });
+
+  it('value 为异构数组被拒绝（同类型标量数组，Q18）', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: 'f', value: ['a', 1], pii: false }).success,
+    ).toBe(false);
+  });
+
+  it('.strict：多余字段被拒绝（SEC-003a）', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: 'f', value: 'v', pii: false, extra: 1 }).success,
+    ).toBe(false);
+  });
+
+  it('field 为空字符串被拒绝（min 1）', () => {
+    expect(
+      changeFieldSchema.safeParse({ field: '', value: 'v', pii: false }).success,
+    ).toBe(false);
   });
 });
 
@@ -328,7 +433,7 @@ describe('契约测 · 出参 schema 匹配', () => {
     ).toBe(false);
   });
 
-  it('auditLogSchema：合法存储态样本通过', () => {
+  it('auditLogSchema：合法存储态样本通过（before=[]/after=ChangeField[]，D5 改型）', () => {
     const sample = {
       id: '30000000-0000-4000-8000-000000000001',
       operator_id: ADMIN_ID,
@@ -337,8 +442,8 @@ describe('契约测 · 出参 schema 匹配', () => {
       entity_id: '00000000-0000-4000-8000-000000000002',
       action: 'create',
       operated_at: '2024-01-01T10:00:00.000Z',
-      before: {},
-      after: { email: 'abcdef@example.com' },
+      before: [],
+      after: [{ field: 'email', value: 'abcdef@example.com', pii: true }],
       created_at: SEED_TS,
     };
     expect(auditLogSchema.safeParse(sample).success).toBe(true);
@@ -353,8 +458,8 @@ describe('契约测 · 出参 schema 匹配', () => {
       entity_id: '00000000-0000-4000-8000-000000000002',
       action: 'create',
       operated_at: '2024-01-01T10:00:00.000Z',
-      before: {},
-      after: { email: 'ab***@example.com' },
+      before: [],
+      after: [{ field: 'email', value: 'ab***@example.com', pii: true }],
       created_at: SEED_TS,
       secret: 'leak',
     };
@@ -373,11 +478,18 @@ describe('契约测 · 出参 schema 匹配', () => {
     expect(redactedEmailSchema.safeParse('a***@x.com').success).toBe(false);
   });
 
-  it('list 返回的 before/after 中 email 字段值可被 redactedEmailSchema 解析（脱敏闭环）', async () => {
+  it('list 返回的 after 中 email 项 value 可被 redactedEmailSchema 解析（脱敏闭环，ChangeField[] 访问）', async () => {
     const { service, auditRepo } = setup();
-    auditRepo.insert(makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1' } }));
+    auditRepo.insert(
+      makeLog(1, {
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
+      }),
+    );
     const result = await service.list({}, adminCtx);
-    const email = result.items[0]!.after.email as string;
+    const email = fieldValue(result.items[0]!.after, 'email') as string;
     expect(redactedEmailSchema.safeParse(email).success).toBe(true);
     expect(email).toBe('ab***@example.com');
   });
@@ -473,7 +585,7 @@ describe('契约测 · 入参 safeParse 合法/非法样本', () => {
 // 3. 边界 · F1 旁路写入 / F2 列表查询 / F3 PII 脱敏 / F4 append-only
 // ---------------------------------------------------------------------------
 describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
-  it('F1: record 写入 create 日志 → 返回存储态 AuditLog（before/after 含原邮箱，未脱敏）', async () => {
+  it('F1: record 写入 create 日志 → 返回存储态 AuditLog（before=[]/after 含原邮箱，未脱敏）', async () => {
     const { service } = setup();
     const log = await service.record(
       {
@@ -483,8 +595,11 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'create' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: {},
-        after: { email: 'abcdef@example.com', name: 'u1' },
+        before: [],
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
       },
       adminCtx,
     );
@@ -493,11 +608,11 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
     expect(log.operator_id).toBe(ADMIN_ID);
     expect(log.action).toBe('create');
     expect(log.entity_type).toBe('user');
-    expect(log.before).toEqual({});
-    expect(log.after.email).toBe('abcdef@example.com');
+    expect(log.before).toEqual([]);
+    expect(fieldValue(log.after, 'email')).toBe('abcdef@example.com');
   });
 
-  it('F1: record 后 list 查回 → after.email 已脱敏（ab***@example.com）', async () => {
+  it('F1: record 后 list 查回 → after.email 项已脱敏（ab***@example.com）', async () => {
     const { service } = setup();
     await service.record(
       {
@@ -507,19 +622,22 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'create' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: {},
-        after: { email: 'abcdef@example.com', name: 'u1' },
+        before: [],
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
       },
       adminCtx,
     );
     const result = await service.list({}, adminCtx);
     expect(result.total).toBe(1);
     expect(result.items[0]!.action).toBe('create');
-    expect(result.items[0]!.before).toEqual({});
-    expect(result.items[0]!.after.email).toBe('ab***@example.com');
+    expect(result.items[0]!.before).toEqual([]);
+    expect(fieldValue(result.items[0]!.after, 'email')).toBe('ab***@example.com');
   });
 
-  it('F1: record 写入 delete 日志 → before 含原值，after={}', async () => {
+  it('F1: record 写入 delete 日志 → before 含原值，after=[]', async () => {
     const { service } = setup();
     await service.record(
       {
@@ -529,16 +647,16 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'delete' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: { name: 'role-x' },
-        after: {},
+        before: [{ field: 'name', value: 'role-x', pii: false }],
+        after: [],
       },
       adminCtx,
     );
     const result = await service.list({}, adminCtx);
     expect(result.items[0]!.action).toBe('delete');
     expect(result.items[0]!.entity_type).toBe('role');
-    expect(result.items[0]!.after).toEqual({});
-    expect(result.items[0]!.before.name).toBe('role-x');
+    expect(result.items[0]!.after).toEqual([]);
+    expect(fieldValue(result.items[0]!.before, 'name')).toBe('role-x');
   });
 
   it('F1 旁路闭环：多次 record → 多条日志按 operated_at 倒序可查', async () => {
@@ -551,8 +669,8 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'create' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: {},
-        after: { name: 'u1' },
+        before: [],
+        after: [{ field: 'name', value: 'u1', pii: false }],
       },
       adminCtx,
     );
@@ -564,8 +682,8 @@ describe('边界 · F1 写操作旁路生成日志（service.record）', () => {
         entity_id: '00000000-0000-4000-8000-000000000003',
         action: 'create' as const,
         operated_at: '2024-01-05T10:00:00.000Z',
-        before: {},
-        after: { name: 'u2' },
+        before: [],
+        after: [{ field: 'name', value: 'u2', pii: false }],
       },
       adminCtx,
     );
@@ -670,48 +788,92 @@ describe('边界 · F2 列表查询', () => {
 });
 
 describe('边界 · F3 PII 脱敏', () => {
-  it('F3: after 含 abcdef@example.com → 返回 ab***@example.com', async () => {
-    const { service, auditRepo } = setup();
-    auditRepo.insert(makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1' } }));
-    const result = await service.list({}, adminCtx);
-    expect(result.items[0]!.after.email).toBe('ab***@example.com');
-  });
-
-  it('F3: before 含原邮箱 → 同样脱敏', async () => {
+  it('F3: after email 项（pii=true）含 abcdef@example.com → 返回 ab***@example.com', async () => {
     const { service, auditRepo } = setup();
     auditRepo.insert(
       makeLog(1, {
-        before: { email: 'abcdef@example.com', name: 'old' },
-        after: { email: 'new@example.com', name: 'new' },
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
+      }),
+    );
+    const result = await service.list({}, adminCtx);
+    expect(fieldValue(result.items[0]!.after, 'email')).toBe('ab***@example.com');
+  });
+
+  it('F3: before email 项（pii=true）含原邮箱 → 同样脱敏', async () => {
+    const { service, auditRepo } = setup();
+    auditRepo.insert(
+      makeLog(1, {
+        before: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'old', pii: false },
+        ]),
+        after: markPii('user', [
+          { field: 'email', value: 'new@example.com', pii: false },
+          { field: 'name', value: 'new', pii: false },
+        ]),
         action: 'update',
       }),
     );
     const result = await service.list({}, adminCtx);
-    expect(result.items[0]!.before.email).toBe('ab***@example.com');
-    expect(result.items[0]!.after.email).toBe('ne***@example.com');
+    expect(fieldValue(result.items[0]!.before, 'email')).toBe('ab***@example.com');
+    expect(fieldValue(result.items[0]!.after, 'email')).toBe('ne***@example.com');
   });
 
-  it('F3: 非邮箱字段（name/status）原样返回', async () => {
+  it('F3: 非邮箱字段（name/status，pii=false）原样返回', async () => {
     const { service, auditRepo } = setup();
     auditRepo.insert(
-      makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1', status: 'active' } }),
+      makeLog(1, {
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+          { field: 'status', value: 'active', pii: false },
+        ]),
+      }),
     );
     const result = await service.list({}, adminCtx);
-    expect(result.items[0]!.after.name).toBe('u1');
-    expect(result.items[0]!.after.status).toBe('active');
+    expect(fieldValue(result.items[0]!.after, 'name')).toBe('u1');
+    expect(fieldValue(result.items[0]!.after, 'status')).toBe('active');
   });
 
-  it('F3: 多条日志邮箱均脱敏无遗漏（SEC-003b 批量闭环）', async () => {
+  it('F3: 多条日志 email 项均脱敏无遗漏（SEC-003b 批量闭环）', async () => {
     const { service, auditRepo } = setup();
-    auditRepo.insert(makeLog(1, { after: { email: 'a1@example.com' } }));
-    auditRepo.insert(makeLog(2, { after: { email: 'a2@example.com' } }));
-    auditRepo.insert(makeLog(3, { after: { email: 'a3@example.com' } }));
+    auditRepo.insert(
+      makeLog(1, { after: markPii('user', [{ field: 'email', value: 'a1@example.com', pii: false }]) }),
+    );
+    auditRepo.insert(
+      makeLog(2, { after: markPii('user', [{ field: 'email', value: 'a2@example.com', pii: false }]) }),
+    );
+    auditRepo.insert(
+      makeLog(3, { after: markPii('user', [{ field: 'email', value: 'a3@example.com', pii: false }]) }),
+    );
     const result = await service.list({}, adminCtx);
     expect(result.items).toHaveLength(3);
     for (const l of result.items) {
-      const email = l.after.email as string;
+      const email = fieldValue(l.after, 'email') as string;
       expect(email).toMatch(/^.{2}\*\*\*@[^\s@]+$/);
     }
+  });
+
+  it('F3: 未标记 pii 但值像邮箱的字段原样返回（D7 移除正则兜底，信任标记）', async () => {
+    const { service, auditRepo } = setup();
+    // 注入一条 entity_type='role' 的日志，note 字段值像邮箱但 pii=false（role 本期无 PII）
+    auditRepo.insert(
+      makeLog(1, {
+        entity_type: 'role',
+        action: 'update',
+        before: [],
+        after: [
+          { field: 'note', value: 'looks-like-email@example.com', pii: false },
+          { field: 'name', value: 'role-x', pii: false },
+        ],
+      }),
+    );
+    const result = await service.list({}, adminCtx);
+    // note 未标记 pii，即使值像邮箱也原样返回（无运行时正则兜底）
+    expect(fieldValue(result.items[0]!.after, 'note')).toBe('looks-like-email@example.com');
   });
 });
 
@@ -773,19 +935,33 @@ describe('权限 · SEC-002 非 admin 调 list → FORBIDDEN', () => {
 describe('权限 · SEC-003 出参不夹带 PII', () => {
   it('SEC-003a：list 出参匹配 auditLogListResultSchema.strict（无未声明的多余字段）', async () => {
     const { service, auditRepo } = setup();
-    auditRepo.insert(makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1' } }));
+    auditRepo.insert(
+      makeLog(1, {
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
+      }),
+    );
     const result = await service.list({}, adminCtx);
     expect(() => auditLogListResultSchema.parse(result)).not.toThrow();
   });
 
-  it('SEC-003b：list 出参 items 的 before/after 中 email 已脱敏，未暴露原值 abcdef@example.com', async () => {
+  it('SEC-003b：list 出参 items 的 after 中 email 项已脱敏，未暴露原值 abcdef@example.com', async () => {
     const { service, auditRepo } = setup();
-    auditRepo.insert(makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1' } }));
+    auditRepo.insert(
+      makeLog(1, {
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
+      }),
+    );
     const result = await service.list({}, adminCtx);
-    const after = result.items[0]!.after as { email?: string; name?: string };
-    expect(after.email).toBe('ab***@example.com');
-    expect(after.email).not.toBe('abcdef@example.com');
-    expect(redactedEmailSchema.safeParse(after.email).success).toBe(true);
+    const email = fieldValue(result.items[0]!.after, 'email') as string;
+    expect(email).toBe('ab***@example.com');
+    expect(email).not.toBe('abcdef@example.com');
+    expect(redactedEmailSchema.safeParse(email).success).toBe(true);
   });
 
   it('SEC-003b：before 中原邮箱同样脱敏（update 场景前后双脱敏）', async () => {
@@ -793,26 +969,29 @@ describe('权限 · SEC-003 出参不夹带 PII', () => {
     auditRepo.insert(
       makeLog(1, {
         action: 'update',
-        before: { email: 'old@example.com' },
-        after: { email: 'new@example.com' },
+        before: markPii('user', [{ field: 'email', value: 'old@example.com', pii: false }]),
+        after: markPii('user', [{ field: 'email', value: 'new@example.com', pii: false }]),
       }),
     );
     const result = await service.list({}, adminCtx);
-    const before = result.items[0]!.before as { email?: string };
-    const after = result.items[0]!.after as { email?: string };
-    expect(before.email).toBe('ol***@example.com');
-    expect(after.email).toBe('ne***@example.com');
+    expect(fieldValue(result.items[0]!.before, 'email')).toBe('ol***@example.com');
+    expect(fieldValue(result.items[0]!.after, 'email')).toBe('ne***@example.com');
   });
 
-  it('SEC-003b：非邮箱字段（name/status）不脱敏，原样返回（避免误伤）', async () => {
+  it('SEC-003b：非邮箱字段（name/status，pii=false）不脱敏，原样返回（避免误伤）', async () => {
     const { service, auditRepo } = setup();
     auditRepo.insert(
-      makeLog(1, { after: { email: 'abcdef@example.com', name: 'u1', status: 'active' } }),
+      makeLog(1, {
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+          { field: 'status', value: 'active', pii: false },
+        ]),
+      }),
     );
     const result = await service.list({}, adminCtx);
-    const after = result.items[0]!.after as { email?: string; name?: string; status?: string };
-    expect(after.name).toBe('u1');
-    expect(after.status).toBe('active');
+    expect(fieldValue(result.items[0]!.after, 'name')).toBe('u1');
+    expect(fieldValue(result.items[0]!.after, 'status')).toBe('active');
   });
 });
 
@@ -925,8 +1104,11 @@ describe('状态机 · F1 旁路闭环（主操作成功 → 日志写入）', (
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'create' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: {},
-        after: { email: 'abcdef@example.com', name: 'u1' },
+        before: [],
+        after: markPii('user', [
+          { field: 'email', value: 'abcdef@example.com', pii: false },
+          { field: 'name', value: 'u1', pii: false },
+        ]),
       },
       adminCtx,
     );
@@ -946,17 +1128,17 @@ describe('状态机 · F1 旁路闭环（主操作成功 → 日志写入）', (
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'create' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: {},
-        after: { email: 'abcdef@example.com' },
+        before: [],
+        after: markPii('user', [{ field: 'email', value: 'abcdef@example.com', pii: false }]),
       },
       adminCtx,
     );
     // 存储态保留原值（record 返回值含原邮箱）
     const stored = auditRepo.list({ page: 1, pageSize: 20 }).items[0]!;
-    expect((stored.after as { email: string }).email).toBe('abcdef@example.com');
+    expect(fieldValue(stored.after, 'email')).toBe('abcdef@example.com');
     // 查询态脱敏（list 返回值邮箱已脱敏）
     const result = await service.list({}, adminCtx);
-    expect((result.items[0]!.after as { email: string }).email).toBe('ab***@example.com');
+    expect(fieldValue(result.items[0]!.after, 'email')).toBe('ab***@example.com');
   });
 
   it('F1 闭环：多次 record → 多条日志按 operated_at 倒序可查（写入顺序与查询顺序解耦）', async () => {
@@ -970,8 +1152,8 @@ describe('状态机 · F1 旁路闭环（主操作成功 → 日志写入）', (
           entity_id: `00000000-0000-4000-8000-${String(i + 1000).padStart(12, '0')}`,
           action: 'create' as const,
           operated_at: `2024-01-0${i}T10:00:00.000Z`,
-          before: {},
-          after: { name: `u${i}` },
+          before: [],
+          after: [{ field: 'name', value: `u${i}`, pii: false }],
         },
         adminCtx,
       );
@@ -983,7 +1165,7 @@ describe('状态机 · F1 旁路闭环（主操作成功 → 日志写入）', (
     expect(result.items[2]!.operated_at).toBe('2024-01-01T10:00:00.000Z');
   });
 
-  it('F1 闭环：record 写入 delete 日志 → before 含原值快照、after={}（delete 动作快照约定）', async () => {
+  it('F1 闭环：record 写入 delete 日志 → before 含原值快照、after=[]（delete 动作快照约定）', async () => {
     const { service } = setup();
     await service.record(
       {
@@ -993,14 +1175,17 @@ describe('状态机 · F1 旁路闭环（主操作成功 → 日志写入）', (
         entity_id: '00000000-0000-4000-8000-000000000002',
         action: 'delete' as const,
         operated_at: '2024-01-01T10:00:00.000Z',
-        before: { name: 'role-x', permission_codes: ['user:read'] },
-        after: {},
+        before: [
+          { field: 'name', value: 'role-x', pii: false },
+          { field: 'permission_codes', value: ['user:read'], pii: false },
+        ],
+        after: [],
       },
       adminCtx,
     );
     const result = await service.list({}, adminCtx);
     expect(result.items[0]!.action).toBe('delete');
-    expect(result.items[0]!.after).toEqual({});
-    expect((result.items[0]!.before as { name: string }).name).toBe('role-x');
+    expect(result.items[0]!.after).toEqual([]);
+    expect(fieldValue(result.items[0]!.before, 'name')).toBe('role-x');
   });
 });

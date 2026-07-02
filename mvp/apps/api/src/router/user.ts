@@ -1,5 +1,6 @@
 // apps/api/src/router/user.ts —— procedure 表：每个 procedure = { input, handler }
 // 输入经 Zod 校验（B1 router 层），handler 调 service。
+// D1：写操作（create/updateStatus）经 withAudit 包装，best-effort 旁路记审计日志（F1 跨域自动埋点）。
 import { z } from 'zod';
 import {
   createUserInputSchema,
@@ -9,7 +10,10 @@ import {
   type UserListResult,
 } from '@admin/contracts';
 import type { UserService } from '../service/user.js';
+import { AuditLogService } from '../service/audit.js';
+import { AuditLogRepository } from '../repository/audit.js';
 import type { Ctx } from '../context.js';
+import { withAudit } from './audit.js';
 
 /**
  * Procedure 形状。
@@ -37,7 +41,13 @@ export type UserRouter = {
   updateStatus: Procedure<z.infer<typeof updateUserStatusProcedureInputSchema>, User>;
 };
 
-export function createUserRouter(service: UserService): UserRouter {
+/**
+ * 创建用户路由。写操作（create/updateStatus）经 withAudit 包装，best-effort 旁路记审计日志。
+ * [advisory] auditService 为可选参数，缺省时创建内部 AuditLogService（独立 AuditLogRepository）；
+ *             生产环境应传入共享实例以聚合日志，测试桩下缺省即可（best-effort 日志去向不影响测试断言）。
+ */
+export function createUserRouter(service: UserService, auditService?: AuditLogService): UserRouter {
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
   return {
     list: {
       input: listUserQuerySchema,
@@ -46,12 +56,20 @@ export function createUserRouter(service: UserService): UserRouter {
     },
     create: {
       input: createUserInputSchema,
-      handler: (input, ctx) => service.create(input, ctx),
+      handler: withAudit(
+        (input, ctx) => service.create(input, ctx),
+        audit,
+        { entityType: 'user', action: 'create' },
+      ),
       auth: 'admin',
     },
     updateStatus: {
       input: updateUserStatusProcedureInputSchema,
-      handler: (input, ctx) => service.updateStatus(input.id, input.body.status, ctx),
+      handler: withAudit(
+        (input, ctx) => service.updateStatus(input.id, input.body.status, ctx),
+        audit,
+        { entityType: 'user', action: 'update' },
+      ),
       auth: 'admin',
     },
   };

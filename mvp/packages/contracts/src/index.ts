@@ -8,3 +8,4 @@ export * from './schemas/user.js';
 export * from './schemas/role.js';
 export * from './schemas/dept.js';
 export * from './schemas/audit.js';
+export * from './schemas/report.js';

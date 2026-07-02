@@ -1,6 +1,7 @@
 // apps/api/src/router/role.ts —— procedure 表：每个 procedure = { input, handler, auth }
 // 输入经 Zod 校验（B1 router 层），handler 调 service。
 // SEC-001：每个 procedure 必须声明 auth 元数据（本角色管理全 admin）。
+// D1：写操作（create/delete/assign/remove）经 withAudit 包装，best-effort 旁路记审计日志（F1 跨域自动埋点）。
 import { z } from 'zod';
 import {
   assignRoleInputSchema,
@@ -11,7 +12,10 @@ import {
   type UserRole,
 } from '@admin/contracts';
 import type { RoleService } from '../service/role.js';
+import { AuditLogService } from '../service/audit.js';
+import { AuditLogRepository } from '../repository/audit.js';
 import type { Procedure } from './user.js';
+import { withAudit } from './audit.js';
 
 export type { Procedure };
 
@@ -41,7 +45,13 @@ export type RoleRouter = {
   remove: Procedure<z.infer<typeof assignRoleInputSchema>, void>;
 };
 
-export function createRoleRouter(service: RoleService): RoleRouter {
+/**
+ * 创建角色路由。写操作（create/delete/assign/remove）经 withAudit 包装，best-effort 旁路记审计日志。
+ * [advisory] auditService 为可选参数，缺省时创建内部 AuditLogService（独立 AuditLogRepository）；
+ *             生产环境应传入共享实例以聚合日志，测试桩下缺省即可（best-effort 日志去向不影响测试断言）。
+ */
+export function createRoleRouter(service: RoleService, auditService?: AuditLogService): RoleRouter {
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
   return {
     list: {
       input: listRoleQuerySchema,
@@ -50,7 +60,11 @@ export function createRoleRouter(service: RoleService): RoleRouter {
     },
     create: {
       input: createRoleInputSchema,
-      handler: (input, ctx) => service.create(input, ctx),
+      handler: withAudit(
+        (input, ctx) => service.create(input, ctx),
+        audit,
+        { entityType: 'role', action: 'create' },
+      ),
       auth: 'admin',
     },
     detail: {
@@ -60,12 +74,20 @@ export function createRoleRouter(service: RoleService): RoleRouter {
     },
     delete: {
       input: roleDetailProcedureInputSchema,
-      handler: (input, ctx) => service.delete(input.id, ctx),
+      handler: withAudit(
+        (input, ctx) => service.delete(input.id, ctx),
+        audit,
+        { entityType: 'role', action: 'delete', entityIdFromInput: (input) => (input as { id: string }).id },
+      ),
       auth: 'admin',
     },
     assign: {
       input: assignRoleInputSchema,
-      handler: (input, ctx) => service.assign(input.userId, input.roleId, ctx),
+      handler: withAudit(
+        (input, ctx) => service.assign(input.userId, input.roleId, ctx),
+        audit,
+        { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
+      ),
       auth: 'admin',
     },
     listUserRoles: {
@@ -75,7 +97,11 @@ export function createRoleRouter(service: RoleService): RoleRouter {
     },
     remove: {
       input: assignRoleInputSchema,
-      handler: (input, ctx) => service.remove(input.userId, input.roleId, ctx),
+      handler: withAudit(
+        (input, ctx) => service.remove(input.userId, input.roleId, ctx),
+        audit,
+        { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
+      ),
       auth: 'admin',
     },
   };

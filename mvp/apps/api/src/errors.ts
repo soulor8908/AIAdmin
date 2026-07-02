@@ -39,4 +39,7 @@ export const errorCodeToHttpStatus: Record<ErrorCode, number> = {
   DEPT_DEPTH_EXCEEDED: 409,
   // 操作日志域（TECH-AUDIT-001）
   AUDIT_LOG_NOT_FOUND: 404, // [advisory] 预留码（B4 本期不触发），仍穷举映射以维持 Record<ErrorCode>
+  // 报表域（TECH-AUDIT-ENHANCEMENT-001，D10：校验层语义判定 → 400）
+  REPORT_GROUP_BY_REQUIRED: 400,
+  REPORT_TIME_RANGE_INVALID: 400,
 };

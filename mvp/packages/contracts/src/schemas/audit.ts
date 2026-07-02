@@ -27,16 +27,52 @@ export const auditLogActionSchema = z.enum(['create', 'update', 'delete']);
 export type AuditLogAction = z.infer<typeof auditLogActionSchema>;
 
 /**
+ * ChangeField.value 类型契约（D5 / PRD Q18）：标量 | null | 同类型标量数组。
+ * [约束] 不支持对象/嵌套数组（PRD Q18）；field 可为虚拟/关联字段（如 assigned_user_ids），不限定为实体列。
+ */
+export const changeFieldValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.string()),
+  z.array(z.number()),
+  z.array(z.boolean()),
+]);
+export type ChangeFieldValue = z.infer<typeof changeFieldValueSchema>;
+
+/**
+ * 结构化变更字段（D5）：{field, value, pii}。
+ * [约束] field 为字段名（≥1 字符）；value 见 changeFieldValueSchema；pii 为字段级布尔标记（存储保留，查询时据标记套 redactEmail）。
+ * [约束] .strict()（SEC-003a）：拒绝多余字段。
+ */
+export const changeFieldSchema = z
+  .object({
+    field: z.string().min(1),
+    value: changeFieldValueSchema,
+    pii: z.boolean(),
+  })
+  .strict();
+export type ChangeField = z.infer<typeof changeFieldSchema>;
+
+/**
+ * PII 字段清单 shape SSOT（D6）：按 entity_type → Set<field_name> 描述 registry 结构。
+ * [约束] ARCH-002：contracts 只导出 schema 与类型；runtime 数据（PII_FIELD_REGISTRY）放 apps/api/src/domain/audit.ts。
+ * [advisory] z.set 在 Zod v3.23+ 可用；若未来 Zod 版本不支持，可降级为 z.array(z.string()) + new Set 转换。
+ */
+export const piiFieldRegistrySchema = z.record(auditLogEntityTypeSchema, z.set(z.string().min(1)));
+export type PiiFieldRegistry = z.infer<typeof piiFieldRegistrySchema>;
+
+/**
  * 操作日志实体：DB audit_logs 表行的契约投影（存储态，含原始 PII）。
  * 字段命名沿用 snake_case 以与 DB schema 对齐（operator_id / entity_type / entity_id / operated_at / created_at）。
  * [约束] append-only：日志一旦写入不可修改、不可删除（F4）；任何入口（含管理后台/批量/快捷入口）均无 update/delete 路径。
- * [约束] before/after 仅含本次实际变更字段（未变更字段不出现在快照）；create 时 before={}，delete 时 after={}（F1 验收）。
- * [约束] before/after 用 z.record(z.unknown()) 承载异构字段快照；其中「邮箱」类型字段值在【查询返回】时须脱敏
- *        （见 redactedAuditLogSchema / redactedEmailSchema，SEC-003b）。存储保留原始值（Q2：以备深度审计），本期查询入口仅返回脱敏值。
+ * [约束] before/after 仅含本次实际变更字段（未变更字段不出现在快照）；create 时 before=[]，delete 时 after=[]（F1 验收，PRD Q17）。
+ * [约束] before/after 用 z.array(changeFieldSchema) 承载结构化变更快照（D5：{field, value, pii}）；
+ *        其中 pii=true 的字段值在【查询返回】时须脱敏（见 redactedAuditLogSchema / redactedEmailSchema，SEC-003b）。
+ *        存储保留原始值（Q2：以备深度审计），本期查询入口仅返回脱敏值；pii 标记存储保留（避免查询时再查 registry）。
  * [约束] operator_name 为操作者姓名快照：写入时从 user 表读取并冻结，避免后续用户改名导致日志与历史操作者脱节（append-only 不可变要求）。
  * [约束] entity_id 为目标实体标识（user/role/dept 的 id 均为 uuid），统一用 z.string().uuid()。
- * [advisory] before/after 不限定字段集（随目标实体 schema 演进而变化），用 z.record(z.unknown()) 保开放；
- *            若未来需强类型快照（按 entity_type 分支为 user/role/dept 各自的 before/after 形状）须反向同步 Spec 并改用 discriminatedUnion。
  */
 export const auditLogSchema = z
   .object({
@@ -47,8 +83,8 @@ export const auditLogSchema = z
     entity_id: z.string().uuid(),
     action: auditLogActionSchema,
     operated_at: z.string().datetime(),
-    before: z.record(z.unknown()),
-    after: z.record(z.unknown()),
+    before: z.array(changeFieldSchema),
+    after: z.array(changeFieldSchema),
     created_at: z.string().datetime(),
   })
   .strict();
@@ -66,10 +102,11 @@ export const redactedEmailSchema = z.string().regex(/^.{2}\*\*\*@[^\s@]+$/, '保
 export type RedactedEmail = z.infer<typeof redactedEmailSchema>;
 
 /**
- * 操作日志查询返回实体（脱敏态）：与 auditLogSchema 字段集一致，语义为 before/after 中邮箱已脱敏。
- * [约束] 查询入口（GET /v1/audit-logs）的返回 items 须为本 schema 实例；service 层在返回前对 before/after 中邮箱字段套用 redactEmail。
- * [约束] 输出 schema 带 .strict()（SEC-003a）；before/after 仍为 z.record(z.unknown())，邮箱脱敏由 service 保证
- *        （契约测断言：构造含 email 的 before/after 样本经 service 脱敏后，email 值可被 redactedEmailSchema 解析；未脱敏原值须被拒绝）。
+ * 操作日志查询返回实体（脱敏态）：与 auditLogSchema 字段集一致，语义为 before/after 中 pii=true 项已脱敏。
+ * [约束] 查询入口（GET /v1/audit-logs）的返回 items 须为本 schema 实例；service 层在返回前对 before/after 中
+ *        pii=true 项套用 redactEmail（D7：信任标记，移除运行时正则兜底 EMAIL_LIKE_RE）。
+ * [约束] 输出 schema 带 .strict()（SEC-003a）；before/after 为 z.array(changeFieldSchema)，邮箱脱敏由 service 保证
+ *        （契约测断言：构造含 email 的 before/after 样本经 service 脱敏后，email 项 value 可被 redactedEmailSchema 解析；未脱敏原值须被拒绝）。
  * [advisory] 本期不提供未脱敏返回入口（Q2 决策：存储保留原值以备深度审计，但查询入口仅返回脱敏值，收敛 PII 批量导出风险面）；
  *            若未来需未脱敏入口须反向同步 Spec 并补独立权限码（如 audit:read_raw）。
  */
@@ -82,8 +119,8 @@ export const redactedAuditLogSchema = z
     entity_id: z.string().uuid(),
     action: auditLogActionSchema,
     operated_at: z.string().datetime(),
-    before: z.record(z.unknown()),
-    after: z.record(z.unknown()),
+    before: z.array(changeFieldSchema),
+    after: z.array(changeFieldSchema),
     created_at: z.string().datetime(),
   })
   .strict();
