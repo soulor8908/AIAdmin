@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-Native Evolution Report · 六轮进化档案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;0,9..144,900;1,9..144,300&family=JetBrains+Mono:wght@300;400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a0d14;
+    --ink-2: #131724;
+    --ink-3: #1c2030;
+    --cream: #f4ede0;
+    --cream-dim: #c9c0ad;
+    --cream-faint: #6b6557;
+    --amber: #ff7a1a;
+    --amber-bright: #ffa050;
+    --teal: #4ecdc4;
+    --teal-dim: #2a8580;
+    --crimson: #e94560;
+    --gold: #d4af37;
+    --line: #2a2f42;
+    --grid: rgba(244, 237, 224, 0.06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--ink);
+    color: var(--cream);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255, 122, 26, 0.06), transparent 40%),
+      radial-gradient(circle at 80% 60%, rgba(78, 205, 196, 0.05), transparent 40%),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: auto, auto, 80px 80px, 80px 80px;
+  }
+  .grain::before {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ============= Typography ============= */
+  .display { font-family: 'Fraunces', serif; font-weight: 900; letter-spacing: -0.03em; line-height: 0.95; }
+  .serif { font-family: 'Instrument Serif', serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--amber); font-weight: 500; }
+  .label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cream-faint); }
+  .dim { color: var(--cream-dim); }
+  .faint { color: var(--cream-faint); }
+
+  /* ============= Layout ============= */
+  .container { max-width: 1400px; margin: 0 auto; padding: 0 48px; }
+  section { padding: 100px 0; border-top: 1px solid var(--line); position: relative; }
+  .section-head { display: flex; align-items: baseline; gap: 24px; margin-bottom: 56px; }
+  .section-num { font-family: 'Fraunces', serif; font-style: italic; font-weight: 300; font-size: 28px; color: var(--amber); }
+  .section-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 48px; letter-spacing: -0.02em; }
+  .section-sub { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 20px; color: var(--cream-dim); margin-left: auto; max-width: 380px; text-align: right; }
+
+  /* ============= HERO ============= */
+  .hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 0 60px; position: relative; overflow: hidden; }
+  .hero-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .hero-mark { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 18px; color: var(--cream-dim); }
+  .hero-mark span { color: var(--amber); }
+  .hero-meta { text-align: right; font-size: 11px; letter-spacing: 0.2em; color: var(--cream-faint); line-height: 2; }
+
+  .hero-center { margin-top: 60px; }
+  .hero-eyebrow { font-size: 12px; letter-spacing: 0.4em; color: var(--amber); margin-bottom: 28px; display: flex; align-items: center; gap: 16px; }
+  .hero-eyebrow::before, .hero-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--line); max-width: 80px; }
+  .hero-title { font-family: 'Fraunces', serif; font-weight: 900; font-size: clamp(64px, 11vw, 168px); line-height: 0.88; letter-spacing: -0.04em; }
+  .hero-title em { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; color: var(--amber); }
+  .hero-sub { font-family: 'Instrument Serif', serif; font-style: italic; font-size: clamp(22px, 3vw, 36px); color: var(--cream-dim); margin-top: 28px; max-width: 780px; line-height: 1.3; }
+
+  .hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--line); padding-top: 32px; }
+  .stat { padding: 0 24px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: none; }
+  .stat:first-child { padding-left: 0; }
+  .stat-num { font-family: 'Fraunces', serif; font-weight: 700; font-size: 56px; letter-spacing: -0.03em; line-height: 1; }
+  .stat-num.amber { color: var(--amber); }
+  .stat-num.teal { color: var(--teal); }
+  .stat-num.crimson { color: var(--crimson); }
+  .stat-unit { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 18px; color: var(--cream-dim); margin-left: 6px; }
+  .stat-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cream-faint); margin-top: 12px; }
+
+  .hero-scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; letter-spacing: 0.3em; color: var(--cream-faint); animation: bob 2s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(6px)} }
+
+  /* ============= §01 完成度仪表盘 ============= */
+  .dashboard { display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px; align-items: start; }
+  .gauge-card { background: var(--ink-2); border: 1px solid var(--line); padding: 40px; position: relative; }
+  .gauge-card::before { content: ''; position: absolute; top: -1px; left: -1px; width: 40px; height: 40px; border-top: 2px solid var(--amber); border-left: 2px solid var(--amber); }
+  .gauge-card::after { content: ''; position: absolute; bottom: -1px; right: -1px; width: 40px; height: 40px; border-bottom: 2px solid var(--amber); border-right: 2px solid var(--amber); }
+  .gauge-title { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .gauge-sub { font-family: 'Instrument Serif', serif; font-style: italic; color: var(--cream-dim); margin-bottom: 32px; }
+  .gauge-rows { display: flex; flex-direction: column; gap: 20px; }
+  .gauge-row { }
+  .gauge-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .gauge-row-label { font-size: 12px; letter-spacing: 0.1em; }
+  .gauge-row-pct { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; }
+  .gauge-bar { height: 4px; background: var(--ink-3); position: relative; overflow: hidden; }
+  .gauge-fill { height: 100%; background: linear-gradient(90deg, var(--amber), var(--amber-bright)); transform-origin: left; animation: fill 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; transform: scaleX(0); }
+  .gauge-fill.teal { background: linear-gradient(90deg, var(--teal-dim), var(--teal)); }
+  .gauge-fill.crimson { background: linear-gradient(90deg, var(--crimson), #ff7a8a); }
+  @keyframes fill { to { transform: scaleX(1); } }
+
+  .run-card { background: var(--ink-2); border: 1px solid var(--line); padding: 40px; }
+  .run-card h3 { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; margin-bottom: 24px; }
+  .run-list { display: flex; flex-direction: column; gap: 16px; }
+  .run-item { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 16px; border-bottom: 1px dashed var(--line); }
+  .run-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .run-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700; }
+  .run-icon.ok { background: rgba(78, 205, 196, 0.15); color: var(--teal); border: 1px solid var(--teal-dim); }
+  .run-icon.no { background: rgba(233, 69, 96, 0.12); color: var(--crimson); border: 1px solid rgba(233, 69, 96, 0.4); }
+  .run-text { flex: 1; }
+  .run-text strong { font-size: 13px; display: block; margin-bottom: 4px; }
+  .run-text span { font-size: 11px; color: var(--cream-faint); }
+
+  /* ============= §02 进化曲线 ============= */
+  .chart-wrap { background: var(--ink-2); border: 1px solid var(--line); padding: 48px; position: relative; }
+  .chart-legend { display: flex; gap: 32px; margin-bottom: 32px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .legend-swatch { width: 24px; height: 3px; }
+  .legend-swatch.line-amber { background: var(--amber); }
+  .legend-swatch.line-teal { background: var(--teal); }
+  .legend-swatch.line-gold { background: var(--gold); }
+  .legend-swatch.bar-crimson { background: var(--crimson); height: 10px; width: 14px; }
+  .chart-svg { width: 100%; height: 420px; display: block; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-top: 32px; border-top: 1px solid var(--line); }
+  .kpi { padding: 20px 16px; border-right: 1px solid var(--line); }
+  .kpi:last-child { border-right: none; }
+  .kpi-round { font-family: 'Fraunces', serif; font-style: italic; color: var(--amber); font-size: 14px; }
+  .kpi-val { font-family: 'Fraunces', serif; font-weight: 700; font-size: 28px; margin-top: 4px; }
+  .kpi-delta { font-size: 10px; color: var(--cream-faint); margin-top: 4px; }
+
+  /* ============= §03 时间线 ============= */
+  .timeline { position: relative; padding-left: 80px; }
+  .timeline::before { content: ''; position: absolute; left: 32px; top: 12px; bottom: 12px; width: 1px; background: linear-gradient(to bottom, var(--amber), var(--teal), var(--line)); }
+  .tl-round { position: relative; padding-bottom: 72px; }
+  .tl-round:last-child { padding-bottom: 0; }
+  .tl-dot { position: absolute; left: -56px; top: 8px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 2px solid var(--amber); z-index: 2; }
+  .tl-round.pass .tl-dot { border-color: var(--teal); }
+  .tl-round.fail .tl-dot { border-color: var(--crimson); background: var(--crimson); }
+  .tl-num { position: absolute; left: -90px; top: 4px; font-family: 'Fraunces', serif; font-style: italic; font-size: 24px; color: var(--amber); width: 40px; text-align: right; }
+  .tl-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tl-theme { font-family: 'Fraunces', serif; font-weight: 700; font-size: 26px; }
+  .tl-tag { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); color: var(--cream-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+  .tl-tag.blocker { color: var(--crimson); border-color: rgba(233, 69, 96, 0.4); }
+  .tl-tag.clean { color: var(--teal); border-color: var(--teal-dim); }
+  .tl-body { display: grid; grid-template-columns: 2fr 1fr; gap: 40px; }
+  .tl-breakthrough { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 17px; color: var(--cream); line-height: 1.5; }
+  .tl-breakthrough::before { content: '“'; font-family: 'Fraunces', serif; font-size: 40px; color: var(--amber); line-height: 0; vertical-align: -10px; margin-right: 4px; }
+  .tl-meta { display: flex; flex-direction: column; gap: 12px; }
+  .tl-meta-row { display: flex; justify-content: space-between; font-size: 11px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .tl-meta-row span:first-child { color: var(--cream-faint); letter-spacing: 0.1em; text-transform: uppercase; }
+  .tl-meta-row span:last-child { color: var(--cream); font-weight: 500; }
+  .tl-conclusion { font-size: 12px; color: var(--cream-dim); margin-top: 12px; line-height: 1.6; padding-left: 16px; border-left: 2px solid var(--amber); }
+
+  /* ============= §04 规则演化矩阵 ============= */
+  .matrix { display: grid; grid-template-columns: 100px repeat(6, 1fr); gap: 0; border: 1px solid var(--line); }
+  .matrix > div { padding: 14px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 11px; display: flex; flex-direction: column; justify-content: center; min-height: 56px; }
+  .matrix > div:nth-child(7n) { border-right: none; }
+  .matrix .mh { background: var(--ink-3); font-family: 'Fraunces', serif; font-weight: 700; font-size: 13px; color: var(--amber); text-align: center; align-items: center; min-height: 48px; }
+  .matrix .mr { background: var(--ink-3); font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--cream-dim); letter-spacing: 0.05em; }
+  .matrix .cell { position: relative; }
+  .rule-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; }
+  .rule-id.new { color: var(--amber); font-weight: 700; }
+  .rule-id.exists { color: var(--cream); }
+  .rule-id.dim { color: var(--cream-faint); }
+  .rule-cell-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 4px; }
+  .rule-cell-dot.new { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .rule-cell-dot.exists { background: var(--teal-dim); }
+
+  /* ============= §05 雷达 + 已完成/还差 ============= */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+  .radar-card { background: var(--ink-2); border: 1px solid var(--line); padding: 40px; }
+  .radar-svg { width: 100%; height: 380px; display: block; }
+  .radar-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-top: 24px; font-size: 11px; }
+  .radar-legend-item { display: flex; align-items: center; gap: 8px; }
+  .radar-legend-val { margin-left: auto; font-family: 'Fraunces', serif; font-weight: 700; color: var(--amber); }
+
+  .feature-list { background: var(--ink-2); border: 1px solid var(--line); padding: 40px; }
+  .feature-list h3 { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; }
+  .feature-list.done h3::before { content: '✓'; color: var(--teal); font-size: 24px; }
+  .feature-list.todo h3::before { content: '○'; color: var(--crimson); font-size: 24px; }
+  .feat-item { padding: 14px 0; border-bottom: 1px dashed var(--line); display: flex; gap: 12px; }
+  .feat-item:last-child { border-bottom: none; }
+  .feat-tag { font-size: 9px; padding: 2px 8px; border: 1px solid var(--line); color: var(--cream-faint); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; height: fit-content; margin-top: 2px; }
+  .feat-tag.core { color: var(--amber); border-color: var(--amber); }
+  .feat-tag.cross { color: var(--teal); border-color: var(--teal-dim); }
+  .feat-tag.flow { color: var(--gold); border-color: var(--gold); }
+  .feat-tag.miss { color: var(--crimson); border-color: var(--crimson); }
+  .feat-text { font-size: 12px; line-height: 1.6; }
+  .feat-text strong { color: var(--cream); display: block; margin-bottom: 2px; }
+  .feat-text span { color: var(--cream-dim); }
+
+  /* ============= §06 下一轮 ============= */
+  .next-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .next-card { background: var(--ink-2); border: 1px solid var(--line); padding: 32px; position: relative; transition: transform 0.3s, border-color 0.3s; }
+  .next-card:hover { transform: translateY(-4px); border-color: var(--amber); }
+  .next-num { font-family: 'Fraunces', serif; font-style: italic; font-size: 36px; color: var(--amber); margin-bottom: 16px; }
+  .next-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 18px; margin-bottom: 12px; line-height: 1.3; }
+  .next-desc { font-size: 11px; color: var(--cream-dim); line-height: 1.6; }
+
+  /* ============= Footer ============= */
+  footer { padding: 60px 0 40px; border-top: 1px solid var(--line); text-align: center; }
+  footer .quote { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 24px; color: var(--cream-dim); max-width: 600px; margin: 0 auto 24px; line-height: 1.4; }
+  footer .meta { font-size: 10px; letter-spacing: 0.3em; color: var(--cream-faint); text-transform: uppercase; }
+
+  /* ============= Responsive ============= */
+  @media (max-width: 980px) {
+    .container { padding: 0 24px; }
+    .hero-stats { grid-template-columns: repeat(2, 1fr); }
+    .stat { border-right: none; border-bottom: 1px solid var(--line); padding: 16px 0; }
+    .dashboard, .split { grid-template-columns: 1fr; gap: 32px; }
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .tl-body { grid-template-columns: 1fr; gap: 16px; }
+    .next-grid { grid-template-columns: 1fr 1fr; }
+    .matrix { grid-template-columns: 80px repeat(6, minmax(70px, 1fr)); font-size: 9px; }
+    .section-title { font-size: 32px; }
+    .section-sub { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; } }
+</style>
+</head>
+<body class="grain">
+
+<!-- =================== HERO =================== -->
+<header class="hero container">
+  <div class="hero-top">
+    <div class="hero-mark">an <span>AI-native</span> workflow archaeology</div>
+    <div class="hero-meta">
+      VOL. 06 / 2026·07·02<br>
+      COMMIT 4486a7c · 506 TESTS GREEN<br>
+      ASIA/SHANGHAI · GLM-5.2
+    </div>
+  </div>
+
+  <div class="hero-center">
+    <div class="hero-eyebrow">SIX-ROUND EVOLUTION DOSSIER</div>
+    <h1 class="hero-title">
+      代码 100%<br>
+      由 <em>AI</em> 生成<br>
+      人类只验收
+    </h1>
+    <p class="hero-sub">
+      一份关于"如何让 AI 不靠运气地、可追溯地、自我演化地"交付企业后台的六轮现场档案 ——
+      从 R1 的 1 blocker &amp; 56% 规则覆盖，到 R6 的 0 blocker &amp; 验收对齐门禁首次闭合。
+    </p>
+  </div>
+
+  <div class="hero-stats">
+    <div class="stat">
+      <div class="stat-num amber">6<span class="stat-unit">轮</span></div>
+      <div class="stat-label">演练迭代</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">506</div>
+      <div class="stat-label">测试用例 全绿</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num teal">16</div>
+      <div class="stat-label">可机器校验规则</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num crimson">3<span class="stat-unit">/29</span></div>
+      <div class="stat-label">累计 blocker · 已闭合</div>
+    </div>
+  </div>
+
+  <div class="hero-scroll">SCROLL ↓</div>
+</header>
+
+<!-- =================== §01 完成度仪表盘 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 01</div>
+    <h2 class="section-title">项目完成度</h2>
+    <div class="section-sub">方法论已近闭合，运行时仍是骨架 —— 这是一台 "可证的引擎"，不是一辆 "可开的车"。</div>
+  </div>
+
+  <div class="dashboard">
+    <div class="gauge-card">
+      <div class="gauge-title">分层完成度</div>
+      <div class="gauge-sub">工作流方法 ≈ 95% · 后端业务逻辑 ≈ 85% · HTTP 运行时 0% · 前端 UI 0% · 整体 35–40%</div>
+      <div class="gauge-rows">
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">工作流方法论 (PRD→Spec→Test→Impl→Review→Gate)</span><span class="gauge-row-pct" style="color:var(--amber)">95%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill" style="width:95%"></div></div>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">后端业务逻辑 (6 领域 + 跨域能力)</span><span class="gauge-row-pct" style="color:var(--amber)">85%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill" style="width:85%"></div></div>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">契约层 SSOT (Zod schema)</span><span class="gauge-row-pct" style="color:var(--teal)">90%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill teal" style="width:90%"></div></div>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">规则可机器校验覆盖</span><span class="gauge-row-pct" style="color:var(--teal)">100%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill teal" style="width:100%"></div></div>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">HTTP 服务器入口 / 真实 DB / 认证中间件</span><span class="gauge-row-pct" style="color:var(--crimson)">0%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill crimson" style="width:2%"></div></div>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge-row-head"><span class="gauge-row-label">前端 UI / 部署配置</span><span class="gauge-row-pct" style="color:var(--crimson)">0%</span></div>
+          <div class="gauge-bar"><div class="gauge-fill crimson" style="width:1%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="run-card">
+      <h3>能否独立运行？</h3>
+      <div class="run-list">
+        <div class="run-item">
+          <div class="run-icon ok">✓</div>
+          <div class="run-text"><strong>npm run typecheck</strong><span>tsc --noEmit · 类型层 0 错误</span></div>
+        </div>
+        <div class="run-item">
+          <div class="run-icon ok">✓</div>
+          <div class="run-text"><strong>npm test</strong><span>vitest run · 8 文件 506 用例全绿 · 2.25s</span></div>
+        </div>
+        <div class="run-item">
+          <div class="run-icon ok">✓</div>
+          <div class="run-text"><strong>npm run lint:rules</strong><span>check-rules.mjs · 16 规则全通过 · 1 SEC-002 豁免审计</span></div>
+        </div>
+        <div class="run-item">
+          <div class="run-icon no">✗</div>
+          <div class="run-text"><strong>作为 HTTP 服务启动</strong><span>无 start / dev 脚本，无 server.ts 入口，dependencies 仅 zod</span></div>
+        </div>
+        <div class="run-item">
+          <div class="run-icon no">✗</div>
+          <div class="run-text"><strong>真实持久化</strong><span>所有 repository 为内存 Map，进程退出即失</span></div>
+        </div>
+        <div class="run-item">
+          <div class="run-icon no">✗</div>
+          <div class="run-text"><strong>真实鉴权 / 前端 / 部署</strong><span>ctx.user 为桩 · 无 UI · 无 Docker/CI yaml</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== §02 进化曲线 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 02</div>
+    <h2 class="section-title">六轮进化曲线</h2>
+    <div class="section-sub">三条线讲一个故事：测试在涨、规则在涨、blocker 在收敛 —— 直到 R5 反弹，逼出 AI-007。</div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-legend">
+      <div class="legend-item"><span class="legend-swatch line-amber"></span>本轮交付用例数</div>
+      <div class="legend-item"><span class="legend-swatch line-teal"></span>累计规则数</div>
+      <div class="legend-item"><span class="legend-swatch line-gold"></span>本轮 suggestion</div>
+      <div class="legend-item"><span class="legend-swatch bar-crimson"></span>blocker (越少越好)</div>
+    </div>
+
+    <svg class="chart-svg" viewBox="0 0 1200 420" preserveAspectRatio="none">
+      <!-- grid -->
+      <g stroke="rgba(244,237,224,0.05)" stroke-width="1">
+        <line x1="80" y1="60" x2="1140" y2="60"/>
+        <line x1="80" y1="140" x2="1140" y2="140"/>
+        <line x1="80" y1="220" x2="1140" y2="220"/>
+        <line x1="80" y1="300" x2="1140" y2="300"/>
+        <line x1="80" y1="380" x2="1140" y2="380"/>
+      </g>
+      <!-- y axis labels (用例 0-120) -->
+      <g fill="#6b6557" font-size="10" font-family="JetBrains Mono" text-anchor="end">
+        <text x="70" y="64">120</text>
+        <text x="70" y="144">90</text>
+        <text x="70" y="224">60</text>
+        <text x="70" y="304">30</text>
+        <text x="70" y="384">0</text>
+      </g>
+      <!-- x axis labels -->
+      <g fill="#c9c0ad" font-size="12" font-family="Fraunces" font-style="italic" text-anchor="middle">
+        <text x="175" y="408">R1 · user</text>
+        <text x="345" y="408">R2 · role</text>
+        <text x="515" y="408">R3 · dept</text>
+        <text x="685" y="408">R4 · audit</text>
+        <text x="855" y="408">R5 · audit-enh</text>
+        <text x="1025" y="408">R6 · notification</text>
+      </g>
+
+      <!-- 用例数 line (35,73,92,91,113,102) max 120 → y = 380 - (v/120)*320 -->
+      <!-- R1: 380-35/120*320=286.7 ; R2: 380-73/120*320=185.3 ; R3: 380-92/120*320=134.7 ; R4: 380-91/120*320=137.3 ; R5: 380-113/120*320=78.7 ; R6: 380-102/120*320=108 -->
+      <polyline points="175,287 345,185 515,135 685,137 855,79 1025,108" fill="none" stroke="#ff7a1a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <g fill="#ff7a1a">
+        <circle cx="175" cy="287" r="5"/><circle cx="345" cy="185" r="5"/><circle cx="515" cy="135" r="5"/><circle cx="685" cy="137" r="5"/><circle cx="855" cy="79" r="5"/><circle cx="1025" cy="108" r="5"/>
+      </g>
+      <g fill="#ff7a1a" font-size="11" font-family="JetBrains Mono" text-anchor="middle" font-weight="500">
+        <text x="175" y="275">35</text><text x="345" y="173">73</text><text x="515" y="123">92</text><text x="685" y="125">91</text><text x="855" y="67">113</text><text x="1025" y="96">102</text>
+      </g>
+
+      <!-- 规则数 line (7,11,13,15,15,16) max 16 → use secondary scale 0-20 → y = 380 - (v/20)*320 -->
+      <!-- R1: 380-7/20*320=268 ; R2: 380-11/20*320=204 ; R3: 380-13/20*320=172 ; R4: 380-15/20*320=140 ; R5: 140 ; R6: 380-16/20*320=124 -->
+      <polyline points="175,268 345,204 515,172 685,140 855,140 1025,124" fill="none" stroke="#4ecdc4" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>
+      <g fill="#4ecdc4">
+        <rect x="172" y="265" width="6" height="6"/><rect x="342" y="201" width="6" height="6"/><rect x="512" y="169" width="6" height="6"/><rect x="682" y="137" width="6" height="6"/><rect x="852" y="137" width="6" height="6"/><rect x="1022" y="121" width="6" height="6"/>
+      </g>
+
+      <!-- suggestion line (6,6,4,3,7,2) -->
+      <!-- max 8 → y = 380 - (v/8)*60 (small scale at bottom) -->
+      <polyline points="175,335 345,335 515,350 685,357.5 855,327.5 1025,365" fill="none" stroke="#d4af37" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+
+      <!-- blocker bars (1,0,0,0,2,0) -->
+      <g fill="#e94560">
+        <rect x="160" y="370" width="30" height="10" opacity="0.9"/>
+        <rect x="840" y="360" width="30" height="20" opacity="0.9"/>
+      </g>
+      <g fill="#e94560" font-size="11" font-family="JetBrains Mono" text-anchor="middle" font-weight="700">
+        <text x="175" y="362">1</text>
+        <text x="855" y="352">2</text>
+      </g>
+      <!-- 0 blocker markers -->
+      <g fill="#4ecdc4" font-size="10" font-family="JetBrains Mono" text-anchor="middle">
+        <text x="345" y="375">0</text><text x="515" y="375">0</text><text x="685" y="375">0</text><text x="1025" y="375">0</text>
+      </g>
+
+      <!-- R5 annotation -->
+      <g>
+        <line x1="855" y1="79" x2="855" y2="360" stroke="rgba(233,69,96,0.3)" stroke-width="1" stroke-dasharray="2 4"/>
+        <text x="870" y="50" fill="#e94560" font-size="10" font-family="Instrument Serif" font-style="italic">R5 反弹点 · 测试通过 ≠ 验收对齐</text>
+      </g>
+      <!-- R6 annotation -->
+      <g>
+        <text x="1025" y="50" fill="#4ecdc4" font-size="10" font-family="Instrument Serif" font-style="italic" text-anchor="middle">R6 闭合 · AI-007 上线</text>
+      </g>
+    </svg>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-round">R1</div><div class="kpi-val">35</div><div class="kpi-delta">用例 · 1 blocker</div></div>
+      <div class="kpi"><div class="kpi-round">R2</div><div class="kpi-val">73</div><div class="kpi-delta">+38 · 规则 56%→100%</div></div>
+      <div class="kpi"><div class="kpi-round">R3</div><div class="kpi-val">92</div><div class="kpi-delta">+19 · META 双向绑定</div></div>
+      <div class="kpi"><div class="kpi-round">R4</div><div class="kpi-val">91</div><div class="kpi-delta">-1 · 三优化闭环</div></div>
+      <div class="kpi"><div class="kpi-round">R5</div><div class="kpi-val">113</div><div class="kpi-delta">+22 · 2 blocker 反弹</div></div>
+      <div class="kpi"><div class="kpi-round">R6</div><div class="kpi-val">102</div><div class="kpi-delta">-11 · 0 blocker 闭合</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== §03 时间线 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 03</div>
+    <h2 class="section-title">六轮现场档案</h2>
+    <div class="section-sub">每一轮都是一次"工作流对未知边界的试探" —— 失败被复盘成规则，规则在下一轮被验证。</div>
+  </div>
+
+  <div class="timeline">
+
+    <div class="tl-round fail">
+      <div class="tl-num">01</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">User 领域 CRUD · MVP 跑通</div>
+        <span class="tl-tag blocker">1 blocker</span>
+        <span class="tl-tag">35 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">建立了 7 阶段流水线骨架 (PRD→Spec→Contract→Test→Impl→Review→Gate)，subagent 协作产出可追溯可合入代码；但 CODE-004 命名违规漏到人工 Review —— 规则可机器校验是系统的阿喀琉斯之踵。</div>
+          <div class="tl-conclusion">MVP 跑通证明工作流骨架可行，但暴露规则可机器校验性是系统短板；唯一 blocker 是命名问题 (CODE-004) 因规则校验缺口漏到人工 Review。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span>— (基线 7 条)</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>三层架构 + SSOT 契约</span></div>
+          <div class="tl-meta-row"><span>规则覆盖</span><span style="color:var(--crimson)">56%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-round pass">
+      <div class="tl-num">02</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">Role 领域 CRUD · P0 强化</div>
+        <span class="tl-tag clean">0 blocker</span>
+        <span class="tl-tag">73 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">规则机器覆盖从 56% 提到 100%，新增代码 0 blocker，证明"无规则不校验" (META-001) 可行；test-writer / impl-writer 拆分 + 断言级红 + BLOCKING flag + advisory/constraint 区分全部上线。</div>
+          <div class="tl-conclusion">R1 全部复盘优化真正生效 (规则机器覆盖 100%、测试先行拆分、BLOCKING flag、advisory 区分)，但规则系统自身会漂移，需要元规则持续守护。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span style="color:var(--amber)">META-001/002 · SEC-003a/b</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>声明式 auth 元数据</span></div>
+          <div class="tl-meta-row"><span>规则覆盖</span><span style="color:var(--teal)">100%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-round pass">
+      <div class="tl-num">03</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">Dept 领域 CRUD · 跨域联动</div>
+        <span class="tl-tag clean">0 blocker</span>
+        <span class="tl-tag">92 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">META-003/004 双向绑定让规则文档与 check-rules.mjs 成为同一 SSOT 的两个投影，元规则守护规则系统自身（元规则也会自漂移，被发现并修复）；跨域契约联动 (权限码/错误码传播) 首次跑通。</div>
+          <div class="tl-conclusion">META-003/004 双向绑定成功消除声明漂移与反向缺口，但跨域联动与产物自检仍是弱点。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span style="color:var(--amber)">META-003/004</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>markEnforcement 双向绑定</span></div>
+          <div class="tl-meta-row"><span>规则覆盖</span><span style="color:var(--teal)">100%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-round pass">
+      <div class="tl-num">04</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">Audit 日志 · append-only + PII 脱敏</div>
+        <span class="tl-tag clean">0 blocker</span>
+        <span class="tl-tag">91 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">三优化点闭环生效：跨域联动实现"零测试改动 / 零救火 / 可预测"，工作流从"每轮暴露新边"转为"复盘优化真正在起作用"；SSOT 派生断言 + 受影响测试清单 + test-writer tsc 自检构成产物级自检环。</div>
+          <div class="tl-conclusion">三个复盘优化点 (AI-002 tsc / AI-005 禁硬编码 / AI-006 清单) 形成产物级自检环，让跨域联动从"突破+救火"变为"零改动+可预测" —— 成熟度转折点。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span style="color:var(--amber)">AI-005 · AI-006</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>[...schema.options] 派生</span></div>
+          <div class="tl-meta-row"><span>规则覆盖</span><span style="color:var(--teal)">100%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-round fail">
+      <div class="tl-num">05</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">Audit 增强 · 跨域埋点 + 报表 + PII 结构化</div>
+        <span class="tl-tag blocker">2 blocker</span>
+        <span class="tl-tag">113 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">三个架构方向 (withAudit HOF / ChangeField 结构化 PII / 非 CRUD 报表聚合) 全部落地，但首次出现 Reviewer blocker —— 暴露出新边界"类型正确 + 规则合规 + 断言通过 ≠ 业务验收对齐"，impl-writer 的语义偏离藏在"全绿"假象下，直到 Reviewer 逐条核对 PRD 才被抓出。</div>
+          <div class="tl-conclusion">三个架构方向落地但首现 Reviewer blocker (B-1/B-2)，暴露新边界"类型正确+规则合规+断言通过 ≠ 业务验收对齐"，工作流从工程质量转向业务正确性。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span>— (反推 AI-007)</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>withAudit HOF · ChangeField · report 聚合</span></div>
+          <div class="tl-meta-row"><span>B-1/B-2</span><span style="color:var(--crimson)">action/entity_type 语义错</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-round pass">
+      <div class="tl-num">06</div>
+      <div class="tl-dot"></div>
+      <div class="tl-head">
+        <div class="tl-theme">Notification · CRUD + 状态机 + 跨 service 依赖</div>
+        <span class="tl-tag clean">0 blocker</span>
+        <span class="tl-tag">102 用例</span>
+      </div>
+      <div class="tl-body">
+        <div>
+          <div class="tl-breakthrough">AI-007 端到端验收测试 + Reviewer PRD 29/29 逐条核对双轨闭合 R5 暴露的"验收对齐"门禁；impl-writer 一次过 Reviewer (对比 R5 的 2 个隐藏 blocker)，证明门禁从"事后救火"前移到"事前预防"；首次引入 service→service 横向依赖 + SEC-002-exempt 豁免机制。</div>
+          <div class="tl-conclusion">三个复盘优化点 (AI-007 / AI-006 增强 / SEC-002 bugfix) 全部生效；"验收对齐"门禁首次闭合，impl-writer 一次过 Reviewer (0 blocker)，门禁从事后救火转为事前预防。</div>
+        </div>
+        <div class="tl-meta">
+          <div class="tl-meta-row"><span>新增规则</span><span style="color:var(--amber)">AI-007</span></div>
+          <div class="tl-meta-row"><span>新增模式</span><span>SEC-002-exempt · service→service</span></div>
+          <div class="tl-meta-row"><span>PRD 核对</span><span style="color:var(--teal)">29/29 对齐</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =================== §04 规则演化矩阵 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 04</div>
+    <h2 class="section-title">规则演化矩阵</h2>
+    <div class="section-sub">规则不是预设的，是被复盘"反推"出来的 —— 每一行新规则都对应一次前一轮的失败。</div>
+  </div>
+
+  <div class="matrix">
+    <div class="mh"></div>
+    <div class="mh">R1</div><div class="mh">R2</div><div class="mh">R3</div><div class="mh">R4</div><div class="mh">R5</div><div class="mh">R6</div>
+
+    <!-- ARCH -->
+    <div class="mr">ARCH-001</div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id exists">● 扩面</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <div class="mr">ARCH-002</div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <!-- CODE -->
+    <div class="mr">CODE-001~004</div>
+    <div class="cell"><div class="rule-id new">NEW ×4</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">● 增强</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <!-- SEC -->
+    <div class="mr">SEC-001</div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <div class="mr">SEC-002</div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id exists">● bugfix+exempt</div><div class="rule-cell-dot exists"></div></div>
+
+    <div class="mr">SEC-003a/b</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id new">NEW ×2</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <!-- AI -->
+    <div class="mr">AI-001~004</div>
+    <div class="cell"><div class="rule-id new">NEW ×4</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">● 增强</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <div class="mr">AI-005</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+
+    <div class="mr">AI-006</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id exists">● 增强(两类标注)</div><div class="rule-cell-dot exists"></div></div>
+
+    <div class="mr">AI-007</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">— (反推)</div></div>
+    <div class="cell"><div class="rule-id new">NEW</div><div class="rule-cell-dot new"></div></div>
+
+    <!-- META -->
+    <div class="mr">META-001/002</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id new">NEW ×2</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+
+    <div class="mr">META-003/004</div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id new">NEW ×2</div><div class="rule-cell-dot new"></div></div>
+    <div class="cell"><div class="rule-id exists">●</div><div class="rule-cell-dot exists"></div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+    <div class="cell"><div class="rule-id dim">—</div></div>
+  </div>
+
+  <p class="dim" style="margin-top:24px; font-size:11px; font-family:'Instrument Serif',serif; font-style:italic;">
+    注：R5 表面"无新规则"，但反推出 AI-007 —— 失败是规则的真正来源。
+  </p>
+</section>
+
+<!-- =================== §05 雷达 + 已完成/还差 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 05</div>
+    <h2 class="section-title">能力雷达 & 功能盘点</h2>
+    <div class="section-sub">六维度雷达看工作流成熟度，两张清单看清"已交付"与"待补齐"。</div>
+  </div>
+
+  <div class="split">
+    <div class="radar-card">
+      <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:24px;">工作流方法成熟度</h3>
+      <svg class="radar-svg" viewBox="0 0 400 400">
+        <!-- 6 轴 radar, center 200,200, max r 140 -->
+        <g stroke="rgba(244,237,224,0.08)" fill="none">
+          <polygon points="200,60 321.2,130 321.2,270 200,340 78.8,270 78.8,130"/>
+          <polygon points="200,95 290.4,147.5 290.4,252.5 200,305 109.6,252.5 109.6,147.5"/>
+          <polygon points="200,130 259.6,165 259.6,235 200,270 140.4,235 140.4,165"/>
+          <polygon points="200,165 228.8,181.7 228.8,218.3 200,235 171.2,218.3 171.2,181.7"/>
+        </g>
+        <!-- axes -->
+        <g stroke="rgba(244,237,224,0.1)">
+          <line x1="200" y1="200" x2="200" y2="60"/>
+          <line x1="200" y1="200" x2="321.2" y2="130"/>
+          <line x1="200" y1="200" x2="321.2" y2="270"/>
+          <line x1="200" y1="200" x2="200" y2="340"/>
+          <line x1="200" y1="200" x2="78.8" y2="270"/>
+          <line x1="200" y1="200" x2="78.8" y2="130"/>
+        </g>
+        <!-- labels -->
+        <g fill="#c9c0ad" font-size="10" font-family="JetBrains Mono" text-anchor="middle">
+          <text x="200" y="50">规则可校验</text>
+          <text x="335" y="125">测试先行</text>
+          <text x="335" y="280">验收对齐</text>
+          <text x="200" y="358">跨域能力</text>
+          <text x="65" y="280">元规则守护</text>
+          <text x="65" y="125">复盘反推</text>
+        </g>
+        <!-- R1 shape (low) -->
+        <!-- values: 规则可校验 0.56, 测试先行 0.6, 验收对齐 0.5, 跨域能力 0.3, 元规则 0.0, 复盘反推 0.4 -->
+        <polygon points="200,121.6 290.4,147.5 259.6,235 158,200 200,200 123.5,171.2" fill="rgba(233,69,96,0.12)" stroke="#e94560" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <!-- R6 shape (high) -->
+        <!-- values: 1.0, 0.95, 0.9, 0.85, 0.95, 0.9 -->
+        <polygon points="200,60 304.1,135 304.1,265 200,321 96,265 96,135" fill="rgba(255,122,26,0.18)" stroke="#ff7a1a" stroke-width="2"/>
+        <g fill="#ff7a1a">
+          <circle cx="200" cy="60" r="4"/><circle cx="304.1" cy="135" r="4"/><circle cx="304.1" cy="265" r="4"/><circle cx="200" cy="321" r="4"/><circle cx="96" cy="265" r="4"/><circle cx="96" cy="135" r="4"/>
+        </g>
+      </svg>
+      <div class="radar-legend">
+        <div class="radar-legend-item"><span style="width:14px; height:2px; background:#e94560; display:inline-block;"></span>R1 起点</div>
+        <div class="radar-legend-item" style="justify-self:end;"><span style="width:14px; height:3px; background:#ff7a1a; display:inline-block;"></span>R6 当前</div>
+        <div class="radar-legend-item">规则可校验<span class="radar-legend-val">56%→100%</span></div>
+        <div class="radar-legend-item">验收对齐<span class="radar-legend-val">50%→90%</span></div>
+        <div class="radar-legend-item">跨域能力<span class="radar-legend-val">30%→85%</span></div>
+        <div class="radar-legend-item">元规则守护<span class="radar-legend-val">0%→95%</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:32px;">
+      <div class="feature-list done">
+        <h3>已交付</h3>
+        <div class="feat-item"><span class="feat-tag core">领域</span><div class="feat-text"><strong>6 大业务领域全栈</strong><span>user / role / dept / audit / report / notification · 含状态机、append-only、聚合查询</span></div></div>
+        <div class="feat-item"><span class="feat-tag cross">跨域</span><div class="feat-text"><strong>withAudit HOF 旁路埋点</strong><span>router 层统一包装 8 类写操作，service 纯粹不感知 audit，best-effort 吞异常</span></div></div>
+        <div class="feat-item"><span class="feat-tag cross">跨域</span><div class="feat-text"><strong>ChangeField 结构化 PII</strong><span>双层 SSOT (shape 在 contracts / data 在 domain) + markPii 字段级标记，移除运行时正则</span></div></div>
+        <div class="feat-item"><span class="feat-tag cross">跨域</span><div class="feat-text"><strong>service→service 横向依赖</strong><span>NotificationService 注入 UserService (R6 首次)，分层一致 + 领域封装</span></div></div>
+        <div class="feat-item"><span class="feat-tag flow">工作流</span><div class="feat-text"><strong>7 阶段流水线 + G1-G7 门禁</strong><span>PRD→Spec→Contract→Test→Impl→Review→Gate 全闭环可追溯</span></div></div>
+        <div class="feat-item"><span class="feat-tag flow">工作流</span><div class="feat-text"><strong>16 条可机器校验规则 + META 元约束</strong><span>check-rules.mjs 双向绑定 · SEC-002-exempt 豁免机制 · AI-007 端到端验收</span></div></div>
+        <div class="feat-item"><span class="feat-tag flow">工作流</span><div class="feat-text"><strong>6 轮 PRD/Spec/Review/Retro 全档</strong><span>每个决策有 BLOCKING 等级 + advisory/constraint 区分 + 反向同步记录</span></div></div>
+      </div>
+
+      <div class="feature-list todo">
+        <h3>还差</h3>
+        <div class="feat-item"><span class="feat-tag miss">运行时</span><div class="feat-text"><strong>HTTP 服务器入口</strong><span>无 server.ts / start 脚本 / fastify·express · procedure 表是声明式的，未挂到 HTTP</span></div></div>
+        <div class="feat-item"><span class="feat-tag miss">运行时</span><div class="feat-text"><strong>真实持久化层</strong><span>所有 repository 为内存 Map · 无 prisma/drizzle/pg · 进程退出即失</span></div></div>
+        <div class="feat-item"><span class="feat-tag miss">运行时</span><div class="feat-text"><strong>认证 / 鉴权中间件</strong><span>ctx.user 为桩 · requireAdmin 只查 ctx 标志 · 无 JWT/session/OAuth</span></div></div>
+        <div class="feat-item"><span class="feat-tag miss">前端</span><div class="feat-text"><strong>UI 层</strong><span>0% · 无 React/Vue · 无路由 · 无组件 · OpenAPI yaml 已就绪但无消费方</span></div></div>
+        <div class="feat-item"><span class="feat-tag miss">工程</span><div class="feat-text"><strong>部署 / CI 配置</strong><span>无 Dockerfile / docker-compose · 无 GitHub Actions yaml · 无环境变量管理</span></div></div>
+        <div class="feat-item"><span class="feat-tag miss">工程</span><div class="feat-text"><strong>真实集成测试</strong><span>现有 506 用例为单元/契约级 · 无 HTTP 端到端 · 无 DB 集成</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== §06 下一轮探索 =================== -->
+<section class="container">
+  <div class="section-head">
+    <div class="section-num">§ 06</div>
+    <h2 class="section-title">下一轮探索方向</h2>
+    <div class="section-sub">R6 复盘反推出的四个未验证边界 —— 工作流能否在"真复杂"的业务里仍不漂移。</div>
+  </div>
+
+  <div class="next-grid">
+    <div class="next-card">
+      <div class="next-num">i</div>
+      <div class="next-title">多步事务 / 跨域聚合报表</div>
+      <div class="next-desc">工作流在"写 + 聚合"混合业务 (多步事务、跨域 join 报表) 的适应性。report 域只验证了纯读，未触事务一致性。</div>
+    </div>
+    <div class="next-card">
+      <div class="next-num">ii</div>
+      <div class="next-title">权限继承树</div>
+      <div class="next-desc">角色/部门层级继承、权限向下传递的递归校验 —— 检验 SEC-002 / ARCH-001 在递归领域逻辑下是否仍闭合。</div>
+    </div>
+    <div class="next-card">
+      <div class="next-num">iii</div>
+      <div class="next-title">门禁自演化</div>
+      <div class="next-desc">规则能否随业务复杂度自适应 —— 门禁自身是否可被复盘反推演化 (而非每次人工补 META-003)。</div>
+    </div>
+    <div class="next-card">
+      <div class="next-num">iv</div>
+      <div class="next-title">AI-002 / AI-003 微调</div>
+      <div class="next-desc">impl-writer 发现测试 helper bug 须退回 test-writer (AI-002)；advisory 偏离须同时反向同步 Tech-Spec + 规则文档 (AI-003)。</div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== Footer =================== -->
+<footer>
+  <p class="quote">"测试通过 ≠ 验收对齐 —— R5 教的；门禁可前移 —— R6 证的。"</p>
+  <p class="meta">AI-NATIVE ENTERPRISE · EVOLUTION DOSSIER · VOL.06 · 2026·07·02 · ASIA/SHANGHAI</p>
+</footer>
+
+</body>
+</html>

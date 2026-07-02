@@ -1,0 +1,61 @@
+---
+alwaysApply: true
+---
+# AI 行为约束
+
+## AI-001 · 先读 Spec 再写码
+- 触发条件：AI 接到任何代码生成/修改任务时。
+- 期望行为：必须先定位并读取 docs/spec 下对应 Tech-Spec 与 packages/contracts 下相关 schema；若未找到对应 Spec，停下并提示"缺 Spec"，禁止凭对话记忆直接写码。
+- 校验方式：Reviewer subagent 扫描 diff 新增导出符号，与 `docs/spec/*.tech.md` + `packages/contracts/src/schemas/*.ts` 比对，无来源即记为越界（脚本无专属 enforcement 分支，由 Reviewer 流程校验）。
+
+## AI-002 · 测试先行（复盘拆分 + tsc 自检）
+- 触发条件：新增功能代码时。
+- 期望行为：
+  - 测试由独立角色 `test-writer` 先行产出，且必须包含**至少 N 条断言级红**（因逻辑未实现而失败的断言，非导入级红）；N = 测试矩阵覆盖类型数。
+  - **test-writer 交付前必须自跑 `npx tsc --noEmit`，0 错误方可交付**（复盘 RETRO-ROUND3 P1 反推：语法/类型错误不是"断言级红"，是产物缺陷；tsc 错误不得漏到编排者）。注意：因实现尚未存在，import 未定义符号会报 tsc 错——这是预期的"导入级红"，test-writer 须在汇报中列出这些预期的导入级 tsc 错误（模块/符号名），与真正的语法/类型错误区分；编排者据此判断哪些红是预期、哪些是产物缺陷。
+  - 实现由 `impl-writer` 后续产出，**禁止修改测试断言**（只可改测试 setup/import 路径，且须注明理由）。
+  - 编排者在两阶段之间实跑 `vitest run` 确认断言级红，作为 G4 通过证据。
+- 校验方式：编排者实跑 `vitest run` 收集断言级红证据 + `git diff` 检查 impl-writer 未改动测试断言行（含 `expect(` 的行）；test-writer 交付须附 tsc 自检结果（区分预期导入红 vs 缺陷），否则 G4 退回。
+
+## AI-005 · 禁止硬编码跨域可变数据（复盘 RETRO-ROUND3 P1 反推）
+- 触发条件：测试或实现中需断言/列举跨域共享的集合（权限码列表、错误码全集、实体类型枚举、状态枚举等）时。
+- 期望行为：
+  - 禁止在断言里硬编码跨域可变集合的字面量（如 `expect(codes).toEqual(['user:read','user:write','role:read','role:write'])`）——当 contracts 的枚举扩展时，硬编码断言会过期变红且不易定位。
+  - 改用 SSOT 派生断言：从 contracts 的 schema 派生期望值，如 `expect(codes).toEqual([...permissionCodeSchema.options])`，使断言自动跟随 SSOT。
+  - 例外：单领域内不可变的固定值（如某测试 fixture 的固定 id）可硬编码；但跨域共享的枚举/集合一律派生。
+- 校验方式：`scripts/check-rules.mjs` AI-005 分支扫描 `apps/api/test/**/*.ts` 中 `.toEqual(\[` 或 `.toStrictEqual(\[` 后紧跟多个字符串字面量（≥3 个）且字面量匹配已知跨域枚举值模式（如 `xxx:xxx` 权限码、`XXX_XXX` 大写下划线错误码）的断言，标记为 suggestion 待人工确认是否应改为派生；Reviewer subagent 复核。
+
+## AI-003 · 禁止越界发挥（复盘细化：advisory 偏离须反向同步 + [约束] 项偏离处理流程）
+- 触发条件：AI 欲新增 Spec 未提及的字段、路由、依赖时。
+- 期望行为：
+  - 对 Spec 的 `[约束]` 项：默认禁止偏离，偏离即越界，停下回报。**例外（[约束] 项偏离处理流程，RETRO-ROUND7-001 S-2 反推）**：impl-writer 实现期发现 [约束] 项设计不足须偏离时，禁止默默偏离，须按以下流程处理：
+    1. impl-writer 在交付报告显式标注"[约束] 项偏离 + 偏离项 + 偏离理由 + 反向同步 Spec"。
+    2. impl-writer 反向同步 Tech-Spec：将偏离项从 `[约束]` 降级为 `[advisory]`（或保留 [约束] 但追加 `[advisory]` 偏离说明），附偏离理由 + 合规论证（如与其他 [约束] 项的权衡）+ 测试影响同步声明。
+    3. Reviewer 逐条确认 [约束] 项偏离的理由是否成立：理由成立 + Spec 已同步 + 验收对齐（PRD Given/When/Then 逐条对齐）+ 三件套全绿 → 视为 Spec 已演进（非越界，不记 blocker）；理由不成立 或 Spec 未同步 或 验收偏离 → 记 blocker。
+    4. 该流程将"严格禁止 [约束] 偏离"演进为"[约束] 偏离须经 Reviewer 确认理由成立 + Spec 同步 + 验收对齐后方可合规"，更贴近工程实际（实现期发现 Spec 设计不足时的合理演进路径），同时保留 [约束] 项的强约束力（默认禁止 + 显式标注 + Reviewer 把关）。
+  - 对 Spec 的 `[advisory]` 项：允许偏离，但必须在 PR 描述写"反向同步 Spec：{{项}}"，并相应更新 Tech-Spec，消除单向漂移。
+  - 对 Spec 未提及项：一律禁止，停下回报"超出 Spec 范围：{{项}}"。
+- 校验方式：Reviewer subagent 扫描 diff 新增导出符号在 `docs/spec` + contracts 有来源；advisory 偏离检查 PR 描述含"反向同步 Spec"字样，无则记 blocker；[约束] 项偏离检查 impl-writer 交付报告是否含"[约束] 项偏离"显式标注 + Tech-Spec 是否已反向同步（[advisory] 标注 + 理由），缺失或理由不成立记 blocker。
+
+## AI-004 · 每次改动必跑三件套
+- 触发条件：AI 完成一批代码改动、提交前。
+- 期望行为：必须执行 `npm run typecheck && npm run lint:rules && npm test`，全绿方可提交。
+- 校验方式：CI（GitHub Actions）执行 `tsc --noEmit` + `node scripts/check-rules.mjs`（整体脚本，非专属校验）+ `vitest run`，任一失败阻断合入；本地 pre-commit hook 同步。AI-004 本身无 check-rules.mjs 专属 enforcement，其"必跑三件套"由 CI 整体执行保障（不触发 META-003）。
+
+## AI-006 · Tech Lead 须产出受影响测试清单（复盘 RETRO-ROUND3 P1 反推 + RETRO-ROUND5 P1 增强）
+- 触发条件：Tech Lead 改动 `packages/contracts`（共享契约层）**或** 改动既有 `apps/api/src/{service,repository}/*.ts` 的 public 方法签名（返回类型/参数/抛错契约）时。
+- 期望行为：
+  - 当 Tech-Spec 涉及 contracts 的联动改动（新增/修改字段、扩展枚举、改错误码），Tech Lead 必须在 Tech-Spec 中产出"受影响测试清单"章节。
+  - 当 Tech-Spec 涉及既有 service/repository 的 public 方法签名变更（如返回类型从 `Promise<Entity>` 扩展为 `Promise<{entity, changes}>`），Tech Lead 必须额外 grep `apps/api/test/**/*.ts` 中消费该方法返回值/参数的断言点（如 `await service.create(...)` 后访问 `.xxx` 的行），纳入同一"受影响测试清单"章节。
+  - 清单生成方式：grep 引用被改符号的测试文件（如改了 `permissionCodeSchema`，则 grep 所有 import/引用 `permissionCodeSchema` 的 `apps/api/test/**/*.ts`），列出文件 + 受影响的断言位置 + 需同步更新的方向（硬编码→派生 / 数据补齐 / 类型对齐）。
+  - 清单分两类标注：①contracts 联动驱动（grep 命中）②apps/api 内部签名变更驱动（Tech Lead 手动分析）。两类均须覆盖，缺一记 blocker。
+  - test-writer 据此清单同步更新既有测试的断言数据；**test-writer 须反向核实清单完整性**——若发现清单外的影响点（如 Tech Lead 遗漏的签名变更影响），须在交付报告显式列出差异并修正，编排者据此判断清单准确性。
+- 校验方式：Reviewer subagent 检查 Tech-Spec 是否含"受影响测试清单"章节（若 contracts 有联动改动或既有 service/repository 签名变更）；清单缺失或两类标注缺一记 blocker；test-writer 交付报告若含"清单遗漏差异"记录，编排者将该差异回填至复盘（验证 AI-006 增强是否真闭合）。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。
+
+## AI-007 · 端到端验收测试 + Reviewer PRD 逐条核对（复盘 RETRO-ROUND5 P0 反推）
+- 触发条件：PRD 含"验收标准（Given/When/Then）"且涉及跨层行为（如埋点、联动、聚合等无法由单层断言覆盖的场景）时。
+- 期望行为：
+  - **test-writer 须产出端到端验收测试**：对照 PRD 每条 Given/When/Then，编写从入口（router/handler）到可观测副作用（如审计日志落库、报表聚合结果、跨域状态变更）的端到端断言，而不仅断言单层 service 返回值。端到端测试须注入共享依赖（如共享 AuditLogRepository）以观测旁路副作用，而非依赖隔离的自建实例导致副作用不可见。
+  - **Reviewer 须按 PRD 验收标准逐条核对**：审查时不仅查规则合规（tsc/check-rules/断言通过），还须对照 PRD 的每条 Given/When/Then 逐条核对实现行为是否对齐；发现 [约束] 偏离记 blocker，[advisory] 偏离核对反向同步说明。
+  - 根因回顾（RETRO-ROUND5 P0）：tsc/check-rules/vitest 校验"代码正确性"（类型/规则/断言），不校验"业务验收对齐"；impl-writer 的语义偏离可隐身于"全绿"假象下，只有端到端验收测试 + Reviewer PRD 逐条核对才能抓出。
+- 校验方式：Reviewer subagent 检查测试文件是否覆盖 PRD 每条 Given/When/Then（端到端断言，非仅单层）；Reviewer 报告须含"PRD 验收逐条核对"章节，列出每条验收点的对齐结论（对齐/偏离）；端到端测试缺失或 PRD 核对章节缺失记 blocker。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。

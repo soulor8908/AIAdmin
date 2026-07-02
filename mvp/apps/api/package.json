@@ -1,0 +1,13 @@
+{
+  "name": "@admin/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@admin/contracts": "*",
+    "zod": "^3.23.0"
+  }
+}

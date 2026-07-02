@@ -1,0 +1,504 @@
+# OpenAPI 3.1 片段 —— 角色管理
+# 与 packages/contracts/src/schemas/role.ts 1:1 对齐（手工对齐，MVP 不装 zod-to-openapi）。
+# 字段名、类型、约束、枚举值、必填项均与 Zod schema 一致；变更须同步两处 + Tech-Spec + errors.ts。
+# 错误码 ErrorCode 对齐 user.ts 的 errorCodeSchema（全局 SSOT，含跨域码）。
+# 引用 Tech-Spec: TECH-ROLE-001 / PRD-ROLE-001
+openapi: 3.1.0
+info:
+  title: Admin Role API
+  version: 0.1.0
+  description: 角色管理 API 片段（列表 / 详情 / 新建 / 删除 / 为用户分配·查看·移除角色）。查看类需 role:read，变更类需 role:write（SEC-001 默认受保护；SEC-002 service 层 requirePermission）。
+servers:
+  - url: /v1
+    description: 本地 / 默认前缀
+
+paths:
+  /roles:
+    get:
+      operationId: listRoles
+      summary: 分页查询角色列表（F2，含内置 admin 标识）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 开始（z.coerce.number().int().min(1).default(1)）。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数，上限 100（z.coerce.number().int().min(1).max(100).default(10)）。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: 列表查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListResult'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED，SEC-001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:read，SEC-002）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      operationId: createRole
+      summary: 新建角色（F1，名称全局唯一，权限码创建后不可改）
+      tags: [role]
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleInput'
+      responses:
+        '201':
+          description: 创建成功，is_builtin 恒为 false
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，如 name 空/超 64、permission_code 非枚举）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 角色名称已存在（ROLE_NAME_DUPLICATE，Q3 全局唯一）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /roles/{id}:
+    get:
+      operationId: getRole
+      summary: 查看角色详情（F2）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 角色 ID（z.string().uuid()）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 角色详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，id 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:read）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 角色不存在（ROLE_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      operationId: deleteRole
+      summary: 删除角色（F3，受内置不可删 + 已分配不可删约束）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 角色 ID（z.string().uuid()）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 删除成功，无 body
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，id 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 内置角色不可删除（ROLE_BUILTIN_FORBIDDEN）或越权（FORBIDDEN，缺 role:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 角色不存在（ROLE_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 角色已被分配，禁止删除（ROLE_IN_USE，Q1 决策方案 B：须先解除全部分配）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/roles:
+    get:
+      operationId: listUserRoles
+      summary: 查看用户已分配的角色关联（F4 查看）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: userId
+          in: path
+          description: 用户 ID（z.string().uuid()）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 用户的角色关联列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserRole'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，userId 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:read）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      operationId: assignRole
+      summary: 为用户分配角色（F4，一个用户可多角色）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: userId
+          in: path
+          description: 用户 ID（z.string().uuid()）。对应契约 assignRoleInputSchema.userId（path+body 合并）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleRequestBody'
+      responses:
+        '201':
+          description: 分配成功，返回新建的用户-角色关联
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRole'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，userId/roleId 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在（USER_NOT_FOUND）或角色不存在（ROLE_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 用户已持有该角色（USER_ROLE_ALREADY_ASSIGNED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}/roles/{roleId}:
+    delete:
+      operationId: removeRole
+      summary: 移除用户的某个角色（F4 移除，幂等）
+      tags: [role]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: userId
+          in: path
+          description: 用户 ID（z.string().uuid()）。对应契约 assignRoleInputSchema.userId。
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          description: 角色 ID（z.string().uuid()）。对应契约 assignRoleInputSchema.roleId。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 移除成功（关联不存在亦返回 204，幂等，B12 决策），无 body
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，userId/roleId 非 uuid）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，缺 role:write）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在（USER_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员凭证（SEC-001 默认受保护路由）。本期 MVP 鉴权桩：ctx.user.role==='admin' 视为具备 role:read+role:write（admin 角色持全部权限码，Q4）；非 admin → FORBIDDEN。role:read/role:write 端到端区分待 Auth 模块富化 Ctx。
+  schemas:
+    PermissionCode:
+      type: string
+      description: 权限码枚举（对齐 permissionCodeSchema，Q2 决策固定枚举）。后续随新模块 PRD 扩展。
+      enum: [user:read, user:write, role:read, role:write]
+
+    Role:
+      type: object
+      description: 角色实体（对齐 roleSchema）。字段 snake_case 与 DB schema 一致。permission_codes 创建后不可改（F1）。
+      required: [id, name, description, permission_codes, is_builtin, created_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: z.string().uuid()
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: z.string().min(1).max(64)，全局唯一（Q3）
+        description:
+          type: string
+          maxLength: 512
+          description: z.string().max(512)
+        permission_codes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+          description: z.array(permissionCodeSchema)，允许为空（Q2 零权限角色）
+        is_builtin:
+          type: boolean
+          description: z.boolean()，内置角色标记（admin=true，其余=false）
+        created_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，ISO 8601
+
+    CreateRoleInput:
+      type: object
+      description: 新建角色入参（对齐 createRoleInputSchema）。is_builtin/id/created_at 由服务端生成，不入输入。
+      required: [name, description, permission_codes]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: z.string().min(1).max(64)
+        description:
+          type: string
+          maxLength: 512
+          description: z.string().max(512)
+        permission_codes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+          description: 允许为空数组（Q2）
+
+    RoleListResult:
+      type: object
+      description: 分页查询结果（对齐 roleListResultSchema，带 .strict()）。total 为角色总条数；含内置 admin。
+      required: [items, total, page, pageSize, totalPages]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        total:
+          type: integer
+          minimum: 0
+          description: 满足条件的总条数（z.number().int().min(0)）
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        totalPages:
+          type: integer
+          minimum: 0
+          description: 总页数 = ceil(total/pageSize)；空列表为 0
+
+    AssignRoleRequestBody:
+      type: object
+      description: 分配角色请求体（对应契约 assignRoleInputSchema 的 body 部分；userId 由 path 提供，契约 AssignRoleInput = path userId + body roleId 合并，对齐 user 域 path+body 合并风格）。
+      required: [roleId]
+      additionalProperties: false
+      properties:
+        roleId:
+          type: string
+          format: uuid
+          description: z.string().uuid()（assignRoleInputSchema.roleId）
+
+    UserRole:
+      type: object
+      description: 用户-角色关联实体（对齐 userRoleSchema，带 .strict()）。(user_id, role_id) 业务唯一。
+      required: [id, user_id, role_id, assigned_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        role_id:
+          type: string
+          format: uuid
+        assigned_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，ISO 8601
+
+    ErrorCode:
+      type: string
+      description: 错误码枚举（对齐 errorCodeSchema 全局 SSOT，含 user 与 role 跨域码）。与 Tech-Spec §边界与异常 一一对应。
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - USER_NOT_FOUND
+        - USER_EMAIL_DUPLICATE
+        - USER_DISABLE_SELF_FORBIDDEN
+        - USER_ALREADY_DISABLED
+        - USER_ALREADY_ACTIVE
+        - ROLE_NOT_FOUND
+        - ROLE_NAME_DUPLICATE
+        - ROLE_BUILTIN_FORBIDDEN
+        - ROLE_IN_USE
+        - USER_ROLE_ALREADY_ASSIGNED
+
+    ErrorResponse:
+      type: object
+      description: 统一错误响应（对齐 errorResponseSchema）。
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 人类可读错误描述（含字段级 detail）

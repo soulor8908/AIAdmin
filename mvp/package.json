@@ -1,0 +1,26 @@
+{
+  "name": "admin-system-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:rules": "node scripts/check-rules.mjs",
+    "start": "tsx apps/api/src/server.ts",
+    "dev": "tsx watch apps/api/src/server.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}

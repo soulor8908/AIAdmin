@@ -1,0 +1,295 @@
+# OpenAPI 3.1 片段 —— 用户管理
+# 与 packages/contracts/src/schemas/user.ts 1:1 对齐（手工对齐，MVP 不装 zod-to-openapi）。
+# 字段名、类型、约束、枚举值、必填项均与 Zod schema 一致；变更须同步两处 + Tech-Spec。
+# 引用 Tech-Spec: TECH-USER-001 / PRD-USER-001
+openapi: 3.1.0
+info:
+  title: Admin User API
+  version: 0.1.0
+  description: 用户管理 API 片段（列表 / 新建 / 状态变更）。所有路由需管理员鉴权（SEC-001）。
+servers:
+  - url: /v1
+    description: 本地 / 默认前缀
+
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: 分页查询用户列表（支持按状态筛选）
+      tags: [user]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 开始（z.coerce.number().int().min(1).default(1)）。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数，上限 100（z.coerce.number().int().min(1).max(100).default(10)）。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: status
+          in: query
+          description: 按状态筛选，缺省表示不过滤（userStatusSchema.optional()）。
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserStatus'
+      responses:
+        '200':
+          description: 列表查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResult'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED，SEC-001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN，SEC-002）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      operationId: createUser
+      summary: 新建用户（邮箱唯一）
+      tags: [user]
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: 创建成功，新用户状态默认 active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，如 email 格式非法 / name 缺失）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 邮箱已被占用（USER_EMAIL_DUPLICATE）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{id}/status:
+    patch:
+      operationId: updateUserStatus
+      summary: 变更用户状态（F3 禁用 / F4 启用）
+      tags: [user]
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 目标用户 ID（z.string().uuid()）。
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusInput'
+      responses:
+        '200':
+          description: 状态变更成功，返回更新后的用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: 入参校验失败（VALIDATION_ERROR，如 id 非 uuid / status 非枚举）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证（UNAUTHORIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 越权（FORBIDDEN）或禁用自身（USER_DISABLE_SELF_FORBIDDEN）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 目标用户不存在（USER_NOT_FOUND）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 重复状态变更（USER_ALREADY_DISABLED / USER_ALREADY_ACTIVE）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员凭证（SEC-001 默认受保护路由）。具体鉴权机制由后续 Auth 模块定义。
+  schemas:
+    UserStatus:
+      type: string
+      enum: [active, disabled]
+      description: 用户状态：active=启用 / disabled=禁用。对齐 userStatusSchema。
+
+    User:
+      type: object
+      description: 用户实体（对齐 userSchema）。字段 snake_case 与 DB schema 一致。
+      required: [id, name, email, status, created_at, updated_at]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: z.string().uuid()
+        name:
+          type: string
+          minLength: 1
+          description: z.string().min(1)
+        email:
+          type: string
+          format: email
+          description: z.string().email()
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        created_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，ISO 8601
+        updated_at:
+          type: string
+          format: date-time
+          description: z.string().datetime()，ISO 8601
+
+    CreateUserInput:
+      type: object
+      description: 新建用户入参（对齐 createUserInputSchema）。Q5 决策：本期必填 = email + name。
+      required: [email, name]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          description: z.string().email()
+        name:
+          type: string
+          minLength: 1
+          description: z.string().min(1)
+
+    UpdateUserStatusInput:
+      type: object
+      description: 变更状态入参（对齐 updateUserStatusInputSchema）。F3/F4 共用同一 PATCH 端点。
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          $ref: '#/components/schemas/UserStatus'
+
+    UserListResult:
+      type: object
+      description: 分页查询结果（对齐 userListResultSchema）。total 为满足筛选条件的总条数。
+      required: [items, total, page, pageSize, totalPages]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          minimum: 0
+          description: 满足筛选条件的总条数（z.number().int().min(0)）
+        page:
+          type: integer
+          minimum: 1
+          description: 当前页码（z.number().int().min(1)）
+        pageSize:
+          type: integer
+          minimum: 1
+          description: 每页条数（z.number().int().min(1)）
+        totalPages:
+          type: integer
+          minimum: 0
+          description: 总页数 = ceil(total/pageSize)；空列表为 0（z.number().int().min(0)）
+
+    ErrorCode:
+      type: string
+      description: 错误码枚举（对齐 errorCodeSchema 全局 SSOT，含 user 与 role 跨域码；user 域端点仅返回前 8 项）。与各域 Tech-Spec §边界与异常 一一对应。
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - USER_NOT_FOUND
+        - USER_EMAIL_DUPLICATE
+        - USER_DISABLE_SELF_FORBIDDEN
+        - USER_ALREADY_DISABLED
+        - USER_ALREADY_ACTIVE
+        - ROLE_NOT_FOUND
+        - ROLE_NAME_DUPLICATE
+        - ROLE_BUILTIN_FORBIDDEN
+        - ROLE_IN_USE
+        - USER_ROLE_ALREADY_ASSIGNED
+
+    ErrorResponse:
+      type: object
+      description: 统一错误响应（对齐 errorResponseSchema）。
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 人类可读错误描述（含字段级 detail）
