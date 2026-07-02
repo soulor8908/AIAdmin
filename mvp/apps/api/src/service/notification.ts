@@ -6,6 +6,7 @@
 //   markRead: B2 登录 → B5 → B4 收件人校验(FORBIDDEN，非 admin 守卫，自服务) → B6 仅 sent 允许 → 写入（status=read, read_at=now）→ 返回 + 埋点
 //   delete:  B3 鉴权 → B5 → B6 仅 draft 允许 → 删除（204）→ 埋点（after=[]）
 //   list/detail: B3 鉴权 → 返回（读不埋点）
+//   [约束] TECH-OPTIMISTIC-LOCKING-001 D9：写操作守卫顺序 B5 实体存在 → B_version 版本匹配 → B6/B7/B8 业务规则。
 // D1：跨 service 依赖新模式——NotificationService 注入 UserService（service→service，ARCH-001 仅禁 service→router，不禁 service→service）。
 // D6：5 类写操作返回 WriteResult<Notification>（{entity, changes, before?}），供 router 层 withAudit 提取 entity + 旁路记日志。
 // D5/D4：markRead 为收件人自服务，**不**走 requireAdmin，带 SEC-002-exempt 豁免标记（scanner 识别跳过 + push info 供 Reviewer 审计）。
@@ -24,6 +25,7 @@ import type { Ctx } from '../context.js';
 import { transitionStatus } from '../domain/notification.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
+import { validateVersion } from '../domain/version.js';
 
 export class NotificationService {
   constructor(
@@ -51,6 +53,7 @@ export class NotificationService {
       updated_at: now,
       sent_at: null, // draft 态 null，send 时置非空
       read_at: null, // draft/sent 态 null，markRead 时置非空
+      version: 0, // TECH-OPTIMISTIC-LOCKING-001 D1：新建实体 version 初始 0
     };
     const inserted = this.notificationRepo.insert(notification);
     // D3/D6：changes 为 after 快照（markPii('notification',...) 全 false，无 PII），create 无 before
@@ -67,13 +70,19 @@ export class NotificationService {
   async update(
     id: string,
     input: UpdateNotificationInput,
+    expectedVersion: number,
     ctx: Ctx,
   ): Promise<WriteResult<Notification>> {
     this.requireAdmin(ctx);
-    // B5: 通知不存在（先于 B6 状态守卫）
+    // B5: 通知不存在（先于 B_version 版本匹配守卫，再先于 B6 状态守卫；含乐观锁版本校验 TECH-OPTIMISTIC-LOCKING-001 D9）
     const n = this.notificationRepo.findById(id);
     if (!n) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6 状态守卫，TECH-OPTIMISTIC-LOCKING-001 D9）
+    const versionCheck = validateVersion(expectedVersion, n.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${n.version}`, { current_version: n.version });
     }
     // B6: 仅 draft 允许编辑（状态守卫，违规同样 NOTIFICATION_INVALID_TRANSITION，Q1）
     if (n.status !== 'draft') {
@@ -94,6 +103,9 @@ export class NotificationService {
       before.push({ field: 'recipient_id', value: n.recipient_id, pii: false });
       changes.push({ field: 'recipient_id', value: input.recipient_id, pii: false });
     }
+    // D12：version 字段无条件纳入 before/after 快照（repo.update 自增 version，新值 = n.version + 1）
+    before.push({ field: 'version', value: n.version, pii: false });
+    changes.push({ field: 'version', value: n.version + 1, pii: false });
     // 保证 updated_at 单调递增：ms 精度下 create 与 update back-to-back 可能同毫秒产生同戳，
     // 取 max(Date.now(), prev+1ms) 确保 updated_at 严格晚于前值（测试断言 updated_at 刷新）。
     const prevMs = Date.parse(n.updated_at);
@@ -111,12 +123,17 @@ export class NotificationService {
     return { entity: updated, changes, before };
   }
 
-  async send(id: string, ctx: Ctx): Promise<WriteResult<Notification>> {
+  async send(id: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<Notification>> {
     this.requireAdmin(ctx);
-    // B5: 通知不存在
+    // B5: 通知不存在（先于 B_version 版本匹配守卫；含乐观锁版本校验 TECH-OPTIMISTIC-LOCKING-001 D9）
     const n = this.notificationRepo.findById(id);
     if (!n) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6 状态守卫，TECH-OPTIMISTIC-LOCKING-001 D9）
+    const versionCheck = validateVersion(expectedVersion, n.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${n.version}`, { current_version: n.version });
     }
     // B6: 状态守卫——send 仅 draft 允许（用 transitionStatus(draft, sent) 裁决，非 draft → NOTIFICATION_INVALID_TRANSITION）
     const transition = transitionStatus(n.status, 'sent');
@@ -139,24 +156,31 @@ export class NotificationService {
     if (!updated) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
     }
-    // before=[status:draft, sent_at:null] / after=[status:sent, sent_at:ISO]（read_at 未变更不入快照）
+    // before=[status:draft, sent_at:null, version] / after=[status:sent, sent_at:ISO, version]（read_at 未变更不入快照）
     const before = markPii('notification', [
       { field: 'status', value: n.status, pii: false },
       { field: 'sent_at', value: n.sent_at, pii: false },
+      { field: 'version', value: n.version, pii: false },
     ]);
     const changes = markPii('notification', [
       { field: 'status', value: updated.status, pii: false },
       { field: 'sent_at', value: updated.sent_at, pii: false },
+      { field: 'version', value: updated.version, pii: false },
     ]);
     return { entity: updated, changes, before };
   }
 
   // SEC-002-exempt: recipient self-service (PRD Q4b); guard via ctx.user.id === recipient_id
-  async markRead(id: string, ctx: Ctx): Promise<WriteResult<Notification>> {
-    // B5: 通知存在（先于 B4 收件人校验，PRD Q4b 钦定序）
+  async markRead(id: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<Notification>> {
+    // B5: 通知存在（先于 B_version 版本匹配守卫，再先于 B4 收件人校验，PRD Q4b 钦定序；含乐观锁版本校验 TECH-OPTIMISTIC-LOCKING-001 D9）
     const n = this.notificationRepo.findById(id);
     if (!n) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B4 收件人校验，TECH-OPTIMISTIC-LOCKING-001 D9）
+    const versionCheck = validateVersion(expectedVersion, n.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${n.version}`, { current_version: n.version });
     }
     // B4: 收件人自服务守卫（非 admin 守卫；admin 代标记亦拒绝，自服务语义）
     if (ctx.user.id !== n.recipient_id) {
@@ -172,24 +196,31 @@ export class NotificationService {
     if (!updated) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
     }
-    // before=[status:sent, read_at:null] / after=[status:read, read_at:ISO]（sent_at 未变更不入快照）
+    // before=[status:sent, read_at:null, version] / after=[status:read, read_at:ISO, version]（sent_at 未变更不入快照）
     const before = markPii('notification', [
       { field: 'status', value: n.status, pii: false },
       { field: 'read_at', value: n.read_at, pii: false },
+      { field: 'version', value: n.version, pii: false },
     ]);
     const changes = markPii('notification', [
       { field: 'status', value: updated.status, pii: false },
       { field: 'read_at', value: updated.read_at, pii: false },
+      { field: 'version', value: updated.version, pii: false },
     ]);
     return { entity: updated, changes, before };
   }
 
-  async delete(id: string, ctx: Ctx): Promise<WriteResult<void>> {
+  async delete(id: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<void>> {
     this.requireAdmin(ctx);
-    // B5: 通知不存在
+    // B5: 通知不存在（先于 B_version 版本匹配守卫，再先于 B6 状态守卫；含乐观锁版本校验 TECH-OPTIMISTIC-LOCKING-001 D9）
     const n = this.notificationRepo.findById(id);
     if (!n) {
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6 状态守卫，TECH-OPTIMISTIC-LOCKING-001 D9）
+    const versionCheck = validateVersion(expectedVersion, n.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${n.version}`, { current_version: n.version });
     }
     // B6: 状态守卫——delete 仅 draft 允许（append-only：sent/read 不可删）
     if (n.status !== 'draft') {
@@ -202,6 +233,7 @@ export class NotificationService {
       { field: 'content', value: n.content, pii: false },
       { field: 'recipient_id', value: n.recipient_id, pii: false },
       { field: 'status', value: n.status, pii: false },
+      { field: 'version', value: n.version, pii: false },
     ]);
     return { entity: undefined, changes: [], before };
   }

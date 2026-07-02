@@ -62,6 +62,7 @@ function seed(
     name: 'admin',
     email: 'admin@example.com',
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -70,6 +71,7 @@ function seed(
     name: 'alice',
     email: 'alice@example.com',
     status: 'active',
+    version: 0,
     department_id: FROM_DEPT_ID,
     created_at: SEED_TS,
     updated_at: SEED_TS,
@@ -82,6 +84,7 @@ function seed(
     description: 'Engineer role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    version: 0,
     parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
@@ -91,6 +94,7 @@ function seed(
     description: 'Sales role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    version: 0,
     parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
@@ -334,13 +338,14 @@ describe('service · transfer 校验失败（前置校验，不产生写入）',
     roleRepo.delete(OLD_ROLE_ID);
     roleRepo.insert({
       id: OLD_ROLE_ID,
-      name: 'admin-builtin',
-      description: 'builtin',
-      permission_codes: ['user:read'],
-      is_builtin: true,
-      parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
-      created_at: SEED_TS,
-    });
+    name: 'admin-builtin',
+    description: 'builtin',
+    permission_codes: ['user:read'],
+    is_builtin: true,
+    version: 0,
+    parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
+    created_at: SEED_TS,
+  });
     const input = makeInput();
     await expect(transferService.transfer(input, adminCtx)).rejects.toMatchObject({
       code: 'ROLE_BUILTIN_FORBIDDEN',

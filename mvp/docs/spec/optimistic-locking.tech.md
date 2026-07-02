@@ -142,6 +142,7 @@ VERSION_CONFLICT: 409,
 - 新增 `notificationWriteIdProcedureInputSchema = notificationIdProcedureInputSchema.extend({ expected_version: z.number().int().min(0) })`（send/markRead/delete 共用）。
 - `updateUserStatusProcedureInputSchema` 追加 `expected_version`（updateStatus 仅写用，无需拆分）。
 - `setParentProcedureInputSchema` / `unsetParentProcedureInputSchema` 追加 `expected_version`。
+  - **[advisory] 偏离（实现期发现 + 反向同步）**：`setParentProcedureInputSchema` 不能用 `setParentInputSchema.extend({ expected_version })` 实现，因为 contracts 层 `setParentInputSchema` 含 `.superRefine()`（自继承拒绝）返回 `ZodEffects` 类型，Zod 的 `ZodEffects` 不支持 `.extend()`。改为**独立声明写 schema**：`z.object({ roleId, parentRoleId, expected_version }).strict().superRefine(自继承拒绝)`，复制自继承拒绝逻辑（与 contracts setParentInputSchema 同规则）。理由：Zod 库技术限制（ZodEffects 不可 extend），非设计选择；独立声明保证读写拆分语义不变（写含 expected_version + 自继承拒绝）。实现见 `apps/api/src/router/role.ts:59-73`（注释 L55-56 已文档化）。
 - `updateNotificationProcedureInputSchema` 追加 `expected_version`。
 
 ### D16 · procedure handler 传递 expected_version

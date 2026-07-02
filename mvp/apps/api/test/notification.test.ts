@@ -84,6 +84,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_VALID,
@@ -92,6 +93,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_DISABLED,
@@ -100,6 +102,7 @@ function setup(): {
     status: 'disabled',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_OTHER,
@@ -108,6 +111,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   const userService = new UserService(userRepo);
   const notificationRepo = new NotificationRepository();
@@ -125,6 +129,7 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
     status: 'draft',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
     sent_at: null,
     read_at: null,
     ...overrides,
@@ -404,7 +409,7 @@ describe('契约测 · 入参 safeParse', () => {
     });
     it('updateNotificationProcedureInputSchema: 合法样本通过', () => {
       expect(
-        updateNotificationProcedureInputSchema.safeParse({ id: U_VALID, body: { title: 'x' } }).success,
+        updateNotificationProcedureInputSchema.safeParse({ id: U_VALID, body: { title: 'x' }, expected_version: 0 }).success,
       ).toBe(true);
     });
   });
@@ -513,6 +518,7 @@ describe('service 单层测 · update', () => {
     const result = await notificationService.update(
       draft.id,
       { title: 'newT' },
+      0,
       adminCtx,
     );
     expect(result.entity.title).toBe('newT');
@@ -528,9 +534,9 @@ describe('service 单层测 · update', () => {
   it('sent 态 update → NOTIFICATION_INVALID_TRANSITION（仅 draft 可编辑，状态守卫）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     await expectAppError(
-      notificationService.update(draft.id, { title: 'x' }, adminCtx),
+      notificationService.update(draft.id, { title: 'x' }, 1, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -538,10 +544,10 @@ describe('service 单层测 · update', () => {
   it('read 态 update → NOTIFICATION_INVALID_TRANSITION（read 为终态，append-only）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
-    await notificationService.markRead(draft.id, recipientCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
+    await notificationService.markRead(draft.id, 1, recipientCtx);
     await expectAppError(
-      notificationService.update(draft.id, { title: 'x' }, adminCtx),
+      notificationService.update(draft.id, { title: 'x' }, 2, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -549,7 +555,7 @@ describe('service 单层测 · update', () => {
   it('不存在通知 update → NOTIFICATION_NOT_FOUND', async () => {
     const { notificationService } = setup();
     await expectAppError(
-      notificationService.update(U_MISSING, { title: 'x' }, adminCtx),
+      notificationService.update(U_MISSING, { title: 'x' }, 0, adminCtx),
       'NOTIFICATION_NOT_FOUND',
     );
   });
@@ -562,7 +568,7 @@ describe('service 单层测 · send', () => {
   it('draft + active 收件人 → status=sent / sent_at 非空 ISO / read_at 仍 null', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    const result = await notificationService.send(draft.id, adminCtx);
+    const result = await notificationService.send(draft.id, 0, adminCtx);
     expect(result.entity.status).toBe('sent');
     expect(result.entity.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(result.entity.read_at).toBeNull();
@@ -579,7 +585,7 @@ describe('service 单层测 · send', () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService, U_MISSING);
     await expectAppError(
-      notificationService.send(draft.id, adminCtx),
+      notificationService.send(draft.id, 0, adminCtx),
       'NOTIFICATION_RECIPIENT_NOT_FOUND',
     );
     // 主操作失败不改状态
@@ -591,7 +597,7 @@ describe('service 单层测 · send', () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService, U_DISABLED);
     await expectAppError(
-      notificationService.send(draft.id, adminCtx),
+      notificationService.send(draft.id, 0, adminCtx),
       'NOTIFICATION_RECIPIENT_DISABLED',
     );
     const detail = await notificationService.detail(draft.id, adminCtx);
@@ -601,9 +607,9 @@ describe('service 单层测 · send', () => {
   it('sent 态 send → NOTIFICATION_INVALID_TRANSITION（同态非法，仅 draft 可 send）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     await expectAppError(
-      notificationService.send(draft.id, adminCtx),
+      notificationService.send(draft.id, 1, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -611,7 +617,7 @@ describe('service 单层测 · send', () => {
   it('不存在通知 send → NOTIFICATION_NOT_FOUND', async () => {
     const { notificationService } = setup();
     await expectAppError(
-      notificationService.send(U_MISSING, adminCtx),
+      notificationService.send(U_MISSING, 0, adminCtx),
       'NOTIFICATION_NOT_FOUND',
     );
   });
@@ -624,9 +630,9 @@ describe('service 单层测 · markRead', () => {
   it('sent + 收件人 ctx → status=read / read_at 非空 ISO（收件人自服务，非 admin 通过）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     // 收件人自服务：recipientCtx.user.id === recipient_id（U_VALID），role='user' 非 admin
-    const result = await notificationService.markRead(draft.id, recipientCtx);
+    const result = await notificationService.markRead(draft.id, 1, recipientCtx);
     expect(result.entity.status).toBe('read');
     expect(result.entity.read_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // before=[status:sent, read_at:null] / after=[status:read, read_at:ISO]（sent_at 未变更不入快照）
@@ -640,7 +646,7 @@ describe('service 单层测 · markRead', () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
     await expectAppError(
-      notificationService.markRead(draft.id, recipientCtx),
+      notificationService.markRead(draft.id, 0, recipientCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -648,10 +654,10 @@ describe('service 单层测 · markRead', () => {
   it('read 态 markRead → NOTIFICATION_INVALID_TRANSITION（同态非法）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
-    await notificationService.markRead(draft.id, recipientCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
+    await notificationService.markRead(draft.id, 1, recipientCtx);
     await expectAppError(
-      notificationService.markRead(draft.id, recipientCtx),
+      notificationService.markRead(draft.id, 2, recipientCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -659,15 +665,15 @@ describe('service 单层测 · markRead', () => {
   it('非收件人 markRead → FORBIDDEN（不论是否 admin；admin 不可代收件人标记已读）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     // otherUserCtx.user.id === U_OTHER !== recipient_id(=U_VALID)
     await expectAppError(
-      notificationService.markRead(draft.id, otherUserCtx),
+      notificationService.markRead(draft.id, 1, otherUserCtx),
       'FORBIDDEN',
     );
     // admin 代标记亦拒绝（adminCtx.user.id === ADMIN_ID !== U_VALID）
     await expectAppError(
-      notificationService.markRead(draft.id, adminCtx),
+      notificationService.markRead(draft.id, 1, adminCtx),
       'FORBIDDEN',
     );
   });
@@ -675,7 +681,7 @@ describe('service 单层测 · markRead', () => {
   it('不存在通知 markRead → NOTIFICATION_NOT_FOUND（先于收件人校验）', async () => {
     const { notificationService } = setup();
     await expectAppError(
-      notificationService.markRead(U_MISSING, recipientCtx),
+      notificationService.markRead(U_MISSING, 0, recipientCtx),
       'NOTIFICATION_NOT_FOUND',
     );
   });
@@ -683,7 +689,7 @@ describe('service 单层测 · markRead', () => {
   it('校验顺序：不存在通知 + 非收件人同时命中 → 先 NOTIFICATION_NOT_FOUND（B5 优先 B4）', async () => {
     const { notificationService } = setup();
     await expectAppError(
-      notificationService.markRead(U_MISSING, otherUserCtx),
+      notificationService.markRead(U_MISSING, 0, otherUserCtx),
       'NOTIFICATION_NOT_FOUND',
     );
   });
@@ -696,7 +702,7 @@ describe('service 单层测 · delete', () => {
   it('draft 态 delete → entity=undefined / changes=[] / before 含草稿字段', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    const result = await notificationService.delete(draft.id, adminCtx);
+    const result = await notificationService.delete(draft.id, 0, adminCtx);
     expect(result.entity).toBeUndefined();
     expect(result.changes).toEqual([]);
     // before 含 title/content/recipient_id/status:draft
@@ -709,9 +715,9 @@ describe('service 单层测 · delete', () => {
   it('sent 态 delete → NOTIFICATION_INVALID_TRANSITION（append-only，sent 后不可删）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     await expectAppError(
-      notificationService.delete(draft.id, adminCtx),
+      notificationService.delete(draft.id, 1, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -719,10 +725,10 @@ describe('service 单层测 · delete', () => {
   it('read 态 delete → NOTIFICATION_INVALID_TRANSITION（read 为终态，append-only）', async () => {
     const { notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
-    await notificationService.markRead(draft.id, recipientCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
+    await notificationService.markRead(draft.id, 1, recipientCtx);
     await expectAppError(
-      notificationService.delete(draft.id, adminCtx),
+      notificationService.delete(draft.id, 2, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
   });
@@ -730,7 +736,7 @@ describe('service 单层测 · delete', () => {
   it('不存在通知 delete → NOTIFICATION_NOT_FOUND', async () => {
     const { notificationService } = setup();
     await expectAppError(
-      notificationService.delete(U_MISSING, adminCtx),
+      notificationService.delete(U_MISSING, 0, adminCtx),
       'NOTIFICATION_NOT_FOUND',
     );
   });
@@ -769,7 +775,7 @@ describe('service 单层测 · list / detail', () => {
     const { notificationService } = setup();
     const d1 = await createDraft(notificationService);
     const d2 = await createDraft(notificationService);
-    await notificationService.send(d1.id, adminCtx); // d1 → sent
+    await notificationService.send(d1.id, 0, adminCtx); // d1 → sent
     // d2 仍 draft
     const sentOnly = await notificationService.list(
       { page: 1, pageSize: 10, status: 'sent' },
@@ -825,37 +831,37 @@ describe('权限 · SEC-002', () => {
   it('非 admin 调 update → FORBIDDEN', async () => {
     const { router } = setup();
     await expectAppError(
-      callProc(router.update, { id: U_VALID, body: { title: 'x' } }, otherUserCtx),
+      callProc(router.update, { id: U_VALID, body: { title: 'x' }, expected_version: 0 }, otherUserCtx),
       'FORBIDDEN',
     );
   });
 
   it('非 admin 调 send → FORBIDDEN', async () => {
     const { router } = setup();
-    await expectAppError(callProc(router.send, { id: U_VALID }, otherUserCtx), 'FORBIDDEN');
+    await expectAppError(callProc(router.send, { id: U_VALID, expected_version: 0 }, otherUserCtx), 'FORBIDDEN');
   });
 
   it('非 admin 调 delete → FORBIDDEN', async () => {
     const { router } = setup();
-    await expectAppError(callProc(router.delete, { id: U_VALID }, otherUserCtx), 'FORBIDDEN');
+    await expectAppError(callProc(router.delete, { id: U_VALID, expected_version: 0 }, otherUserCtx), 'FORBIDDEN');
   });
 
   it('markRead 非收件人（含 admin 代标记）→ FORBIDDEN（自服务守卫，非 admin 守卫）', async () => {
     const { router, notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     // 非收件人 user
-    await expectAppError(callProc(router.markRead, { id: draft.id }, otherUserCtx), 'FORBIDDEN');
+    await expectAppError(callProc(router.markRead, { id: draft.id, expected_version: 1 }, otherUserCtx), 'FORBIDDEN');
     // admin 代标记亦拒绝
-    await expectAppError(callProc(router.markRead, { id: draft.id }, adminCtx), 'FORBIDDEN');
+    await expectAppError(callProc(router.markRead, { id: draft.id, expected_version: 1 }, adminCtx), 'FORBIDDEN');
   });
 
   it('markRead 收件人（非 admin）→ 成功（自服务，不走 requireAdmin/permission 码）', async () => {
     const { router, notificationService } = setup();
     const draft = await createDraft(notificationService);
-    await notificationService.send(draft.id, adminCtx);
+    await notificationService.send(draft.id, 0, adminCtx);
     // recipientCtx.user.id === U_VALID === recipient_id，role='user' 非 admin
-    const result = await callProc(router.markRead, { id: draft.id }, recipientCtx);
+    const result = await callProc(router.markRead, { id: draft.id, expected_version: 1 }, recipientCtx);
     expect(result.status).toBe('read');
     expect(result.read_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });

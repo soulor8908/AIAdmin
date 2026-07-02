@@ -31,7 +31,7 @@ export type NotificationProcedure<I, O> = Procedure<I, O> & {
 };
 
 /**
- * detail / send / markRead / delete procedure 入参 = path id (uuid)。
+ * detail procedure 入参 = path id (uuid)（读操作，无 expected_version）。
  * 单独导出以便契约测直接对该 schema 跑 safeParse。
  */
 export const notificationIdProcedureInputSchema = z.object({
@@ -39,12 +39,24 @@ export const notificationIdProcedureInputSchema = z.object({
 });
 
 /**
- * update procedure 入参 = path id (uuid) + body updateNotificationInputSchema。
+ * send / markRead / delete procedure 入参 = path id (uuid) + expected_version（写操作，If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4/D15：写操作须拆分读写 schema，写含 expected_version。
+ * 单独导出以便契约测直接对该 schema 跑 safeParse。
+ */
+export const notificationWriteIdProcedureInputSchema = z.object({
+  id: z.string().uuid(),
+  expected_version: z.number().int().min(0),
+});
+
+/**
+ * update procedure 入参 = path id (uuid) + body updateNotificationInputSchema + expected_version（If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4：写操作含 expected_version。
  * 单独导出以便契约测直接对该 schema 跑 safeParse。
  */
 export const updateNotificationProcedureInputSchema = z.object({
   id: z.string().uuid(),
   body: updateNotificationInputSchema,
+  expected_version: z.number().int().min(0),
 });
 
 export type NotificationRouter = {
@@ -52,9 +64,9 @@ export type NotificationRouter = {
   detail: NotificationProcedure<z.infer<typeof notificationIdProcedureInputSchema>, Notification>;
   create: NotificationProcedure<z.infer<typeof createNotificationInputSchema>, Notification>;
   update: NotificationProcedure<z.infer<typeof updateNotificationProcedureInputSchema>, Notification>;
-  send: NotificationProcedure<z.infer<typeof notificationIdProcedureInputSchema>, Notification>;
-  markRead: NotificationProcedure<z.infer<typeof notificationIdProcedureInputSchema>, Notification>;
-  delete: NotificationProcedure<z.infer<typeof notificationIdProcedureInputSchema>, void>;
+  send: NotificationProcedure<z.infer<typeof notificationWriteIdProcedureInputSchema>, Notification>;
+  markRead: NotificationProcedure<z.infer<typeof notificationWriteIdProcedureInputSchema>, Notification>;
+  delete: NotificationProcedure<z.infer<typeof notificationWriteIdProcedureInputSchema>, void>;
 };
 
 /**
@@ -94,7 +106,7 @@ export function createNotificationRouter(
     update: {
       input: updateNotificationProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.update(input.id, input.body, ctx),
+        (input, ctx) => service.update(input.id, input.body, input.expected_version, ctx),
         audit,
         { entityType: 'notification', action: 'update' },
       ),
@@ -102,9 +114,9 @@ export function createNotificationRouter(
       permission: 'notification:write',
     },
     send: {
-      input: notificationIdProcedureInputSchema,
+      input: notificationWriteIdProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.send(input.id, ctx),
+        (input, ctx) => service.send(input.id, input.expected_version, ctx),
         audit,
         { entityType: 'notification', action: 'update' },
       ),
@@ -113,18 +125,18 @@ export function createNotificationRouter(
     },
     // public: markRead 为收件人自服务（PRD Q4b），不走 requireAdmin/permission 码，校验由 service 层 ctx.user.id === recipient_id 守卫
     markRead: {
-      input: notificationIdProcedureInputSchema,
+      input: notificationWriteIdProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.markRead(input.id, ctx),
+        (input, ctx) => service.markRead(input.id, input.expected_version, ctx),
         audit,
         { entityType: 'notification', action: 'update' },
       ),
       auth: 'public',
     },
     delete: {
-      input: notificationIdProcedureInputSchema,
+      input: notificationWriteIdProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.delete(input.id, ctx),
+        (input, ctx) => service.delete(input.id, input.expected_version, ctx),
         audit,
         {
           entityType: 'notification',

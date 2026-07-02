@@ -1,7 +1,6 @@
 // apps/api/src/domain/version.ts —— 乐观锁版本校验纯函数（TECH-OPTIMISTIC-LOCKING-001 D5）
 // ARCH-001：domain 不得 import 上层（service/repository/router），仅可 import @admin/contracts。
-// 与 validateSetParent / transitionStatus 同模式（domain 持纯函数，service 调用转抛 AppError）。
-import type { ErrorCode } from '@admin/contracts';
+// 与 validateSetParent / transitionStatus 同模式（domain 持纯函数，service 调用转抛 AppError）
 
 /**
  * 版本校验结果：匹配返回 ok，不匹配返回 VERSION_CONFLICT。
@@ -23,7 +22,7 @@ export function validateVersion(
   actual: number,
 ): VersionCheckResult {
   if (expected !== actual) {
-    return { ok: false, errorCode: 'VERSION_CONFLICT' as ErrorCode };
+    return { ok: false, errorCode: 'VERSION_CONFLICT' };
   }
   return { ok: true };
 }

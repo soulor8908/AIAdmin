@@ -56,6 +56,7 @@ function makeRole(i: number, overrides: Partial<Role> = {}): Role {
     is_builtin: false,
     parent_role_id: null, // ②类同步：roleSchema 追加字段
     created_at: SEED_TS,
+    version: 0, // TECH-OPTIMISTIC-LOCKING-001 D1：初始 version=0
     ...overrides,
   };
 }
@@ -75,6 +76,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   const service = new RoleService(repo, userRepo);
   const router = createRoleRouter(service);
@@ -144,10 +146,10 @@ describe('domain · detectCycle 纯函数（祖先遍历）', () => {
     return (id: string) => roles[id];
   }
   it('无环（直线链 A←B←C，设 C.parent=D 不成环）', () => {
-    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS };
-    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS };
-    const C: RoleEntity = { id: 'C', name: 'c', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'B', created_at: SEED_TS };
-    const D: RoleEntity = { id: 'D', name: 'd', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS };
+    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS, version: 0 };
+    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS, version: 0 };
+    const C: RoleEntity = { id: 'C', name: 'c', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'B', created_at: SEED_TS, version: 0 };
+    const D: RoleEntity = { id: 'D', name: 'd', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS, version: 0 };
     const findById = makeFindById({ A, B, C, D });
     // 设 C.parent=D：从 D 向上遍历，D.parent=null → 无环
     const result = detectCycle('C', 'D', findById);
@@ -156,8 +158,8 @@ describe('domain · detectCycle 纯函数（祖先遍历）', () => {
   });
   it('两节点环 A←B，设 A.parent=B → hasCycle=true（AC-F1-6）', () => {
     // 已有 B.parent=A，设 A.parent=B → detectCycle(A, B)：B.id!==A, B.parent=A, A.id===A → 环
-    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS };
-    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS };
+    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS, version: 0 };
+    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS, version: 0 };
     const findById = makeFindById({ A, B });
     const result = detectCycle('A', 'B', findById);
     expect(result.hasCycle).toBe(true);
@@ -167,9 +169,9 @@ describe('domain · detectCycle 纯函数（祖先遍历）', () => {
   });
   it('三节点环 A←B←C，设 A.parent=C → hasCycle=true（AC-F1-7）', () => {
     // 已有 C.parent=B + B.parent=A，设 A.parent=C → detectCycle(A, C)：C.id!==A, C.parent=B, B.id!==A, B.parent=A, A.id===A → 环
-    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS };
-    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS };
-    const C: RoleEntity = { id: 'C', name: 'c', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'B', created_at: SEED_TS };
+    const A: RoleEntity = { id: 'A', name: 'a', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: null, created_at: SEED_TS, version: 0 };
+    const B: RoleEntity = { id: 'B', name: 'b', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'A', created_at: SEED_TS, version: 0 };
+    const C: RoleEntity = { id: 'C', name: 'c', description: 'd', permission_codes: [], is_builtin: false, parent_role_id: 'B', created_at: SEED_TS, version: 0 };
     const findById = makeFindById({ A, B, C });
     const result = detectCycle('A', 'C', findById);
     expect(result.hasCycle).toBe(true);
@@ -237,7 +239,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const B = makeRole(2, { permission_codes: ['user:read'] });
     repo.insert(A);
     repo.insert(B);
-    const result = await service.setParent(B.id, A.id, adminCtx);
+    const result = await service.setParent(B.id, A.id, 0, adminCtx);
     expect(repo.findById(B.id)?.parent_role_id).toBe(A.id);
     expect(result.entity.parent_role_id).toBe(A.id);
     // before/after 含 parent_role_id 虚拟字段
@@ -249,7 +251,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const { repo, service } = setup();
     const B = makeRole(2);
     repo.insert(B);
-    await expect(service.setParent(B.id, MISSING_ID, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
+    await expect(service.setParent(B.id, MISSING_ID, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
     expect(repo.findById(B.id)?.parent_role_id).toBeNull();
   });
 
@@ -257,7 +259,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const { repo, service } = setup();
     const B = makeRole(2);
     repo.insert(B);
-    await expect(service.setParent(B.id, B.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_SELF_INHERITANCE' });
+    await expect(service.setParent(B.id, B.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_SELF_INHERITANCE' });
     expect(repo.findById(B.id)?.parent_role_id).toBeNull();
   });
 
@@ -266,7 +268,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const adminId = builtinAdminId(repo);
     const B = makeRole(2);
     repo.insert(B);
-    await expect(service.setParent(B.id, adminId, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_PARENT_FORBIDDEN' });
+    await expect(service.setParent(B.id, adminId, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_PARENT_FORBIDDEN' });
     expect(repo.findById(B.id)?.parent_role_id).toBeNull();
   });
 
@@ -277,9 +279,9 @@ describe('F1 · setParent 校验顺序与边界', () => {
     repo.insert(A);
     repo.insert(B);
     // 先建立 B.parent=A
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 再设 A.parent=B → 环
-    await expect(service.setParent(A.id, B.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
+    await expect(service.setParent(A.id, B.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
     expect(repo.findById(A.id)?.parent_role_id).toBeNull();
   });
 
@@ -291,10 +293,10 @@ describe('F1 · setParent 校验顺序与边界', () => {
     repo.insert(A);
     repo.insert(B);
     repo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx); // B.parent=A
-    await service.setParent(C.id, B.id, adminCtx); // C.parent=B
+    await service.setParent(B.id, A.id, 0, adminCtx); // B.parent=A
+    await service.setParent(C.id, B.id, 0, adminCtx); // C.parent=B
     // 设 A.parent=C → 环 A→C→B→A
-    await expect(service.setParent(A.id, C.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
+    await expect(service.setParent(A.id, C.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
     expect(repo.findById(A.id)?.parent_role_id).toBeNull();
   });
 
@@ -303,7 +305,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const adminId = builtinAdminId(repo);
     const B = makeRole(2);
     repo.insert(B);
-    await expect(service.setParent(adminId, B.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
+    await expect(service.setParent(adminId, B.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
   });
 
   it('AC-F1-9 重新设置继承（覆盖）→ B.parent 从 A 改为 C', async () => {
@@ -314,9 +316,9 @@ describe('F1 · setParent 校验顺序与边界', () => {
     repo.insert(A);
     repo.insert(B);
     repo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 覆盖：B.parent=A → B.parent=C
-    const result = await service.setParent(B.id, C.id, adminCtx);
+    const result = await service.setParent(B.id, C.id, 1, adminCtx);
     expect(repo.findById(B.id)?.parent_role_id).toBe(C.id);
     expect(result.before?.find((f) => f.field === 'parent_role_id')?.value).toBe(A.id);
     expect(result.changes.find((f) => f.field === 'parent_role_id')?.value).toBe(C.id);
@@ -326,7 +328,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const { repo, service } = setup();
     const A = makeRole(1);
     repo.insert(A);
-    await expect(service.setParent(MISSING_ID, A.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
+    await expect(service.setParent(MISSING_ID, A.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
   });
 
   it('非 admin 调用 → FORBIDDEN', async () => {
@@ -335,7 +337,7 @@ describe('F1 · setParent 校验顺序与边界', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await expect(service.setParent(B.id, A.id, userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(service.setParent(B.id, A.id, 0, userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
@@ -349,8 +351,8 @@ describe('F1 · unsetParent', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
-    const result = await service.unsetParent(B.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
+    const result = await service.unsetParent(B.id, 1, adminCtx);
     expect(repo.findById(B.id)?.parent_role_id).toBeNull();
     expect(result.before?.find((f) => f.field === 'parent_role_id')?.value).toBe(A.id);
     expect(result.changes.find((f) => f.field === 'parent_role_id')?.value).toBeNull();
@@ -358,20 +360,20 @@ describe('F1 · unsetParent', () => {
 
   it('unsetParent 角色不存在 → ROLE_NOT_FOUND', async () => {
     const { service } = setup();
-    await expect(service.unsetParent(MISSING_ID, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
+    await expect(service.unsetParent(MISSING_ID, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
   });
 
   it('unsetParent 内置 admin → ROLE_BUILTIN_FORBIDDEN', async () => {
     const { repo, service } = setup();
     const adminId = builtinAdminId(repo);
-    await expect(service.unsetParent(adminId, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
+    await expect(service.unsetParent(adminId, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
   });
 
   it('非 admin 调用 → FORBIDDEN', async () => {
     const { repo, service } = setup();
     const B = makeRole(2);
     repo.insert(B);
-    await expect(service.unsetParent(B.id, userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(service.unsetParent(B.id, 0, userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
@@ -385,7 +387,7 @@ describe('F2 · getInheritanceChain', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const chain = await service.getInheritanceChain(B.id, adminCtx);
     expect(chain).toHaveLength(1);
     expect(chain[0]?.id).toBe(A.id);
@@ -399,8 +401,8 @@ describe('F2 · getInheritanceChain', () => {
     repo.insert(A);
     repo.insert(B);
     repo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
-    await service.setParent(C.id, B.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
+    await service.setParent(C.id, B.id, 0, adminCtx);
     const chain = await service.getInheritanceChain(C.id, adminCtx);
     expect(chain).toHaveLength(2);
     expect(chain[0]?.id).toBe(B.id);
@@ -437,7 +439,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     const A = makeRole(1, { permission_codes: ['role:read', 'user:read'] });
     repo.insert(A);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({
       id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS,
@@ -452,9 +454,9 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     const B = makeRole(2, { permission_codes: ['role:write'] });
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: B.id, assigned_at: SEED_TS });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
@@ -469,10 +471,10 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(A);
     repo.insert(B);
     repo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
-    await service.setParent(C.id, B.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
+    await service.setParent(C.id, B.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: C.id, assigned_at: SEED_TS });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
@@ -487,9 +489,9 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(A);
     repo.insert(D);
     repo.insert(E);
-    await service.setParent(D.id, E.id, adminCtx);
+    await service.setParent(D.id, E.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS });
     repo.insertUserRole({ id: 'ur2', user_id: 'u2', role_id: D.id, assigned_at: SEED_TS });
@@ -504,14 +506,14 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(A);
     repo.insert(B);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: B.id, assigned_at: SEED_TS });
     // 变更前：B 无父角色，有效权限=[role:write]
     const before = await service.getEffectivePermissions('u2', adminCtx);
     expect(before.sort()).toEqual(['role:write']);
     // 设置 B.parent=A
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 变更后：B ∪ A = [role:write, role:read]
     const after = await service.getEffectivePermissions('u2', adminCtx);
     expect(after.sort()).toEqual(['role:read', 'role:write']);
@@ -525,7 +527,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
   it('AC-F3-7 用户无角色 → 返回空数组', async () => {
     const { userRepo, service } = setup();
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
     expect(perms).toEqual([]);
@@ -534,7 +536,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
   it('非 admin 调用 → FORBIDDEN', async () => {
     const { userRepo, service } = setup();
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     await expect(service.getEffectivePermissions('u2', userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -550,9 +552,9 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // A 有子角色 B
-    await expect(service.delete(A.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
+    await expect(service.delete(A.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
     expect(repo.findById(A.id)).toBeDefined();
   });
 
@@ -560,7 +562,7 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     const { repo, service } = setup();
     const A = makeRole(1);
     repo.insert(A);
-    await service.delete(A.id, adminCtx);
+    await service.delete(A.id, 0, adminCtx);
     expect(repo.findById(A.id)).toBeUndefined();
   });
 
@@ -570,11 +572,11 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 解除 B 的继承
-    await service.unsetParent(B.id, adminCtx);
+    await service.unsetParent(B.id, 1, adminCtx);
     // 现在删除 A 应成功
-    await service.delete(A.id, adminCtx);
+    await service.delete(A.id, 0, adminCtx);
     expect(repo.findById(A.id)).toBeUndefined();
   });
 
@@ -587,7 +589,7 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     // 直接 repo 层设置 B.parent=adminId 绕过 service 校验（模拟数据已存在）
     const adminRole = repo.findById(adminId)!;
     // delete admin 应先触发 B6 ROLE_BUILTIN_FORBIDDEN（而非 B8 ROLE_HAS_CHILDREN）
-    await expect(service.delete(adminId, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
+    await expect(service.delete(adminId, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
   });
 
   it('守卫顺序 B8 先于 B7：有子角色且已分配 → ROLE_HAS_CHILDREN（非 ROLE_IN_USE）', async () => {
@@ -596,13 +598,13 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 给 A 分配用户（触发 B7 条件），但 B8 应先拦截
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS });
-    await expect(service.delete(A.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
+    await expect(service.delete(A.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
   });
 });
 
@@ -661,7 +663,7 @@ describe('②类签名变更回归 · roleSchema 含 parent_role_id', () => {
     const B = makeRole(2);
     repo.insert(A);
     repo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const updated = repo.findById(B.id)!;
     expect(() => roleSchema.parse(updated)).not.toThrow();
     expect(updated.parent_role_id).toBe(A.id);

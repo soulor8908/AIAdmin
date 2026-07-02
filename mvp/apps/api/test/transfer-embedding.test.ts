@@ -162,6 +162,7 @@ function seedSharedData(
     name: 'admin',
     email: 'admin@example.com',
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -171,6 +172,7 @@ function seedSharedData(
     name: 'alice',
     email: 'alice@example.com',
     status: 'active',
+    version: 0,
     department_id: FROM_DEPT_ID,
     created_at: SEED_TS,
     updated_at: SEED_TS,
@@ -185,6 +187,7 @@ function seedSharedData(
     description: 'Engineer role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    version: 0,
     parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });
@@ -194,6 +197,7 @@ function seedSharedData(
     description: 'Sales role',
     permission_codes: ['user:read'],
     is_builtin: false,
+    version: 0,
     parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）
     created_at: SEED_TS,
   });

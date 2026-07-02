@@ -7,7 +7,6 @@ import {
   assignRoleInputSchema,
   createRoleInputSchema,
   listRoleQuerySchema,
-  setParentInputSchema,
   unsetParentInputSchema,
   inheritanceChainInputSchema,
   effectivePermissionsInputSchema,
@@ -25,11 +24,21 @@ import { withAudit } from './audit.js';
 export type { Procedure };
 
 /**
- * detail / delete procedure 入参 = path id (uuid)。
+ * detail procedure 入参 = path id (uuid)（读操作，无 expected_version）。
  * 单独导出以便契约测直接对该 schema 跑 safeParse。
  */
 export const roleDetailProcedureInputSchema = z.object({
   id: z.string().uuid(),
+});
+
+/**
+ * delete procedure 入参 = path id (uuid) + expected_version（写操作，If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4/D15：delete 为写操作须拆分读写 schema，delete 含 expected_version。
+ * 单独导出以便契约测直接对该 schema 跑 safeParse。
+ */
+export const roleDeleteProcedureInputSchema = z.object({
+  id: z.string().uuid(),
+  expected_version: z.number().int().min(0),
 });
 
 /**
@@ -41,17 +50,35 @@ export const listUserRolesProcedureInputSchema = z.object({
 });
 
 /**
- * setParent procedure 入参 = path roleId + body { parentRoleId }。
- * 复用 contracts 的 setParentInputSchema（含 superRefine 自继承拒绝 + .strict）。
+ * setParent procedure 入参 = path roleId + body { parentRoleId } + expected_version（If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4/D15：写操作须拆分读写 schema，写含 expected_version。
+ * [约束] contracts setParentInputSchema 为 ZodEffects（.superRefine），不可 .extend()；按 D15 独立声明写 schema。
+ * [约束] superRefine 拒绝自继承（与 contracts setParentInputSchema 同规则，读写拆分后各自独立声明）。
  * 单独导出以便契约测直接对该 schema 跑 safeParse。
  */
-export const setParentProcedureInputSchema = setParentInputSchema;
+export const setParentProcedureInputSchema = z
+  .object({
+    roleId: z.string().uuid(),
+    parentRoleId: z.string().uuid(),
+    expected_version: z.number().int().min(0),
+  })
+  .strict()
+  .superRefine((val, ctx) => {
+    if (val.roleId === val.parentRoleId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'parentRoleId 不能等于 roleId（自继承禁止）',
+      });
+    }
+  });
 
 /**
- * unsetParent procedure 入参 = path roleId。
- * 复用 contracts 的 unsetParentInputSchema。
+ * unsetParent procedure 入参 = path roleId + expected_version（If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4：在 contracts unsetParentInputSchema 基础上 extend expected_version。
  */
-export const unsetParentProcedureInputSchema = unsetParentInputSchema;
+export const unsetParentProcedureInputSchema = unsetParentInputSchema.extend({
+  expected_version: z.number().int().min(0),
+});
 
 /**
  * getInheritanceChain procedure 入参 = path roleId。
@@ -69,7 +96,7 @@ export type RoleRouter = {
   list: Procedure<z.infer<typeof listRoleQuerySchema>, RoleListResult>;
   create: Procedure<z.infer<typeof createRoleInputSchema>, Role>;
   detail: Procedure<z.infer<typeof roleDetailProcedureInputSchema>, Role>;
-  delete: Procedure<z.infer<typeof roleDetailProcedureInputSchema>, void>;
+  delete: Procedure<z.infer<typeof roleDeleteProcedureInputSchema>, void>;
   assign: Procedure<z.infer<typeof assignRoleInputSchema>, UserRole>;
   listUserRoles: Procedure<z.infer<typeof listUserRolesProcedureInputSchema>, UserRole[]>;
   remove: Procedure<z.infer<typeof assignRoleInputSchema>, void>;
@@ -108,9 +135,9 @@ export function createRoleRouter(service: RoleService, auditService?: AuditLogSe
       auth: 'admin',
     },
     delete: {
-      input: roleDetailProcedureInputSchema,
+      input: roleDeleteProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.delete(input.id, ctx),
+        (input, ctx) => service.delete(input.id, input.expected_version, ctx),
         audit,
         { entityType: 'role', action: 'delete', entityIdFromInput: (input) => (input as { id: string }).id },
       ),
@@ -144,7 +171,7 @@ export function createRoleRouter(service: RoleService, auditService?: AuditLogSe
     setParent: {
       input: setParentProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.setParent(input.roleId, input.parentRoleId, ctx),
+        (input, ctx) => service.setParent(input.roleId, input.parentRoleId, input.expected_version, ctx),
         audit,
         { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
       ),
@@ -153,7 +180,7 @@ export function createRoleRouter(service: RoleService, auditService?: AuditLogSe
     unsetParent: {
       input: unsetParentProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.unsetParent(input.roleId, ctx),
+        (input, ctx) => service.unsetParent(input.roleId, input.expected_version, ctx),
         audit,
         { entityType: 'role', action: 'update', entityIdFromInput: (input) => (input as { roleId: string }).roleId },
       ),

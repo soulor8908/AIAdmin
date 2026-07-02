@@ -27,12 +27,14 @@ export type Procedure<I, O> = {
 };
 
 /**
- * updateStatus procedure 入参 = path id (uuid) + body updateUserStatusInputSchema。
+ * updateStatus procedure 入参 = path id (uuid) + body updateUserStatusInputSchema + expected_version（If-Match header 注入）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D4：expected_version 必填，server.ts 从 If-Match header 解析注入。
  * 单独导出以便契约测直接对该 schema 跑 safeParse。
  */
 export const updateUserStatusProcedureInputSchema = z.object({
   id: z.string().uuid(),
   body: updateUserStatusInputSchema,
+  expected_version: z.number().int().min(0),
 });
 
 export type UserRouter = {
@@ -66,7 +68,7 @@ export function createUserRouter(service: UserService, auditService?: AuditLogSe
     updateStatus: {
       input: updateUserStatusProcedureInputSchema,
       handler: withAudit(
-        (input, ctx) => service.updateStatus(input.id, input.body.status, ctx),
+        (input, ctx) => service.updateStatus(input.id, input.body.status, input.expected_version, ctx),
         audit,
         { entityType: 'user', action: 'update' },
       ),

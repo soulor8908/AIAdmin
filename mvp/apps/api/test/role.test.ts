@@ -60,6 +60,7 @@ function setup(): {
     name: 'admin',
     email: 'admin@example.com',
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -75,6 +76,7 @@ function makeRole(i: number, overrides: Partial<Role> = {}): Role {
     description: `desc${i}`,
     permission_codes: ['user:read'],
     is_builtin: false,
+    version: 0,
     parent_role_id: null, // ②类同步（TECH-ROLE-INHERITANCE-001 §8.2）：roleSchema 追加 parent_role_id 字段
     created_at: SEED_TS,
     ...overrides,
@@ -232,7 +234,7 @@ describe('单测 · service 裁决', () => {
 
   it('delete 守卫序列 B5→B6→B7：不存在角色 → ROLE_NOT_FOUND（先于 B6/B7）', async () => {
     const { service } = setup();
-    await expectAppError(service.delete(MISSING_ID, adminCtx), 'ROLE_NOT_FOUND');
+    await expectAppError(service.delete(MISSING_ID, 0, adminCtx), 'ROLE_NOT_FOUND');
   });
 
   it('assign 守卫序列 B8→B9→B10：用户不存在 → USER_NOT_FOUND（先于 B9）', async () => {
@@ -536,13 +538,13 @@ describe('边界 · F3 删除角色', () => {
       { name: 'toDelete', description: 'd', permission_codes: [] },
       adminCtx,
     );
-    await expect(callProc(router.delete, { id: created.id }, adminCtx)).resolves.toBeUndefined();
+    await expect(callProc(router.delete, { id: created.id, expected_version: 0 }, adminCtx)).resolves.toBeUndefined();
   });
 
   it('F3: 删除内置 admin（未被分配）→ ROLE_BUILTIN_FORBIDDEN', async () => {
     const { repo, router } = setup();
     const adminId = builtinAdminId(repo);
-    await expectAppError(callProc(router.delete, { id: adminId }, adminCtx), 'ROLE_BUILTIN_FORBIDDEN');
+    await expectAppError(callProc(router.delete, { id: adminId, expected_version: 0 }, adminCtx), 'ROLE_BUILTIN_FORBIDDEN');
   });
 
   it('F3: 删除已被分配的非内置角色 → ROLE_IN_USE', async () => {
@@ -553,12 +555,12 @@ describe('边界 · F3 删除角色', () => {
       adminCtx,
     );
     repo.insertUserRole(makeUserRole(70, { user_id: ADMIN_ID, role_id: created.id }));
-    await expectAppError(callProc(router.delete, { id: created.id }, adminCtx), 'ROLE_IN_USE');
+    await expectAppError(callProc(router.delete, { id: created.id, expected_version: 0 }, adminCtx), 'ROLE_IN_USE');
   });
 
   it('F3: 删除不存在 → ROLE_NOT_FOUND', async () => {
     const { router } = setup();
-    await expectAppError(callProc(router.delete, { id: MISSING_ID }, adminCtx), 'ROLE_NOT_FOUND');
+    await expectAppError(callProc(router.delete, { id: MISSING_ID, expected_version: 0 }, adminCtx), 'ROLE_NOT_FOUND');
   });
 
   it('F3: 解除全部分配后删除 → 204', async () => {
@@ -570,7 +572,7 @@ describe('边界 · F3 删除角色', () => {
     );
     repo.insertUserRole(makeUserRole(71, { user_id: ADMIN_ID, role_id: created.id }));
     await callProc(router.remove, { userId: ADMIN_ID, roleId: created.id }, adminCtx);
-    await expect(callProc(router.delete, { id: created.id }, adminCtx)).resolves.toBeUndefined();
+    await expect(callProc(router.delete, { id: created.id, expected_version: 0 }, adminCtx)).resolves.toBeUndefined();
   });
 });
 
@@ -680,7 +682,7 @@ describe('权限 · SEC-002 非 admin 各 procedure → FORBIDDEN', () => {
 
   it('非 admin 调 delete → FORBIDDEN', async () => {
     const { router } = setup();
-    await expectAppError(callProc(router.delete, { id: ADMIN_ID }, userCtx), 'FORBIDDEN');
+    await expectAppError(callProc(router.delete, { id: ADMIN_ID, expected_version: 0 }, userCtx), 'FORBIDDEN');
   });
 
   it('非 admin 调 assign → FORBIDDEN', async () => {
@@ -723,14 +725,14 @@ describe('权限 · SEC-002 非 admin 各 procedure → FORBIDDEN', () => {
 describe('状态机 · 守卫序列顺序', () => {
   it('delete: 不存在 + 内置同时命中 → 先 ROLE_NOT_FOUND（B5 优先 B6）', async () => {
     const { service } = setup();
-    await expectAppError(service.delete(MISSING_ID, adminCtx), 'ROLE_NOT_FOUND');
+    await expectAppError(service.delete(MISSING_ID, 0, adminCtx), 'ROLE_NOT_FOUND');
   });
 
   it('delete: 内置 + 已分配同时命中 → 先 ROLE_BUILTIN_FORBIDDEN（B6 优先 B7）', async () => {
     const { repo, service } = setup();
     const adminId = builtinAdminId(repo);
     repo.insertUserRole(makeUserRole(50, { user_id: ADMIN_ID, role_id: adminId }));
-    await expectAppError(service.delete(adminId, adminCtx), 'ROLE_BUILTIN_FORBIDDEN');
+    await expectAppError(service.delete(adminId, 0, adminCtx), 'ROLE_BUILTIN_FORBIDDEN');
   });
 
   it('assign: 用户不存在 + 角色不存在同时命中 → 先 USER_NOT_FOUND（B8 优先 B9）', async () => {
@@ -750,10 +752,10 @@ describe('状态机 · 守卫序列顺序', () => {
     );
     repo.insertUserRole(makeUserRole(60, { user_id: ADMIN_ID, role_id: created.id }));
     // 删除被拒（B7）
-    await expectAppError(callProc(router.delete, { id: created.id }, adminCtx), 'ROLE_IN_USE');
+    await expectAppError(callProc(router.delete, { id: created.id, expected_version: 0 }, adminCtx), 'ROLE_IN_USE');
     // 解除分配
     await callProc(router.remove, { userId: ADMIN_ID, roleId: created.id }, adminCtx);
     // 再次删除 → 204
-    await expect(callProc(router.delete, { id: created.id }, adminCtx)).resolves.toBeUndefined();
+    await expect(callProc(router.delete, { id: created.id, expected_version: 0 }, adminCtx)).resolves.toBeUndefined();
   });
 });

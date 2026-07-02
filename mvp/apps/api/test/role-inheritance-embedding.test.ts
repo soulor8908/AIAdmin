@@ -97,6 +97,7 @@ function makeRole(
     is_builtin: false,
     parent_role_id: null,
     created_at: SEED_TS,
+    version: 0,
     ...overrides,
   };
 }
@@ -128,6 +129,7 @@ function setupShared(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   const service = new RoleService(roleRepo, userRepo);
   const router = createRoleRouter(service, auditService);
@@ -152,7 +154,7 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
     // WHEN 设置 B.parent=A（经 router.setParent 触发 withAudit 旁路记审计日志）
-    const result = await callProc(router.setParent, { roleId: ROLE_B_ID, parentRoleId: ROLE_A_ID }, adminCtx);
+    const result = await callProc(router.setParent, { roleId: ROLE_B_ID, parentRoleId: ROLE_A_ID, expected_version: 0 }, adminCtx);
     // THEN ① roleRepo 中 B.parent_role_id === A
     expect(roleRepo.findById(B.id)?.parent_role_id).toBe(A.id);
     // THEN ② 审计日志新增 1 条 entity_type=role/action=update
@@ -171,10 +173,10 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(A);
     roleRepo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const beforeTotal = auditRepo.listAll().length;
     // WHEN 解除 B 的继承（经 router.unsetParent 触发 withAudit 旁路记审计日志）
-    const result = await callProc(router.unsetParent, { roleId: B.id }, adminCtx);
+    const result = await callProc(router.unsetParent, { roleId: B.id, expected_version: 1 }, adminCtx);
     // THEN B.parent_role_id === null
     expect(roleRepo.findById(B.id)?.parent_role_id).toBeNull();
     // THEN 审计日志新增 1 条
@@ -189,7 +191,7 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
-    await expect(service.setParent(B.id, 'missing-id-00000000-0000-4000-8000-000000000099', adminCtx))
+    await expect(service.setParent(B.id, 'missing-id-00000000-0000-4000-8000-000000000099', 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_NOT_FOUND' });
     expect(roleRepo.findById(B.id)?.parent_role_id).toBeNull();
     expect(auditRepo.listAll().length).toBe(beforeTotal); // 无幽灵日志
@@ -200,7 +202,7 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
-    await expect(service.setParent(B.id, B.id, adminCtx))
+    await expect(service.setParent(B.id, B.id, 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_SELF_INHERITANCE' });
     expect(roleRepo.findById(B.id)?.parent_role_id).toBeNull();
     expect(auditRepo.listAll().length).toBe(beforeTotal);
@@ -212,7 +214,7 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
-    await expect(service.setParent(B.id, adminId, adminCtx))
+    await expect(service.setParent(B.id, adminId, 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_BUILTIN_PARENT_FORBIDDEN' });
     expect(roleRepo.findById(B.id)?.parent_role_id).toBeNull();
     expect(auditRepo.listAll().length).toBe(beforeTotal);
@@ -225,10 +227,10 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     roleRepo.insert(A);
     roleRepo.insert(B);
     // 先建立 B.parent=A
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const beforeTotal = auditRepo.listAll().length;
     // 再设 A.parent=B → 环
-    await expect(service.setParent(A.id, B.id, adminCtx))
+    await expect(service.setParent(A.id, B.id, 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
     expect(roleRepo.findById(A.id)?.parent_role_id).toBeNull();
     expect(auditRepo.listAll().length).toBe(beforeTotal); // 无幽灵日志
@@ -242,11 +244,11 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     roleRepo.insert(A);
     roleRepo.insert(B);
     roleRepo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx); // B.parent=A
-    await service.setParent(C.id, B.id, adminCtx); // C.parent=B
+    await service.setParent(B.id, A.id, 0, adminCtx); // B.parent=A
+    await service.setParent(C.id, B.id, 0, adminCtx); // C.parent=B
     const beforeTotal = auditRepo.listAll().length;
     // 设 A.parent=C → 环 A→C→B→A
-    await expect(service.setParent(A.id, C.id, adminCtx))
+    await expect(service.setParent(A.id, C.id, 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_INHERITANCE_CYCLE' });
     expect(roleRepo.findById(A.id)?.parent_role_id).toBeNull();
     expect(auditRepo.listAll().length).toBe(beforeTotal);
@@ -258,7 +260,7 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
-    await expect(service.setParent(adminId, B.id, adminCtx))
+    await expect(service.setParent(adminId, B.id, 0, adminCtx))
       .rejects.toMatchObject({ code: 'ROLE_BUILTIN_FORBIDDEN' });
     expect(auditRepo.listAll().length).toBe(beforeTotal);
   });
@@ -271,9 +273,9 @@ describe('F1 端到端 · 设置/解除继承关系', () => {
     roleRepo.insert(A);
     roleRepo.insert(B);
     roleRepo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 覆盖：B.parent=A → B.parent=C（经 router.setParent 触发 withAudit 旁路记审计日志）
-    const result = await callProc(router.setParent, { roleId: B.id, parentRoleId: C.id }, adminCtx);
+    const result = await callProc(router.setParent, { roleId: B.id, parentRoleId: C.id, expected_version: 1 }, adminCtx);
     expect(roleRepo.findById(B.id)?.parent_role_id).toBe(C.id);
     const log = findLog(auditRepo, { entityType: 'role', entityId: B.id, action: 'update' });
     expect(log).toBeDefined();
@@ -292,7 +294,7 @@ describe('F2 端到端 · 查询继承链', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(A);
     roleRepo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const chain = await service.getInheritanceChain(B.id, adminCtx);
     expect(chain).toHaveLength(1);
     expect(chain[0]?.id).toBe(A.id);
@@ -308,8 +310,8 @@ describe('F2 端到端 · 查询继承链', () => {
     roleRepo.insert(A);
     roleRepo.insert(B);
     roleRepo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
-    await service.setParent(C.id, B.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
+    await service.setParent(C.id, B.id, 0, adminCtx);
     const chain = await service.getInheritanceChain(C.id, adminCtx);
     expect(chain).toHaveLength(2);
     expect(chain[0]?.id).toBe(B.id);
@@ -351,6 +353,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
       status: 'active',
       created_at: SEED_TS,
       updated_at: SEED_TS,
+      version: 0,
     });
     for (let i = 0; i < roleIds.length; i++) {
       roleRepo.insertUserRole({
@@ -377,7 +380,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
     const B = makeRole(ROLE_B_ID, { permission_codes: ['role:write'] });
     roleRepo.insert(A);
     roleRepo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     seedUserWithRoles(userRepo, roleRepo, USER_U1_ID, [B.id]);
     const perms = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(perms.sort()).toEqual(['role:read', 'role:write', 'user:read']);
@@ -391,8 +394,8 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
     roleRepo.insert(A);
     roleRepo.insert(B);
     roleRepo.insert(C);
-    await service.setParent(B.id, A.id, adminCtx);
-    await service.setParent(C.id, B.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
+    await service.setParent(C.id, B.id, 0, adminCtx);
     seedUserWithRoles(userRepo, roleRepo, USER_U1_ID, [C.id]);
     const perms = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(perms.sort()).toEqual(['dept:read', 'role:read', 'role:write', 'user:read']);
@@ -406,7 +409,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
     roleRepo.insert(A);
     roleRepo.insert(D);
     roleRepo.insert(E);
-    await service.setParent(D.id, E.id, adminCtx);
+    await service.setParent(D.id, E.id, 0, adminCtx);
     seedUserWithRoles(userRepo, roleRepo, USER_U1_ID, [A.id, D.id]);
     const perms = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(perms.sort()).toEqual(['dept:write', 'notification:read', 'role:read']);
@@ -423,7 +426,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
     const before = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(before.sort()).toEqual(['role:write']);
     // 设置 B.parent=A（继承关系变更）
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // 变更后：B ∪ A = [role:write, role:read]（读时聚合自动反映新继承链）
     const after = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(after.sort()).toEqual(['role:read', 'role:write']);
@@ -438,7 +441,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
   it('AC-F3-7 §用户无角色 → 返回空数组', async () => {
     const { userRepo, service } = setupShared();
     userRepo.insert({
-      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     const perms = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(perms).toEqual([]);
@@ -455,10 +458,10 @@ describe('F4 端到端 · 删除守卫 B8 ROLE_HAS_CHILDREN', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(A);
     roleRepo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     const beforeTotal = auditRepo.listAll().length;
     // WHEN 删除 A（有子角色 B）
-    await expect(service.delete(A.id, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
+    await expect(service.delete(A.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });
     // THEN A 仍存在
     expect(roleRepo.findById(A.id)).toBeDefined();
     // THEN 无删除日志（无幽灵日志）
@@ -471,7 +474,7 @@ describe('F4 端到端 · 删除守卫 B8 ROLE_HAS_CHILDREN', () => {
     roleRepo.insert(A);
     const beforeTotal = auditRepo.listAll().length;
     // WHEN 删除 A（无子角色，经 router.delete 触发 withAudit 旁路记审计日志）
-    await callProc(router.delete, { id: ROLE_A_ID }, adminCtx);
+    await callProc(router.delete, { id: ROLE_A_ID, expected_version: 0 }, adminCtx);
     // THEN A 不存在
     expect(roleRepo.findById(A.id)).toBeUndefined();
     // THEN 删除日志新增 1 条
@@ -487,10 +490,10 @@ describe('F4 端到端 · 删除守卫 B8 ROLE_HAS_CHILDREN', () => {
     const B = makeRole(ROLE_B_ID);
     roleRepo.insert(A);
     roleRepo.insert(B);
-    await service.setParent(B.id, A.id, adminCtx);
+    await service.setParent(B.id, A.id, 0, adminCtx);
     // WHEN 解除 B 的继承 + 删除 A
-    await service.unsetParent(B.id, adminCtx);
-    await service.delete(A.id, adminCtx);
+    await service.unsetParent(B.id, 1, adminCtx);
+    await service.delete(A.id, 0, adminCtx);
     // THEN 删除成功
     expect(roleRepo.findById(A.id)).toBeUndefined();
     // B 仍存在，parent_role_id 恢复 null
@@ -509,7 +512,7 @@ describe('端到端 · router 层 setParent withAudit 包装', () => {
     roleRepo.insert(A);
     roleRepo.insert(B);
     // 经 router.setParent 调用（withAudit 包装）
-    await callProc(router.setParent, { roleId: B.id, parentRoleId: A.id }, adminCtx);
+    await callProc(router.setParent, { roleId: B.id, parentRoleId: A.id, expected_version: 0 }, adminCtx);
     // 审计日志落库
     const log = findLog(auditRepo, { entityType: 'role', entityId: B.id, action: 'update' });
     expect(log).toBeDefined();
@@ -522,7 +525,7 @@ describe('端到端 · router 层 setParent withAudit 包装', () => {
     roleRepo.insert(B);
     const beforeTotal = auditRepo.listAll().length;
     // 自继承 → schema superRefine 在 router 入口先拦截（service 层 ROLE_SELF_INHERITANCE 不会执行）
-    await expect(callProc(router.setParent, { roleId: B.id, parentRoleId: B.id }, adminCtx))
+    await expect(callProc(router.setParent, { roleId: B.id, parentRoleId: B.id, expected_version: 0 }, adminCtx))
       .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(auditRepo.listAll().length).toBe(beforeTotal); // 无幽灵日志
   });
@@ -532,7 +535,7 @@ describe('端到端 · router 层 setParent withAudit 包装', () => {
     const A = makeRole(ROLE_A_ID, { permission_codes: ['user:read'] });
     roleRepo.insert(A);
     userRepo.insert({
-      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS,
+      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
     });
     roleRepo.insertUserRole({ id: 'ur1', user_id: USER_U1_ID, role_id: A.id, assigned_at: SEED_TS });
     const beforeTotal = auditRepo.listAll().length;

@@ -44,13 +44,14 @@ import { ReportService } from './service/report.js';
 import { NotificationService } from './service/notification.js';
 import { TransferService } from './service/transfer.js';
 import { createUserRouter, updateUserStatusProcedureInputSchema } from './router/user.js';
-import { createRoleRouter, roleDetailProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './router/role.js';
+import { createRoleRouter, roleDetailProcedureInputSchema, roleDeleteProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './router/role.js';
 import { createDeptRouter, deptDeleteProcedureInputSchema } from './router/dept.js';
 import { createAuditRouter } from './router/audit.js';
 import { createReportRouter } from './router/report.js';
 import {
   createNotificationRouter,
   notificationIdProcedureInputSchema,
+  notificationWriteIdProcedureInputSchema,
   updateNotificationProcedureInputSchema,
 } from './router/notification.js';
 import { createTransferRouter, transferProcedureInputSchema } from './router/transfer.js';
@@ -98,6 +99,8 @@ function seedDemoData(): void {
     department_id: null,
     created_at: now,
     updated_at: now,
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D8：seed 数据 version=0。
+    version: 0,
   });
   userRepo.insert({
     id: DEMO_USER_ID,
@@ -107,6 +110,8 @@ function seedDemoData(): void {
     department_id: null,
     created_at: now,
     updated_at: now,
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D8：seed 数据 version=0。
+    version: 0,
   });
 }
 
@@ -124,14 +129,23 @@ type Route = {
   inputSchema: z.ZodType<unknown, z.ZodTypeDef, unknown>;
   handler: (input: unknown, ctx: Ctx) => Promise<unknown>;
   auth: 'admin' | 'public';
+  /**
+   * 是否为版本化写路由（乐观锁，TECH-OPTIMISTIC-LOCKING-001 D17/D18）。
+   * versioned=true 时，handle() 在 safeParse 之前解析 If-Match header：
+   * 缺失 → VERSION_REQUIRED(400)；格式非法 → VALIDATION_ERROR(400)；合法 → 注入 expected_version。
+   */
+  versioned: boolean;
 };
 
-/** 从 procedure + 路由元数据构造 Route（复用 procedure 的 inputSchema/handler/auth，无重复声明）。 */
+/** 从 procedure + 路由元数据构造 Route（复用 procedure 的 inputSchema/handler/auth，无重复声明）。
+ * [约束] TECH-OPTIMISTIC-LOCKING-001 D17：versioned 标记由 server.ts 声明式注入（路由层 procedure 不感知 HTTP header）。
+ * @param versioned 写路由传 true（解析 If-Match），读路由缺省 false。 */
 function defineRoute<I>(
   method: string,
   pattern: string,
   buildInput: (m: MatchCtx) => unknown,
   procedure: Procedure<I, unknown>,
+  versioned = false,
 ): Route {
   return {
     method,
@@ -140,6 +154,7 @@ function defineRoute<I>(
     inputSchema: procedure.input as z.ZodType<unknown, z.ZodTypeDef, unknown>,
     handler: procedure.handler as (input: unknown, ctx: Ctx) => Promise<unknown>,
     auth: procedure.auth,
+    versioned,
   };
 }
 
@@ -161,7 +176,7 @@ const routes: Route[] = [
     input: updateUserStatusProcedureInputSchema,
     handler: userRouter.updateStatus.handler,
     auth: userRouter.updateStatus.auth,
-  }),
+  }, true),
 
   // ---- transfer（调岗事务，POST /v1/users/:userId/transfer） ----
   defineRoute('POST', '/v1/users/:userId/transfer', (m) => {
@@ -187,10 +202,10 @@ const routes: Route[] = [
     auth: roleRouter.detail.auth,
   }),
   defineRoute('DELETE', '/v1/roles/:id', (m) => ({ id: m.path.id }), {
-    input: roleDetailProcedureInputSchema,
+    input: roleDeleteProcedureInputSchema,
     handler: roleRouter.delete.handler,
     auth: roleRouter.delete.auth,
-  }),
+  }, true),
   defineRoute('GET', '/v1/users/:userId/roles', (m) => ({ userId: m.path.userId }), {
     input: listUserRolesProcedureInputSchema,
     handler: roleRouter.listUserRoles.handler,
@@ -215,12 +230,12 @@ const routes: Route[] = [
     input: setParentProcedureInputSchema,
     handler: roleRouter.setParent.handler,
     auth: roleRouter.setParent.auth,
-  }),
+  }, true),
   defineRoute('DELETE', '/v1/roles/:roleId/parent', (m) => ({ roleId: m.path.roleId }), {
     input: unsetParentProcedureInputSchema,
     handler: roleRouter.unsetParent.handler,
     auth: roleRouter.unsetParent.auth,
-  }),
+  }, true),
   defineRoute('GET', '/v1/roles/:roleId/inheritance-chain', (m) => ({ roleId: m.path.roleId }), {
     input: inheritanceChainProcedureInputSchema,
     handler: roleRouter.getInheritanceChain.handler,
@@ -273,22 +288,22 @@ const routes: Route[] = [
     input: updateNotificationProcedureInputSchema,
     handler: notificationRouter.update.handler,
     auth: notificationRouter.update.auth,
-  }),
+  }, true),
   defineRoute('POST', '/v1/notifications/:id/send', (m) => ({ id: m.path.id }), {
-    input: notificationIdProcedureInputSchema,
+    input: notificationWriteIdProcedureInputSchema,
     handler: notificationRouter.send.handler,
     auth: notificationRouter.send.auth,
-  }),
+  }, true),
   defineRoute('POST', '/v1/notifications/:id/read', (m) => ({ id: m.path.id }), {
-    input: notificationIdProcedureInputSchema,
+    input: notificationWriteIdProcedureInputSchema,
     handler: notificationRouter.markRead.handler,
     auth: notificationRouter.markRead.auth,
-  }),
+  }, true),
   defineRoute('DELETE', '/v1/notifications/:id', (m) => ({ id: m.path.id }), {
-    input: notificationIdProcedureInputSchema,
+    input: notificationWriteIdProcedureInputSchema,
     handler: notificationRouter.delete.handler,
     auth: notificationRouter.delete.auth,
-  }),
+  }, true),
 ];
 
 // ============ 路径匹配 ============
@@ -356,6 +371,24 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
+/**
+ * 解析 If-Match header 为乐观锁 version（TECH-OPTIMISTIC-LOCKING-001 D18）。
+ * 接受纯非负整数字符串（如 "3"）；不采用 ETag 引号格式（MVP 简化）。
+ * @returns ok=true 携带 version；ok=false 携带 errorCode（VERSION_REQUIRED / VALIDATION_ERROR）。
+ */
+function parseIfMatch(headerValue: string | undefined):
+  | { ok: true; version: number }
+  | { ok: false; errorCode: 'VERSION_REQUIRED' | 'VALIDATION_ERROR' } {
+  if (headerValue === undefined || headerValue.trim() === '') {
+    return { ok: false, errorCode: 'VERSION_REQUIRED' };
+  }
+  const trimmed = headerValue.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return { ok: false, errorCode: 'VALIDATION_ERROR' };
+  }
+  return { ok: true, version: Number(trimmed) };
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const pathname = url.pathname;
@@ -387,7 +420,23 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   try {
     const body = await readBody(req);
     const rawInput = route.buildInput({ path: pathParams, query: url.searchParams, body });
-    const parsed = route.inputSchema.safeParse(rawInput);
+    // [约束] TECH-OPTIMISTIC-LOCKING-001 D18：versioned 路由在 safeParse 之前解析 If-Match header。
+    // 缺失 → VERSION_REQUIRED(400)；格式非法 → VALIDATION_ERROR(400)；合法 → 注入 expected_version 到入参。
+    let finalInput = rawInput;
+    if (route.versioned) {
+      const ifMatch = req.headers['if-match'] as string | undefined;
+      const versionResult = parseIfMatch(ifMatch);
+      if (!versionResult.ok) {
+        if (versionResult.errorCode === 'VERSION_REQUIRED') {
+          sendJson(res, 400, { error: 'VERSION_REQUIRED', message: '写操作须携带 If-Match header（非负整数）' });
+        } else {
+          sendJson(res, 400, { error: 'VALIDATION_ERROR', message: 'If-Match header 须为非负整数字符串' });
+        }
+        return;
+      }
+      finalInput = { ...(rawInput as Record<string, unknown>), expected_version: versionResult.version };
+    }
+    const parsed = route.inputSchema.safeParse(finalInput);
     if (!parsed.success) {
       sendJson(res, 400, {
         error: 'VALIDATION_ERROR',
@@ -408,7 +457,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   } catch (e) {
     if (e instanceof AppError) {
       const status = errorCodeToHttpStatus[e.code] ?? 500;
-      sendJson(res, status, { error: e.code, message: e.message });
+      // [约束] TECH-OPTIMISTIC-LOCKING-001 D13：合并 e.meta 到响应体（如 VERSION_CONFLICT 的 current_version）。
+      const respBody: Record<string, unknown> = { error: e.code, message: e.message };
+      if (e.meta) Object.assign(respBody, e.meta);
+      sendJson(res, status, respBody);
       return;
     }
     // 非预期错误：log + 500（CODE-002：catch 须非空且非仅 console）

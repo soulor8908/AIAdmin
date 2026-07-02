@@ -82,6 +82,7 @@ function setup(): {
     name: 'admin',
     email: 'admin@example.com',
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -382,6 +383,7 @@ describe('契约测 · 出参 schema 匹配', () => {
       status: 'active' as const,
       created_at: SEED_TS,
       updated_at: SEED_TS,
+      version: 0,
     };
     expect(userSchema.safeParse({ ...base, department_id: null }).success).toBe(true);
     expect(

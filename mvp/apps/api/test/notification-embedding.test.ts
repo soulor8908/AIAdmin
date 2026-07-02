@@ -90,6 +90,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_VALID,
@@ -98,6 +99,7 @@ function setup(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_DISABLED,
@@ -106,6 +108,7 @@ function setup(): {
     status: 'disabled',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   const userService = new UserService(userRepo);
   const notificationRepo = new NotificationRepository();
@@ -151,6 +154,7 @@ function setupThrowingAudit(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   userRepo.insert({
     id: U_VALID,
@@ -159,6 +163,7 @@ function setupThrowingAudit(): {
     status: 'active',
     created_at: SEED_TS,
     updated_at: SEED_TS,
+    version: 0,
   });
   const userService = new UserService(userRepo);
   const notificationRepo = new NotificationRepository();
@@ -245,7 +250,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const draft = await createDraftViaRouter(notificationRouter, U_VALID);
     const logsBefore = auditRepo.listAll().length;
     // send（admin 操作，operator_id=ADMIN_ID）
-    const sent = await callProc(notificationRouter.send, { id: draft.id }, adminCtx);
+    const sent = await callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx);
     expect(sent.status).toBe('sent');
     expect(sent.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(sent.read_at).toBeNull();
@@ -264,13 +269,13 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     expect(log.operator_id).toBe(ADMIN_ID);
     expect(log.operated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // before=[{status:'draft',pii:false},{sent_at:null,pii:false}]
-    expect(log.before).toHaveLength(2);
+    expect(log.before).toHaveLength(3);
     expect(fieldValue(log.before, 'status')).toBe('draft');
     expect(fieldPii(log.before, 'status')).toBe(false);
     expect(fieldValue(log.before, 'sent_at')).toBeNull();
     expect(fieldPii(log.before, 'sent_at')).toBe(false);
     // after=[{status:'sent',pii:false},{sent_at:<非空ISO>,pii:false}]（read_at 未变更不入快照）
-    expect(log.after).toHaveLength(2);
+    expect(log.after).toHaveLength(3);
     expect(fieldValue(log.after, 'status')).toBe('sent');
     expect(fieldPii(log.after, 'status')).toBe(false);
     expect(fieldValue(log.after, 'sent_at')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -326,7 +331,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     // 编辑 title（旧→新），content/recipient_id 未变更
     const updated = await callProc(
       notificationRouter.update,
-      { id: draft.id, body: { title: '新' } },
+      { id: draft.id, body: { title: '新' }, expected_version: 0 },
       adminCtx,
     );
     expect(updated.title).toBe('新');
@@ -340,8 +345,8 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     if (!log) return;
     expect(log.action).toBe('update');
     // before/after 仅含 title（content/recipient_id 未变更不入快照）
-    expect(log.before).toHaveLength(1);
-    expect(log.after).toHaveLength(1);
+    expect(log.before).toHaveLength(2);
+    expect(log.after).toHaveLength(2);
     expect(hasField(log.before, 'title')).toBe(true);
     expect(hasField(log.after, 'title')).toBe(true);
     expect(fieldValue(log.before, 'title')).toBe('旧');
@@ -362,7 +367,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const logsBefore = auditRepo.listAll().length;
     // 收件人对 draft 态标记已读 → 状态守卫 draft→read 非法（NOTIFICATION_INVALID_TRANSITION）
     await expectAppError(
-      callProc(notificationRouter.markRead, { id: draft.id }, recipientCtx),
+      callProc(notificationRouter.markRead, { id: draft.id, expected_version: 0 }, recipientCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
     // 主操作失败不埋点（沿用第五轮 Q2）：auditRepo 长度不变
@@ -372,10 +377,10 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
   it('F2-5 §92 markRead sent→read 成功 → 日志 action=update/before=[status:sent,read_at:null]/after=[status:read,read_at:<ISO>]；operator_id=收件人 id', async () => {
     const { notificationRouter, auditRepo } = setup();
     const draft = await createDraftViaRouter(notificationRouter, U_VALID);
-    await callProc(notificationRouter.send, { id: draft.id }, adminCtx); // draft→sent
+    await callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx); // draft→sent
     const logsBefore = auditRepo.listAll().length;
     // 收件人 U_VALID 标记已读（自服务，operator_id=U_VALID）
-    const read = await callProc(notificationRouter.markRead, { id: draft.id }, recipientCtx);
+    const read = await callProc(notificationRouter.markRead, { id: draft.id, expected_version: 1 }, recipientCtx);
     expect(read.status).toBe('read');
     expect(read.read_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(auditRepo.listAll().length).toBe(logsBefore + 1);
@@ -392,13 +397,13 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     // operator_id=收件人 id（markRead 自服务，非 admin）
     expect(log.operator_id).toBe(U_VALID);
     // before=[{status:'sent',pii:false},{read_at:null,pii:false}]（sent_at 未变更不入快照）
-    expect(log.before).toHaveLength(2);
+    expect(log.before).toHaveLength(3);
     expect(fieldValue(log.before, 'status')).toBe('sent');
     expect(fieldPii(log.before, 'status')).toBe(false);
     expect(fieldValue(log.before, 'read_at')).toBeNull();
     expect(fieldPii(log.before, 'read_at')).toBe(false);
     // after=[{status:'read',pii:false},{read_at:<非空ISO>,pii:false}]
-    expect(log.after).toHaveLength(2);
+    expect(log.after).toHaveLength(3);
     expect(fieldValue(log.after, 'status')).toBe('read');
     expect(fieldPii(log.after, 'status')).toBe(false);
     expect(fieldValue(log.after, 'read_at')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -410,7 +415,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const { notificationRouter, auditRepo } = setup();
     const draft = await createDraftViaRouter(notificationRouter, U_VALID, 'T', 'C');
     const logsBefore = auditRepo.listAll().length;
-    await callProc(notificationRouter.delete, { id: draft.id }, adminCtx);
+    await callProc(notificationRouter.delete, { id: draft.id, expected_version: 0 }, adminCtx);
     expect(auditRepo.listAll().length).toBe(logsBefore + 1);
     const log = findLog(auditRepo, {
       entityType: 'notification',
@@ -426,7 +431,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     // after=[]（删除无 after 快照）
     expect(log.after).toEqual([]);
     // before=[{title},{content},{recipient_id},{status:'draft'}]
-    expect(log.before).toHaveLength(4);
+    expect(log.before).toHaveLength(5);
     expect(hasField(log.before, 'title')).toBe(true);
     expect(hasField(log.before, 'content')).toBe(true);
     expect(hasField(log.before, 'recipient_id')).toBe(true);
@@ -444,7 +449,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const { throwingRepo, notificationRouter } = setupThrowingAudit();
     const draft = await createDraftViaRouter(notificationRouter, U_VALID);
     // send 主操作成功（收件人 active，draft→sent 合法），埋点环节 record 抛错被 withAudit 吞掉
-    const sent = await callProc(notificationRouter.send, { id: draft.id }, adminCtx);
+    const sent = await callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx);
     expect(sent.status).toBe('sent');
     expect(sent.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // 埋点失败：record 抛错在 insert 前，日志未入库（create 与 send 的埋点均失败被吞）
@@ -458,7 +463,7 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const draftMissing = await createDraftViaRouter(notificationRouter, U_MISSING);
     let logsBefore = auditRepo.listAll().length;
     await expectAppError(
-      callProc(notificationRouter.send, { id: draftMissing.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draftMissing.id, expected_version: 0 }, adminCtx),
       'NOTIFICATION_RECIPIENT_NOT_FOUND',
     );
     expect(auditRepo.listAll().length).toBe(logsBefore); // 不产生审计日志
@@ -467,17 +472,17 @@ describe('F2 端到端 · 审计埋点联动（共享 AuditLogRepository 观测�
     const draftDisabled = await createDraftViaRouter(notificationRouter, U_DISABLED);
     logsBefore = auditRepo.listAll().length;
     await expectAppError(
-      callProc(notificationRouter.send, { id: draftDisabled.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draftDisabled.id, expected_version: 0 }, adminCtx),
       'NOTIFICATION_RECIPIENT_DISABLED',
     );
     expect(auditRepo.listAll().length).toBe(logsBefore); // 不产生审计日志
 
     // 场景3：状态非法（sent→sent 同态，send 仅 draft 允许）→ NOTIFICATION_INVALID_TRANSITION
     const draftSent = await createDraftViaRouter(notificationRouter, U_VALID);
-    await callProc(notificationRouter.send, { id: draftSent.id }, adminCtx); // draft→sent
+    await callProc(notificationRouter.send, { id: draftSent.id, expected_version: 0 }, adminCtx); // draft→sent
     logsBefore = auditRepo.listAll().length;
     await expectAppError(
-      callProc(notificationRouter.send, { id: draftSent.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draftSent.id, expected_version: 1 }, adminCtx),
       'NOTIFICATION_INVALID_TRANSITION',
     );
     expect(auditRepo.listAll().length).toBe(logsBefore); // 不产生审计日志
@@ -491,7 +496,7 @@ describe('F3 端到端 · 跨 service 收件人校验（共享 UserService/UserR
   it('F3-1 §98 recipient=U_valid（存在且 active）→ send 成功，通知 status=sent', async () => {
     const { notificationRouter, notificationRepo } = setup();
     const draft = await createDraftViaRouter(notificationRouter, U_VALID);
-    const sent = await callProc(notificationRouter.send, { id: draft.id }, adminCtx);
+    const sent = await callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx);
     expect(sent.status).toBe('sent');
     expect(sent.recipient_id).toBe(U_VALID);
     // 跨 service 调用 userService.findByIds([U_VALID]) 判定收件人存在且 active → 校验通过
@@ -505,7 +510,7 @@ describe('F3 端到端 · 跨 service 收件人校验（共享 UserService/UserR
     const draft = await createDraftViaRouter(notificationRouter, U_MISSING);
     const logsBefore = auditRepo.listAll().length;
     await expectAppError(
-      callProc(notificationRouter.send, { id: draft.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx),
       'NOTIFICATION_RECIPIENT_NOT_FOUND',
     );
     // 通知 status 仍 draft（主操作失败不改状态）
@@ -521,7 +526,7 @@ describe('F3 端到端 · 跨 service 收件人校验（共享 UserService/UserR
     const draft = await createDraftViaRouter(notificationRouter, U_DISABLED);
     const logsBefore = auditRepo.listAll().length;
     await expectAppError(
-      callProc(notificationRouter.send, { id: draft.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx),
       'NOTIFICATION_RECIPIENT_DISABLED',
     );
     // 通知 status 仍 draft（主操作失败不改状态）
@@ -543,7 +548,7 @@ describe('F3 端到端 · 跨 service 收件人校验（共享 UserService/UserR
     expect(stored?.status).toBe('draft');
     // 后续 send → 延后校验生效：收件人不存在 → NOTIFICATION_RECIPIENT_NOT_FOUND
     await expectAppError(
-      callProc(notificationRouter.send, { id: draft.id }, adminCtx),
+      callProc(notificationRouter.send, { id: draft.id, expected_version: 0 }, adminCtx),
       'NOTIFICATION_RECIPIENT_NOT_FOUND',
     );
     // 通知仍 draft（延后校验失败不改状态）

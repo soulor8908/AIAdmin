@@ -1,13 +1,14 @@
 // apps/api/src/service/role.ts —— 业务层：编排 repository + 权限校验 + 抛 AppError
 // 校验顺序（Tech-Spec §边界与异常，先到先返，不叠加）：
 //   create:           B3 鉴权 → B4 name 唯一 → 写入
-//   delete:           B3 鉴权 → B5 角色存在(ROLE_NOT_FOUND) → B6 内置(ROLE_BUILTIN_FORBIDDEN)
-//                          → B8 子角色引用(ROLE_HAS_CHILDREN) → B7 已分配(ROLE_IN_USE)
+//   delete:           B3 鉴权 → B5 角色存在(ROLE_NOT_FOUND) → B_version 版本匹配(VERSION_CONFLICT)
+//                          → B6 内置(ROLE_BUILTIN_FORBIDDEN) → B8 子角色引用(ROLE_HAS_CHILDREN) → B7 已分配(ROLE_IN_USE)
 //                          （TECH-ROLE-INHERITANCE-001 D6：B8 插在 B6 与 B7 之间，结构约束优先于使用约束）
+//                          （TECH-OPTIMISTIC-LOCKING-001 D9：B_version 插在 B5 与 B6 之间，不存在优先于版本过期）
 //   assign:           B3 鉴权 → B8 用户存在(USER_NOT_FOUND) → B9 角色存在(ROLE_NOT_FOUND) → B10 已持有(USER_ROLE_ALREADY_ASSIGNED)
 //   remove:           B3 鉴权 → B11 用户存在(USER_NOT_FOUND) → 关联不存在幂等 204(B12)
-//   setParent:        B3 鉴权 → validateSetParent（角色存在/父角色存在/角色非内置/自继承/父角色非内置/环检测）
-//   unsetParent:      B3 鉴权 → 角色存在 → 角色非内置
+//   setParent:        B3 鉴权 → B5 角色存在 → B5b 父角色存在 → B_version 版本匹配 → validateSetParent（自继承/内置/环）
+//   unsetParent:      B3 鉴权 → B5 角色存在 → B_version 版本匹配 → B6 内置
 //   getInheritanceChain: B3 鉴权 → 角色存在
 //   getEffectivePermissions: B3 鉴权 → 用户存在
 // D3：写操作返回 {entity, changes, before?}（WriteResult），供 router 层 withAudit 提取 entity + 旁路记日志。
@@ -26,6 +27,7 @@ import type { Ctx } from '../context.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
 import { AppError } from '../errors.js';
 import { validateSetParent, detectCycle } from '../domain/role-inheritance.js';
+import { validateVersion } from '../domain/version.js';
 
 export class RoleService {
   constructor(
@@ -78,6 +80,7 @@ export class RoleService {
       // 后续经 setParent 维护继承关系。
       parent_role_id: null,
       created_at: new Date().toISOString(),
+      version: 0, // TECH-OPTIMISTIC-LOCKING-001 D1：新建实体 version 初始 0
     };
     const inserted = this.roleRepo.insert(role);
     // D3：changes 为 after 快照（role 本期无 PII，markPii 全 false）
@@ -89,12 +92,21 @@ export class RoleService {
     return { entity: inserted, changes };
   }
 
-  async delete(id: string, ctx: Ctx): Promise<WriteResult<void>> {
+  /**
+   * F3 删除角色（含乐观锁版本校验）。
+   * 守卫顺序（TECH-OPTIMISTIC-LOCKING-001 D9）：B3 鉴权 → B5 角色存在 → B_version 版本匹配 → B6 内置 → B8 子角色 → B7 已分配。
+   */
+  async delete(id: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<void>> {
     this.requireAdmin(ctx);
-    // B5: 角色不存在（先于 B6/B7）
+    // B5: 角色不存在（先于 B_version / B6/B7/B8）
     const role = this.roleRepo.findById(id);
     if (!role) {
       throw new AppError('ROLE_NOT_FOUND', `角色不存在: ${id}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6/B7/B8 业务规则，D9）
+    const versionCheck = validateVersion(expectedVersion, role.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${role.version}`, { current_version: role.version });
     }
     // B6: 内置角色不可删（先于 B7/B8，无论是否已分配或有子角色）
     if (role.is_builtin) {
@@ -112,11 +124,12 @@ export class RoleService {
       throw new AppError('ROLE_IN_USE', '角色已被分配，需先解除全部分配');
     }
     this.roleRepo.delete(id);
-    // D3：delete 返回 entity=void（204 无体），before 为删除前快照
+    // D3：delete 返回 entity=void（204 无体），before 为删除前快照（含 version，TECH-OPTIMISTIC-LOCKING-001 D12）
     const before = markPii('role', [
       { field: 'name', value: role.name, pii: false },
       { field: 'description', value: role.description, pii: false },
       { field: 'permission_codes', value: role.permission_codes, pii: false },
+      { field: 'version', value: role.version, pii: false },
     ]);
     return { entity: undefined, changes: [], before };
   }
@@ -193,14 +206,23 @@ export class RoleService {
   // ============================================================
 
   /**
-   * F1 设置继承关系（D1/D2/D4/D5）。
-   * 校验顺序（§5）：requireAdmin → validateSetParent（角色存在/父角色存在/角色非内置/自继承/父角色非内置/环检测）。
-   * 写操作返回 WriteResult<Role>，before/after 含 parent_role_id 虚拟字段（pii=false）。
+   * F1 设置继承关系（D1/D2/D4/D5 + 乐观锁版本校验 D9）。
+   * 校验顺序：requireAdmin → B5 角色存在 → B5b 父角色存在 → B_version 版本匹配 → validateSetParent（自继承/内置/环）。
+   * 写操作返回 WriteResult<Role>，before/after 含 parent_role_id + version 字段（pii=false）。
    */
-  async setParent(roleId: string, parentRoleId: string, ctx: Ctx): Promise<WriteResult<Role>> {
+  async setParent(roleId: string, parentRoleId: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<Role>> {
     this.requireAdmin(ctx);
     const role = this.roleRepo.findById(roleId);
     const parent = this.roleRepo.findById(parentRoleId);
+    // B5: 角色不存在（先于 B_version）
+    if (!role) {
+      throw new AppError('ROLE_NOT_FOUND', `角色不存在: ${roleId}`);
+    }
+    // B_version: 乐观锁版本校验（先于 validateSetParent 业务规则，D9）
+    const versionCheck = validateVersion(expectedVersion, role.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${role.version}`, { current_version: role.version });
+    }
     // 环检测：detectCycle 从 parentRoleId 向上遍历，遇 roleId 则环。
     // 注：parent 不存在时 detectCycle 的 findById 返回 undefined → hasCycle=false，
     //     由 validateSetParent 的 parentExists 校验先拦截（ROLE_NOT_FOUND）。
@@ -225,26 +247,33 @@ export class RoleService {
     // 校验通过，写入 parent_role_id（覆盖语义：Q5 决策，重新设置继承即覆盖旧值）
     const beforeRoleId = role!.parent_role_id;
     const updated = this.roleRepo.update(roleId, { parent_role_id: parentRoleId });
-    // D5：before/after 含 parent_role_id 虚拟字段（pii=false）
+    // D5/D12：before/after 含 parent_role_id + version 字段（pii=false）
     const before = markPii('role', [
       { field: 'parent_role_id', value: beforeRoleId, pii: false },
+      { field: 'version', value: role.version, pii: false },
     ]);
     const changes = markPii('role', [
       { field: 'parent_role_id', value: parentRoleId, pii: false },
+      { field: 'version', value: updated!.version, pii: false },
     ]);
     return { entity: updated!, changes, before };
   }
 
   /**
-   * F1 解除继承关系（D5）。
-   * 校验顺序：requireAdmin → 角色存在 → 角色非内置（内置 admin 不可改继承关系）。
-   * 写操作返回 WriteResult<Role>，before/after 含 parent_role_id 虚拟字段。
+   * F1 解除继承关系（D5 + 乐观锁版本校验 D9）。
+   * 校验顺序：requireAdmin → B5 角色存在 → B_version 版本匹配 → B6 内置（内置 admin 不可改继承关系）。
+   * 写操作返回 WriteResult<Role>，before/after 含 parent_role_id + version 字段。
    */
-  async unsetParent(roleId: string, ctx: Ctx): Promise<WriteResult<Role>> {
+  async unsetParent(roleId: string, expectedVersion: number, ctx: Ctx): Promise<WriteResult<Role>> {
     this.requireAdmin(ctx);
     const role = this.roleRepo.findById(roleId);
     if (!role) {
       throw new AppError('ROLE_NOT_FOUND', `角色不存在: ${roleId}`);
+    }
+    // B_version: 乐观锁版本校验（先于 B6 内置守卫，D9）
+    const versionCheck = validateVersion(expectedVersion, role.version);
+    if (!versionCheck.ok) {
+      throw new AppError('VERSION_CONFLICT', `版本冲突: 期望 ${expectedVersion}，实际 ${role.version}`, { current_version: role.version });
     }
     if (role.is_builtin) {
       throw new AppError('ROLE_BUILTIN_FORBIDDEN', '内置角色不可修改继承关系');
@@ -253,9 +282,11 @@ export class RoleService {
     const updated = this.roleRepo.update(roleId, { parent_role_id: null });
     const before = markPii('role', [
       { field: 'parent_role_id', value: beforeRoleId, pii: false },
+      { field: 'version', value: role.version, pii: false },
     ]);
     const changes = markPii('role', [
       { field: 'parent_role_id', value: null, pii: false },
+      { field: 'version', value: updated!.version, pii: false },
     ]);
     return { entity: updated!, changes, before };
   }

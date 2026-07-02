@@ -90,6 +90,7 @@ function setup(): {
     name: 'admin',
     email: 'admin@example.com',
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -231,7 +232,7 @@ describe('F1 端到端 · user 域埋点', () => {
     // 禁用该用户
     await callProc(
       userRouter.updateStatus,
-      { id: user.id, body: { status: 'disabled' } },
+      { id: user.id, body: { status: 'disabled' }, expected_version: 0 },
       adminCtx,
     );
     const log = findLog(auditRepo, {
@@ -245,11 +246,11 @@ describe('F1 端到端 · user 域埋点', () => {
     expect(log.action).toBe('update');
     expect(log.entity_id).toBe(user.id);
     // before=[{field:status,value:'active',pii:false}]
-    expect(log.before).toHaveLength(1);
+    expect(log.before).toHaveLength(2);
     expect(fieldValue(log.before, 'status')).toBe('active');
     expect(fieldPii(log.before, 'status')).toBe(false);
     // after=[{field:status,value:'disabled',pii:false}]
-    expect(log.after).toHaveLength(1);
+    expect(log.after).toHaveLength(2);
     expect(fieldValue(log.after, 'status')).toBe('disabled');
     expect(fieldPii(log.after, 'status')).toBe(false);
     // 未变更字段不出现在快照中：email/name 不在 before/after
@@ -301,7 +302,7 @@ describe('F1 端到端 · role 域埋点', () => {
       { name: 'toDelete', description: 'd', permission_codes: [] },
       adminCtx,
     );
-    await callProc(roleRouter.delete, { id: role.id }, adminCtx);
+    await callProc(roleRouter.delete, { id: role.id, expected_version: 0 }, adminCtx);
     const log = findLog(auditRepo, {
       entityType: 'role',
       entityId: role.id,
@@ -571,7 +572,7 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
     );
     await callProc(
       userRouter.updateStatus,
-      { id: user.id, body: { status: 'disabled' } },
+      { id: user.id, body: { status: 'disabled' }, expected_version: 0 },
       adminCtx,
     );
     const role = await callProc(
@@ -579,7 +580,7 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
       { name: 'r2', description: 'd', permission_codes: [] },
       adminCtx,
     );
-    await callProc(roleRouter.delete, { id: role.id }, adminCtx);
+    await callProc(roleRouter.delete, { id: role.id, expected_version: 0 }, adminCtx);
     const validActions = [...auditLogActionSchema.options];
     // 全集断言：枚举覆盖 create/update/delete
     expect(validActions).toEqual(['create', 'update', 'delete']);

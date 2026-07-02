@@ -45,6 +45,7 @@ function makeUser(i: number, overrides: Partial<User> = {}): User {
     name: `user${i}`,
     email: `user${i}@example.com`,
     status: 'active',
+    version: 0,
     created_at: SEED_TS,
     updated_at: SEED_TS,
     ...overrides,
@@ -145,7 +146,7 @@ describe('契约测 · 出参 schema 匹配', () => {
     const u = firstUser(seedUsers(repo, 1));
     const result = await callProc(
       router.updateStatus,
-      { id: u.id, body: { status: 'disabled' } },
+      { id: u.id, body: { status: 'disabled' }, expected_version: 0 },
       adminCtx,
     );
     expect(() => userSchema.parse(result)).not.toThrow();
@@ -194,6 +195,7 @@ describe('契约测 · 入参 safeParse 合法/非法样本', () => {
       updateUserStatusProcedureInputSchema.safeParse({
         id: '00000000-0000-4000-8000-000000000001',
         body: { status: 'disabled' },
+        expected_version: 0,
       }).success,
     ).toBe(true);
   });
@@ -233,9 +235,9 @@ describe('边界', () => {
   it('重复禁用 → USER_ALREADY_DISABLED', async () => {
     const { repo, router } = setup();
     const u = firstUser(seedUsers(repo, 1));
-    await callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' } }, adminCtx);
+    await callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' }, expected_version: 0 }, adminCtx);
     await expectAppError(
-      callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' } }, adminCtx),
+      callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' }, expected_version: 1 }, adminCtx),
       'USER_ALREADY_DISABLED',
     );
   });
@@ -244,7 +246,7 @@ describe('边界', () => {
     const { repo, router } = setup();
     const u = firstUser(seedUsers(repo, 1));
     await expectAppError(
-      callProc(router.updateStatus, { id: u.id, body: { status: 'active' } }, adminCtx),
+      callProc(router.updateStatus, { id: u.id, body: { status: 'active' }, expected_version: 0 }, adminCtx),
       'USER_ALREADY_ACTIVE',
     );
   });
@@ -254,7 +256,7 @@ describe('边界', () => {
     await expectAppError(
       callProc(
         router.updateStatus,
-        { id: '00000000-0000-4000-8000-000000000099', body: { status: 'disabled' } },
+        { id: '00000000-0000-4000-8000-000000000099', body: { status: 'disabled' }, expected_version: 0 },
         adminCtx,
       ),
       'USER_NOT_FOUND',
@@ -267,7 +269,7 @@ describe('边界', () => {
       makeUser(99, { id: ADMIN_ID, name: 'admin', email: 'admin@example.com' }),
     );
     await expectAppError(
-      callProc(router.updateStatus, { id: ADMIN_ID, body: { status: 'disabled' } }, adminCtx),
+      callProc(router.updateStatus, { id: ADMIN_ID, body: { status: 'disabled' }, expected_version: 0 }, adminCtx),
       'USER_DISABLE_SELF_FORBIDDEN',
     );
   });
@@ -283,7 +285,7 @@ describe('边界', () => {
       }),
     );
     await expectAppError(
-      callProc(router.updateStatus, { id: ADMIN_ID, body: { status: 'disabled' } }, adminCtx),
+      callProc(router.updateStatus, { id: ADMIN_ID, body: { status: 'disabled' }, expected_version: 0 }, adminCtx),
       'USER_DISABLE_SELF_FORBIDDEN',
     );
   });
@@ -346,7 +348,7 @@ describe('权限 · SEC-002', () => {
     await expectAppError(
       callProc(
         router.updateStatus,
-        { id: '00000000-0000-4000-8000-000000000001', body: { status: 'disabled' } },
+        { id: '00000000-0000-4000-8000-000000000001', body: { status: 'disabled' }, expected_version: 0 },
         userCtx,
       ),
       'FORBIDDEN',
@@ -365,7 +367,7 @@ describe('权限 · SEC-002', () => {
     );
     const result = await callProc(
       router.updateStatus,
-      { id: ADMIN_ID, body: { status: 'active' } },
+      { id: ADMIN_ID, body: { status: 'active' }, expected_version: 0 },
       adminCtx,
     );
     expect(result.status).toBe('active');
@@ -383,7 +385,7 @@ describe('状态机 · active → disabled → active 全路径', () => {
 
     const afterDisable = await callProc(
       router.updateStatus,
-      { id: u.id, body: { status: 'disabled' } },
+      { id: u.id, body: { status: 'disabled' }, expected_version: 0 },
       adminCtx,
     );
     expect(afterDisable.status).toBe('disabled');
@@ -392,7 +394,7 @@ describe('状态机 · active → disabled → active 全路径', () => {
 
     const afterEnable = await callProc(
       router.updateStatus,
-      { id: u.id, body: { status: 'active' } },
+      { id: u.id, body: { status: 'active' }, expected_version: 1 },
       adminCtx,
     );
     expect(afterEnable.status).toBe('active');
@@ -405,14 +407,14 @@ describe('状态机 · active → disabled → active 全路径', () => {
     const u = firstUser(seedUsers(repo, 1));
 
     await expectAppError(
-      callProc(router.updateStatus, { id: u.id, body: { status: 'active' } }, adminCtx),
+      callProc(router.updateStatus, { id: u.id, body: { status: 'active' }, expected_version: 0 }, adminCtx),
       'USER_ALREADY_ACTIVE',
     );
 
-    await callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' } }, adminCtx);
+    await callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' }, expected_version: 0 }, adminCtx);
 
     await expectAppError(
-      callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' } }, adminCtx),
+      callProc(router.updateStatus, { id: u.id, body: { status: 'disabled' }, expected_version: 1 }, adminCtx),
       'USER_ALREADY_DISABLED',
     );
   });
