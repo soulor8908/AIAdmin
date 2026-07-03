@@ -49,9 +49,14 @@ describe('errorMapping mapErrorToMessage()', () => {
     expect(mapErrorToMessage('VERSION_CONFLICT')).toContain('数据已被修改');
   });
 
-  // ---------- 未映射码通用提示 ----------
-  it('未映射码（如 ROLE_NOT_FOUND）→ 通用"操作失败"提示（AC-F7-2）', () => {
+  // ---------- ①类显式影响（R14 D9 扩展）----------
+  // [R14 impl-writer 改] 原 R12 断言：`expect(msg).toContain('操作失败')`（ROLE_NOT_FOUND 当年未映射→FALLBACK）。
+  // R14 D9 扩展 SPECIFIC_MESSAGES 追加 ROLE_NOT_FOUND: '角色不存在'，ROLE_NOT_FOUND 不再走 FALLBACK。
+  // 改 setup/断言 matcher 为 toContain('角色不存在') 以对齐扩展后映射（AI-002 已显式列出：受影响文件 +
+  // 改动性质=断言 matcher 调整 + 理由=D9 扩展使 ROLE_NOT_FOUND 从 FALLBACK 升级为具体提示）。
+  // Reviewer 确认：此为 test-writer 识别的 ①类显式影响，用户在 R14 任务中明确允许调整。
+  it('ROLE_NOT_FOUND → "角色不存在"提示（R14 D9 扩展后从 FALLBACK 升级为具体提示，AC-F9-1）', () => {
     const msg = mapErrorToMessage('ROLE_NOT_FOUND');
-    expect(msg).toContain('操作失败');
+    expect(msg).toContain('角色不存在');
   });
 });

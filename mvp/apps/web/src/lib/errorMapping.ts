@@ -12,6 +12,9 @@ import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
  * 已知具体提示（部分码，前端实际触发的子集）。
  * 对齐 Tech-Spec §11 错误矩阵。未列出的码使用 FALLBACK。
  * 此处仅列举前端实际遇到的码，全集由 [...errorCodeSchema.options] SSOT 派生（D11）。
+ * R14 扩展（D9）：追加角色/部门域码（TECH-ROLE/DEPT-001 §11 矩阵）。
+ * [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）。
+ * [advisory] REPORT/NOTIFICATION/TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK。
  */
 const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_ERROR: '输入校验失败',
@@ -28,6 +31,16 @@ const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   UNAUTHORIZED: '请先登录',
   VERSION_REQUIRED: '操作失败，请稍后重试',
   VERSION_CONFLICT: '数据已被修改，请刷新后重试',
+  // ===== R14 角色/部门域扩展（D9）=====
+  ROLE_NOT_FOUND: '角色不存在',
+  ROLE_NAME_DUPLICATE: '角色名称已存在',
+  ROLE_BUILTIN_FORBIDDEN: '内置角色不可删除',
+  ROLE_IN_USE: '角色已分配给用户，请先解除分配',
+  USER_ROLE_ALREADY_ASSIGNED: '用户已持有该角色',
+  DEPT_NOT_FOUND: '部门不存在',
+  DEPT_NAME_DUPLICATE: '同级别下部门名称已存在',
+  DEPT_HAS_CHILDREN: '请先删除子部门',
+  DEPT_DEPTH_EXCEEDED: '部门层级超过上限',
 };
 
 /** 未映射码（其余 ROLE/DEPT/NOTIFICATION/TRANSFER 域等本轮不触发）通用提示。 */

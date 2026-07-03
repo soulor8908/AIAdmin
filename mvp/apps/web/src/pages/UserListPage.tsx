@@ -23,6 +23,7 @@ import { useAuth } from '../auth/AuthContext.js';
 import { ErrorBanner } from '../components/ErrorBanner.js';
 import { UserRow } from '../components/UserRow.js';
 import { CreateUserModal } from '../components/CreateUserModal.js';
+import { UserRolesPanel } from '../components/UserRolesPanel.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** 前端固定 pageSize=20（D14，不依赖 schema 缺省 10）。 */
@@ -39,6 +40,8 @@ export function UserListPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // D24：角色分配面板 modal 状态（目标用户 id，null 表示面板关闭）
+  const [rolesPanelUserId, setRolesPanelUserId] = useState<string | null>(null);
 
   // 列表加载：依赖 page + statusFilter，首次及状态变化均触发（AC-F2-1/2/3/4）
   useEffect(() => {
@@ -125,6 +128,15 @@ export function UserListPage(): JSX.Element {
     refresh();
   }
 
+  /**
+   * D24：行内"角色"按钮点击 → 弹 UserRolesPanel modal（设置目标 userId）。
+   * 角色分配/移除由 UserRolesPanel 内部处理（类型派生 toggle，不调 safeParse）。
+   */
+  function handleToggleRoles(user: User): void {
+    setError(null);
+    setRolesPanelUserId(user.id);
+  }
+
   return (
     <div>
       <header>
@@ -170,7 +182,12 @@ export function UserListPage(): JSX.Element {
           </thead>
           <tbody>
             {items.map((u) => (
-              <UserRow key={u.id} user={u} onToggleStatus={handleToggleStatus} />
+              <UserRow
+                key={u.id}
+                user={u}
+                onToggleStatus={handleToggleStatus}
+                onToggleRoles={handleToggleRoles}
+              />
             ))}
           </tbody>
         </table>
@@ -197,6 +214,13 @@ export function UserListPage(): JSX.Element {
 
       {showCreateModal && (
         <CreateUserModal onClose={() => setShowCreateModal(false)} onCreated={handleCreated} />
+      )}
+
+      {rolesPanelUserId && (
+        <UserRolesPanel
+          userId={rolesPanelUserId}
+          onClose={() => setRolesPanelUserId(null)}
+        />
       )}
     </div>
   );
