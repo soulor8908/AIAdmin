@@ -51,6 +51,30 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 估算测试影响面时，区分 spawn-based vs in-process 两种 embedding 模式（R11 S-3）
 - 涉及安全域时，显式标注 PII/敏感字段清单，明确哪些不可出现在响应输出
 - PRD status 仅当无 BLOCKING 未决项时才设为 decided
+上下文文件清单（最小上下文包，R14 上下文效率优化）：
+1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+2. 再读以下必需文件：
+   - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项，替代全量 retro）
+   - apps/api/src/server.ts（既有路由表，R10 S-2 核验新增端点非覆盖既有）
+   - .trae/rules/security/pii.md（PII 标注规则，SEC-003a/003b 边界）
+   - .trae/rules/architecture/layering.md（架构约束，ARCH-001/002/003）
+3. 禁止读取（减少无效 I/O，BA 不读代码）：
+   - apps/api/src/service/、repository/、domain/、router/（实现层，BA 不读代码）
+   - apps/web/src/（前端实现层）
+   - apps/api/test/、apps/web/test/（测试代码）
+   - packages/contracts/src/schemas/*.ts（契约是 Tech Lead 阶段产物，BA 不预定义）
+   - docs/spec/*.tech.md（Tech-Spec 是下游产物）
+规则内化（BA 最少，只须知道架构约束 + PII 标注，避免运行时读取 .trae/rules/）：
+- ARCH-001：四层单向依赖（router→service→repository→domain），PRD 不预设反向调用
+- ARCH-002：contracts 纯净层（只 Zod schema + z.infer），PRD 不要求 contracts 含业务逻辑
+- ARCH-003：跨层只经契约，PRD 不要求前端直连后端
+- SEC-003a：响应输出 schema 须 .strict()，PRD 须标注哪些字段可输出
+- SEC-003b：错误消息不回显他人 PII，PRD 须标注 PII 字段清单
+- AI-003：advisory 偏离须反向同步 Spec，PRD 须显式标记 [BLOCKING] 不确定项
+- AI-007：验收标准 Given/When/Then，须端到端可验证
+- D5：Bearer 鉴权五守卫，PRD 须标注哪些路由 public
+- D7：PII 脱敏（如 email ab***@domain），PRD 须标注哪些字段须脱敏
+- D9：审计 append-only，PRD 须标注哪些操作须埋点
 门禁 G1：字段+验收非空 + BLOCKING 项已拍板
 ```
 
@@ -70,6 +94,34 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 不改 service/repo/domain/router/server.ts（impl-writer 阶段）
 - Tech-Spec §3.2 表单校验复用清单须区分"自由文本表单"（须 safeParse，因有自由输入）与"类型派生操作"（TS 类型保证，schema 校验冗余，可不调或保留 defensive safeParse）。AC 措辞须精确限定为"自由文本输入表单"。（R12 S-1）
 - Tech-Spec §10 advisory 偏离预判须明确同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 §10 但须在 Review 报告记录。（R12 S-2）
+上下文文件清单（最小上下文包，R14 上下文效率优化）：
+1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+2. 再读以下必需文件：
+   - docs/prd/<domain>.md（BA 产出的 PRD，Tech Lead 的输入）
+   - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
+   - apps/api/src/server.ts（既有路由表，§1 覆盖范围核验）
+   - packages/contracts/src/schemas/<相关域>.ts（既有契约，避免重名/重复定义）
+   - apps/api/src/errors.ts（错误码映射 SSOT，新增码须四处处同步）
+   - .trae/rules/ai-behavior/spec-first.md（AI-001~007，含 AI-005 SSOT 派生约束）
+3. 禁止读取（减少无效 I/O，Tech Lead 不读测试/实现）：
+   - apps/api/test/、apps/web/test/（测试是 test-writer 阶段产物）
+   - apps/api/src/service/、repository/、domain/、router/（实现是 impl-writer 阶段产物，Tech Lead 只设计不实现）
+   - apps/web/src/（前端实现层，仅通过 ARCH-003 约束前端，不读实现）
+   - docs/review/*.md（Review 是下游产物）
+规则内化（Tech Lead 中等，须知道契约约束 + 错误码 + advisory 边界，避免运行时读取 .trae/rules/）：
+- ARCH-001：四层单向依赖，Tech-Spec 须按四层组织实现提示
+- ARCH-002：contracts 纯净层，只导出 Zod schema + z.infer，禁含业务逻辑
+- ARCH-003：跨层只经契约，前端禁连 apps/api/src/**
+- CODE-001：禁 any，Tech-Spec 类型须完整
+- CODE-004：Zod schema 命名须带 Schema 后缀
+- SEC-001：路由默认受保护，public 须带注释
+- SEC-002：越权校验在 service 层，Tech-Spec 须标注每个 public 方法的鉴权
+- SEC-003a：输出 schema 须 .strict()
+- AI-005：跨域枚举断言用 [...schema.options]，禁硬编码全集
+- AI-006：§9 受影响测试清单两类标注（①显式+隐式 + ②签名 + ③新增）
+- META-003/004：声明即实现 + 实现即声明，Spec 与代码双向绑定
+- D1：乐观锁 versioned=true + If-Match→expected_version + VERSION_CONFLICT(409)
+- D3：ETag cacheable=true + If-None-Match→304
 门禁 G3：tsc 编译 + Spec 与契约 1:1 + 边界覆盖 + 受影响清单两类完整
 ```
 
@@ -89,6 +141,32 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 输出 schema 用 .strict() 断言拒绝多余字段（SEC-003a）
 - AC 覆盖矩阵自检——每条 AC 须有至少 1 个测试用例直接覆盖，未覆盖的显式列出 reason（如"实现正确但缺直接测试"/"组合场景未单独测"）。交付报告附 AC↔测试用例覆盖矩阵表。（R12 S-3）
 - 组合场景测试——当 AC 涉及多操作组合（如筛选+分页、启停双向、登出 action），须单独测组合场景，不可仅分别测单一操作后假设组合正确。（R12 S-3）
+上下文文件清单（最小上下文包，R14 上下文效率优化）：
+1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+2. 再读以下必需文件：
+   - docs/prd/<domain>.md（AC 来源，AI-007 端到端验收依据）
+   - docs/spec/<domain>.tech.md（§9 受影响清单 + 边界定义 + 错误码）
+   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，断言依据）
+   - apps/api/src/errors.ts（错误码 SSOT，断言依据）
+   - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
+3. 禁止读取（减少无效 I/O，test-writer 不读实现）：
+   - apps/api/src/service/、repository/、domain/、router/（实现是 impl-writer 阶段产物，test-writer 须基于 Spec+契约写测试，不可读实现）
+   - apps/web/src/（前端实现层）
+   - docs/review/*.md（Review 是下游产物）
+   - docs/prd/*.md 中非本域的 PRD（仅读本域 PRD 的 AC）
+规则内化（test-writer 须知道测试约束 + SSOT 派生 + AC 覆盖，避免运行时读取 .trae/rules/）：
+- AI-002：测试先行，断言级红（非导入级红），至少 N 条因逻辑未实现而失败
+- AI-005：跨域枚举用 [...schema.options].toContain()，禁硬编码全集
+- AI-006：反向核实 Tech Lead §9 清单，发现清单外影响点须显式列出
+- AI-007：AC 须端到端可验证，每条 AC 至少 1 个测试用例直接覆盖
+- SEC-003a：输出 schema 用 .strict() 断言拒绝多余字段
+- ARCH-001：测试可跨层调用 router（端到端），但禁假设反向依赖
+- CODE-001：测试代码禁 any
+- META-004：实现即声明，测试须覆盖 Spec 声明的全部边界
+- D1：乐观锁测试须覆盖 VERSION_REQUIRED(400) + VERSION_CONFLICT(409)
+- D3：ETag 测试须覆盖 200+ETag + 304(空体)
+- D5：Bearer 鉴权五守卫测试须覆盖 G1~G5（UNAUTHORIZED/TOKEN_INVALID/TOKEN_EXPIRED/TOKEN_REVOKED）
+- D7：PII 脱敏测试须覆盖脱敏态 vs 存储态（redactedAuditLogSchema vs auditLogSchema）
 门禁 G4：编排者实跑 vitest 确认断言级红（非导入级红）
 ```
 
@@ -106,6 +184,36 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 断言 matcher 改动(如 toEqual→toContain) 须特别标注，由 Reviewer 判定
 - advisory 偏离反向同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 Spec §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 Spec §10 但须在交付报告列出。（R12 S-2）
 - 对类型派生操作（如 toggle，值经 TS 类型派生非自由输入）不调 schema.safeParse 时，须显式标注 [约束] 偏离 + 反向同步 Spec §3.2（注明"类型派生操作，schema 校验冗余"），不可静默偏离。（R12 S-1）
+上下文文件清单（最小上下文包，R14 上下文效率优化）：
+1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+2. 再读以下必需文件：
+   - docs/spec/<domain>.tech.md（Tech-Spec，impl-writer 的 SSOT，AI-001）
+   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，类型派生依据）
+   - apps/api/test/<domain>.test.ts（已就绪的测试，impl-writer 须使其转绿，禁改断言）
+   - apps/api/src/errors.ts（错误码映射 SSOT）
+   - apps/api/src/server.ts（路由表，需追加新路由）
+   - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
+3. 禁止读取（减少无效 I/O，impl-writer 不读 PRD）：
+   - docs/prd/*.md（PRD 是 BA 产物，impl-writer 须基于 Tech-Spec 实现，不可读 PRD 以免越界发挥，AI-003）
+   - docs/review/*.md（Review 是下游产物）
+   - apps/web/test/（前端测试，非本域）
+   - 历史 retro 明细（已由 lessons-learned.md 索引替代）
+规则内化（impl-writer 须知道实现约束 + 命名 + 错误处理，避免运行时读取 .trae/rules/）：
+- AI-001：先读 Tech-Spec 再写码（Tech-Spec 是 SSOT）
+- AI-002：禁止修改测试断言，只可改 setup/import 路径
+- AI-003：advisory 偏离须反向同步 Spec §10，[约束] 偏离须显式标注+Reviewer 确认
+- AI-004：每次改动必跑三件套（typecheck + lint:rules + test）
+- ARCH-001：四层单向依赖，禁反向 import（domain 不依赖 router）
+- ARCH-002：contracts 纯净层，禁在 contracts 加业务逻辑
+- ARCH-003：前端禁连 apps/api/src/**
+- CODE-001：禁 any
+- CODE-002：禁吞错（catch 须处理或重抛）
+- CODE-003：禁 eval 与动态执行（eval/Function/new Function）
+- CODE-004：Zod schema 命名带 Schema 后缀
+- SEC-001：路由默认受保护，public 须带注释
+- SEC-002：越权校验在 service 层
+- SEC-003a：输出 schema 须 .strict()
+- META-003/004：声明即实现 + 实现即声明（Spec 与代码双向绑定）
 门禁 G5：三件套全绿（typecheck + lint:rules + test 全转绿）
 ```
 
@@ -128,6 +236,35 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - AC-ARCH-4（表单校验复用 Zod schema）partial 判定依据——须区分"自由文本表单"（须 safeParse，未调判 partial）与"类型派生操作"（TS 类型保证，safeParse 冗余，未调可判合理偏离须补同步）。partial 判定须注明根因（措辞未区分 vs 实际遗漏）。（R12 S-1）
 - CODE 扫描器前端覆盖核对——当 apps/web 存在时，确认 allTs 已含 apps/web/src + apps/web/test（R13 S-4 固化后已覆盖）；若扫描器未覆盖，须手动 grep 核对 CODE-001/002/003/AI-005 在前端的合规性。（R12 S-4）
 - verdict=block 时给出精确修复路径（文件:行 + 修复动作 + 影响面）
+上下文文件清单（最小上下文包，R14 上下文效率优化）：
+1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+2. 再读以下必需文件：
+   - docs/prd/<domain>.md（PRD AC，逐条核对依据，AI-007）
+   - docs/spec/<domain>.tech.md（Tech-Spec，advisory/[约束] 偏离核对依据）
+   - docs/retro/lessons-learned.md（已固化教训，核对是否重蹈覆辙）
+   - .trae/rules/ 全部规则文件（SEC/ARCH/CODE/AI/META 逐条核对，Reviewer 最全）
+   - git diff（本次改动范围，按需读改动文件，不读全量代码）
+3. 禁止读取（减少无效 I/O，Reviewer 按需读 git diff 范围）：
+   - 未改动的实现文件（按需读 git diff 范围，非全量代码扫描）
+   - apps/web/test/（除非本轮涉及前端测试改动）
+   - 历史 retro 明细 roundN-retro.md（已由 lessons-learned.md 索引替代，仅在索引指向特定 round 时按需读取）
+规则内化（Reviewer 最全，须逐条核对 SEC/ARCH/CODE/AI/META，避免运行时读取 .trae/rules/）：
+- AI-001：核对 impl-writer 是否先读 Spec 再写码
+- AI-002：核对测试断言未被修改（仅 setup/import 可改）
+- AI-003：核对 advisory 偏离是否反向同步 Spec §10
+- AI-004：核对三件套是否全绿
+- AI-005：核对跨域枚举断言是否用 SSOT 派生（[...schema.options]）
+- AI-006：核对 §9 受影响清单完整性（①显式+隐式 + ②签名 + ③新增）
+- AI-007：核对 PRD AC 逐条对齐（✅对齐/⚠️偏离/❌未实现）
+- ARCH-001：核四层单向依赖（反向 import，check-rules.mjs + 手动核查）
+- ARCH-002：核 contracts 纯净层（无业务逻辑）
+- ARCH-003：核跨层只经契约（前端禁连 apps/api/src/**）
+- CODE-001/002/003/004：核禁 any / 禁吞错 / 禁 eval/Function / Zod schema 命名带 Schema 后缀
+- SEC-001：核路由默认受保护（声明式 auth 元数据）
+- SEC-002：核越权校验在 service 层（逐个 public 方法独立核对，R11 S-1 盲区）
+- SEC-003a/003b：核输出 schema .strict() + 错误消息/日志 PII 边界
+- META-001/003/004：核规则可校验 + 声明即实现 + 实现即声明
+- D1/D3/D5：核乐观锁（If-Match+VERSION_CONFLICT）+ ETag（304）+ Bearer 鉴权五守卫
 门禁 G6：零 blocker 方可合入；blocker 修复后重跑 G5+G6（G6.1）
 ```
 
