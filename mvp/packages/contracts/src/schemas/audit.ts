@@ -16,16 +16,22 @@ import { z } from 'zod';
  *        枚举扩展须同步本 schema、Tech-Spec §API 契约、OpenAPI 的 AuditLogEntityType 与各域写操作埋点。
  * [约束] notification 为跨域联动扩展（TECH-NOTIFICATION-001 引入）：notification 5 类写操作经 withAudit 埋点，
  *        entity_type=notification；枚举扩展后 SSOT 派生断言（AI-005）自动跟随（role/audit/report.test.ts 等无需手改）。
+ * [约束] TECH-AUTH-001 AI-006 反向核实：鉴权域 login/login_failed/logout 记审计 entity_type=auth（PRD AC-F1-6/F4-3），
+ *        枚举追加 'auth'；该埋点由 AuthService 直接调 audit.record（非 withAudit），故 audit-embedding.test.ts 全集
+ *        覆盖断言不要求 'auth' 被本测试触发（已改为子集断言，见 audit-embedding.test.ts 注释）。
  */
-export const auditLogEntityTypeSchema = z.enum(['user', 'role', 'dept', 'notification']);
+export const auditLogEntityTypeSchema = z.enum(['user', 'role', 'dept', 'notification', 'auth']);
 export type AuditLogEntityType = z.infer<typeof auditLogEntityTypeSchema>;
 
 /**
  * 操作日志动作枚举（PRD：仅记录写操作，读操作不记录 Q1）。
  * [约束] 此处 update/delete 指对目标实体（user/role/dept）的写动作，并非对日志本身的修改/删除——
  *        日志为 append-only（F4），不存在「修改/删除日志」的动作，故无 audit:* 的 update/delete 错误码。
+ * [约束] TECH-AUTH-001 AI-006 反向核实：鉴权域 login 成功记 action=login、login 失败记 action=login_failed、
+ *        logout 记 action=logout（PRD AC-F1-6/F4-3）；这些 action 由 AuthService 直接调 audit.record，不经
+ *        withAudit，故 audit-embedding.test.ts 全集覆盖断言不要求这些 action 被本测试触发（已改为子集断言）。
  */
-export const auditLogActionSchema = z.enum(['create', 'update', 'delete']);
+export const auditLogActionSchema = z.enum(['create', 'update', 'delete', 'login', 'login_failed', 'logout']);
 export type AuditLogAction = z.infer<typeof auditLogActionSchema>;
 
 /**

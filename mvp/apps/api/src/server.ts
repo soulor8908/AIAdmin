@@ -10,8 +10,10 @@
 // - 零新 HTTP 框架依赖（Node 内置 http），仅加 tsx 执行 TS。
 // - 声明式路由注册表：每条 route = { method, pattern, buildInput, ...procedure }，
 //   procedure 的 inputSchema/handler/auth 直接展开复用，无重复声明。
-// - 鉴权桩：从 X-User-Id / X-User-Role header 构造 Ctx（MVP 无真实 JWT），
-//   缺省为 admin（方便演示）。生产应替换为真实认证中间件。
+// - 鉴权（TECH-AUTH-001 D3/D8）：buildCtx 从 Authorization: Bearer <token> 验签构造 Ctx
+//   （G1 缺失→UNAUTHORIZED；G2 非 Bearer→TOKEN_INVALID；G3 验签失败→TOKEN_INVALID；
+//    G4 exp≤now→TOKEN_EXPIRED；G5 黑名单→TOKEN_REVOKED）。public 路由（login）跳过验签。
+//   Ctx 接口不变（{ user: { id, role } }），service 层零改动（ARCH-001 闭合核心）。
 // - 错误：AppError → errorCodeToHttpStatus；Zod 失败 → 400；其余 → 500。
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
@@ -36,6 +38,7 @@ import { RoleRepository } from './repository/role.js';
 import { DepartmentRepository } from './repository/dept.js';
 import { AuditLogRepository } from './repository/audit.js';
 import { NotificationRepository } from './repository/notification.js';
+import { TokenBlacklistRepository } from './repository/token-blacklist.js';
 import { UserService } from './service/user.js';
 import { RoleService } from './service/role.js';
 import { DepartmentService } from './service/dept.js';
@@ -43,7 +46,10 @@ import { AuditLogService } from './service/audit.js';
 import { ReportService } from './service/report.js';
 import { NotificationService } from './service/notification.js';
 import { TransferService } from './service/transfer.js';
+import { AuthService } from './service/auth.js';
+import { verifyToken, hashPassword } from './domain/auth.js';
 import { createUserRouter, updateUserStatusProcedureInputSchema } from './router/user.js';
+import { createAuthRouter } from './router/auth.js';
 import { createRoleRouter, roleDetailProcedureInputSchema, roleDeleteProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './router/role.js';
 import { createDeptRouter, deptDeleteProcedureInputSchema } from './router/dept.js';
 import { createAuditRouter } from './router/audit.js';
@@ -61,11 +67,19 @@ import type { Ctx } from './context.js';
 import type { Procedure } from './router/user.js';
 
 // ============ 依赖组装（生产应替换为 DI 容器 / 真实 DB 连接） ============
+// TECH-AUTH-001 D10：AUTH_SECRET 缺省值 + console.warn（生产须通过环境变量注入强随机密钥）
+const AUTH_SECRET = process.env.AUTH_SECRET ?? 'dev-auth-secret-do-not-use-in-prod';
+if (!process.env.AUTH_SECRET) {
+  console.warn('[server] AUTH_SECRET 未设置，使用开发缺省值。生产环境须通过 AUTH_SECRET 环境变量注入强随机密钥。');
+}
+
 const userRepo = new UserRepository();
 const roleRepo = new RoleRepository();
 const deptRepo = new DepartmentRepository();
 const auditRepo = new AuditLogRepository();
 const notificationRepo = new NotificationRepository();
+// TECH-AUTH-001 D4：token 黑名单（内存 Set，logout 吊销；进程重启清空，MVP 可接受）
+const tokenBlacklistRepo = new TokenBlacklistRepository();
 
 const userService = new UserService(userRepo);
 const roleService = new RoleService(roleRepo, userRepo);
@@ -73,6 +87,8 @@ const deptService = new DepartmentService(deptRepo, userRepo);
 const auditService = new AuditLogService(auditRepo);
 const reportService = new ReportService(auditRepo);
 const notificationService = new NotificationService(userService, notificationRepo);
+// TECH-AUTH-001：AuthService 注入共享 auditService（login/logout 直接记审计，不经 withAudit）
+const authService = new AuthService(userService, userRepo, tokenBlacklistRepo, auditService, AUTH_SECRET);
 
 // 共享 auditService 聚合所有写操作旁路日志（advisory：router 缺省会自建独立实例，
 // 此处显式注入共享实例以聚合日志到同一 auditRepo，便于 report 聚合演示）
@@ -84,6 +100,7 @@ const reportRouter = createReportRouter(reportService);
 const notificationRouter = createNotificationRouter(notificationService, auditService);
 const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
 const transferRouter = createTransferRouter(transferService, auditService);
+const authRouter = createAuthRouter(authService);
 
 // ============ Seed（演示数据，让 list 不为空） ============
 const ADMIN_USER_ID = '00000000-0000-4000-8000-000000000001';
@@ -91,6 +108,8 @@ const DEMO_USER_ID = '00000000-0000-4000-8000-000000000002';
 seedDemoData();
 
 function seedDemoData(): void {
+  // TECH-AUTH-001 D11 / AC-F5-2：幂等 —— admin 已存在则跳过全部 seed（重复启动不重复 insert）
+  if (userRepo.findByEmail('admin@example.com')) return;
   const now = new Date().toISOString();
   userRepo.insert({
     id: ADMIN_USER_ID,
@@ -102,6 +121,8 @@ function seedDemoData(): void {
     updated_at: now,
     // [约束] TECH-OPTIMISTIC-LOCKING-001 D8：seed 数据 version=0。
     version: 0,
+    // TECH-AUTH-001 D11：seed admin 凭据 admin@example.com/admin123（scrypt 哈希存储）
+    password_hash: hashPassword('admin123'),
   });
   userRepo.insert({
     id: DEMO_USER_ID,
@@ -121,6 +142,8 @@ type MatchCtx = {
   path: Record<string, string>;
   query: URLSearchParams;
   body: unknown;
+  // TECH-AUTH-001：logout buildInput 从 Authorization header 提取 token 注入 input
+  headers: IncomingMessage['headers'];
 };
 
 type Route = {
@@ -187,6 +210,23 @@ function queryToObject(query: URLSearchParams): Record<string, unknown> {
 }
 
 const routes: Route[] = [
+  // ---- auth（TECH-AUTH-001）----
+  // login：public 路由，不携带 token 即可访问（AC-F1-5）；buildCtx 跳过验签返回 anonCtx
+  defineRoute('POST', '/v1/auth/login', (m) => m.body, authRouter.login),
+  // logout：admin 路由，须携带有效 Bearer token（AC-F4-4）。
+  // buildInput 从 Authorization header 提取 token 注入 input（buildCtx 已验签同一 token 构造 Ctx）
+  defineRoute('POST', '/v1/auth/logout', (m) => {
+    const authHeader = m.headers['authorization'] as string | undefined;
+    const token = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length).trim()
+      : '';
+    return { token };
+  }, {
+    input: authRouter.logout.input,
+    handler: authRouter.logout.handler,
+    auth: authRouter.logout.auth,
+  }),
+
   // ---- user ----
   defineRoute('GET', '/v1/users', (m) => queryToObject(m.query), userRouter.list, false, true, listEtag),
   defineRoute('POST', '/v1/users', (m) => m.body, userRouter.create),
@@ -351,17 +391,53 @@ function matchPattern(pattern: string, pathname: string): Record<string, string>
   return params;
 }
 
-// ============ Ctx 构造（鉴权桩） ============
-function buildCtx(req: IncomingMessage): Ctx {
-  // MVP 桩：从 header 读 user；缺省为 admin（演示用）。生产应替换为 JWT/session 校验。
-  const id = req.headers['x-user-id'] as string | undefined;
-  const role = req.headers['x-user-role'] as string | undefined;
-  return {
-    user: {
-      id: id && id.trim() ? id : ADMIN_USER_ID,
-      role: role === 'user' ? 'user' : 'admin',
-    },
-  };
+// ============ Ctx 构造（TECH-AUTH-001 D3/D8 Bearer 验签） ============
+/**
+ * 从 Authorization: Bearer <token> 验签构造 Ctx（D3 来源切换，Ctx 接口不变）。
+ * 守卫顺序（D8 / D9）：
+ *   public 路由 → 跳过验签，返回 anonCtx（login 路由不携带 token 即可访问，AC-F1-5）
+ *   G1 缺失 Authorization header → UNAUTHORIZED
+ *   G2 非 Bearer scheme → TOKEN_INVALID
+ *   G3 验签失败（签名错/格式错/payload 非法）→ TOKEN_INVALID
+ *   G4 exp ≤ now → TOKEN_EXPIRED
+ *   G5 黑名单命中 → TOKEN_REVOKED
+ * [约束] verifyToken 仅验签 + 解析 payload，不检查过期（G4 在本函数完成，对齐 domain/auth.ts 注释）。
+ * @throws AppError（UNAUTHORIZED / TOKEN_INVALID / TOKEN_EXPIRED / TOKEN_REVOKED）
+ */
+function buildCtx(req: IncomingMessage, routeAuth: 'admin' | 'public'): Ctx {
+  // public 路由（login）：不携带 token 即可访问，返回 anonCtx（service 层 login 忽略 ctx.user）
+  if (routeAuth === 'public') {
+    return { user: { id: '', role: 'user' } };
+  }
+  // G1: 缺失 Authorization header
+  const authHeader = req.headers['authorization'];
+  if (authHeader === undefined || (typeof authHeader === 'string' && authHeader.trim() === '')) {
+    throw new AppError('UNAUTHORIZED', '缺失 Authorization header');
+  }
+  const headerStr = Array.isArray(authHeader) ? authHeader[0] ?? '' : authHeader;
+  // G2: 非 Bearer scheme
+  if (!headerStr.startsWith('Bearer ')) {
+    throw new AppError('TOKEN_INVALID', 'Authorization 须为 Bearer scheme');
+  }
+  const token = headerStr.slice('Bearer '.length).trim();
+  if (!token) {
+    throw new AppError('TOKEN_INVALID', 'token 为空');
+  }
+  // G3: 验签（verifyToken 不检查过期，仅签名 + payload 结构）
+  const verified = verifyToken(token, AUTH_SECRET);
+  if (!verified.ok) {
+    throw new AppError('TOKEN_INVALID', 'token 验签失败');
+  }
+  // G4: 过期判定（exp ≤ now）
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (verified.payload.exp <= nowSec) {
+    throw new AppError('TOKEN_EXPIRED', 'token 已过期');
+  }
+  // G5: 黑名单（logout 吊销）
+  if (tokenBlacklistRepo.has(token)) {
+    throw new AppError('TOKEN_REVOKED', 'token 已被吊销');
+  }
+  return { user: { id: verified.payload.sub, role: verified.payload.role } };
 }
 
 // ============ 请求处理 ============
@@ -436,7 +512,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         version: '0.1.0',
         endpoints: routes.map((r) => `${r.method.padEnd(6)} ${r.pattern}`),
         health: '/health',
-        auth_hint: 'MVP 桩：通过 X-User-Id / X-User-Role header 模拟身份，缺省为 admin',
+        auth_hint: 'Bearer token 鉴权：POST /v1/auth/login 获取 token，请求携带 Authorization: Bearer <token>',
       });
     }
     return;
@@ -450,8 +526,12 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const { route, pathParams } = matched;
 
   try {
+    // TECH-AUTH-001 D3/D8：buildCtx 在 buildInput/safeParse 之前执行 Bearer 验签（G1-G5）。
+    // public 路由（login）跳过验签返回 anonCtx；admin 路由验签失败抛 AppError（401 系列），
+    // 由 catch 块转 HTTP 响应。先于 safeParse 确保 AC-F4-4（无 token logout → 401 UNAUTHORIZED，非 400）。
+    const ctx = buildCtx(req, route.auth);
     const body = await readBody(req);
-    const rawInput = route.buildInput({ path: pathParams, query: url.searchParams, body });
+    const rawInput = route.buildInput({ path: pathParams, query: url.searchParams, body, headers: req.headers });
     // [约束] TECH-OPTIMISTIC-LOCKING-001 D18：versioned 路由在 safeParse 之前解析 If-Match header。
     // 缺失 → VERSION_REQUIRED(400)；格式非法 → VALIDATION_ERROR(400)；合法 → 注入 expected_version 到入参。
     let finalInput = rawInput;
@@ -477,7 +557,6 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       });
       return;
     }
-    const ctx = buildCtx(req);
     const result = await route.handler(parsed.data, ctx);
     // void 返回（delete/remove）→ 204；否则 200
     if (result === undefined) {
@@ -530,7 +609,7 @@ server.listen(PORT, () => {
   console.log(`  │  http://localhost:${PORT}                        │`);
   console.log(`  │  health: GET /health                        │`);
   console.log(`  │  api dir: GET /                             │`);
-  console.log(`  │  auth (桩): X-User-Id / X-User-Role header  │`);
+  console.log(`  │  auth: Bearer token (POST /v1/auth/login)   │`);
   console.log(`  └─────────────────────────────────────────────┘\n`);
 });
 

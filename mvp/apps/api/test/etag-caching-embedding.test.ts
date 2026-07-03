@@ -26,18 +26,23 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 const TEST_PORT = 4000;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
-const ADMIN_HEADERS = {
-  'X-User-Id': '00000000-0000-4000-8000-000000000001',
-  'X-User-Role': 'admin',
-};
+// TECH-AUTH-001 D3：server.ts 已切换为 Bearer 验签，embedding 测试须 login 获取 token
+// （原 X-User-Id/X-User-Role header mock 不再被 buildCtx 接受）
+const AUTH_SECRET = 'test-etag-secret';
 const ALICE_ID = '00000000-0000-4000-8000-000000000002';
 
 let serverProcess: ChildProcess | undefined;
 let emailCounter = 0;
+let authToken: string | undefined;
+
+/** 返回 Bearer 鉴权 header（login 后填充；beforeAll 前为空）。 */
+function authHeaders(): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
 
 beforeAll(async () => {
   serverProcess = spawn('npx', ['tsx', 'apps/api/src/server.ts'], {
-    env: { ...process.env, PORT: String(TEST_PORT) },
+    env: { ...process.env, PORT: String(TEST_PORT), AUTH_SECRET },
     stdio: 'pipe',
     cwd: '/workspace/mvp',
   });
@@ -49,15 +54,32 @@ beforeAll(async () => {
     serverOutput += d.toString();
   });
   // 等待 server ready（轮询 /health）
+  let ready = false;
   for (let i = 0; i < 100; i++) {
     try {
       const res = await fetch(`${BASE_URL}/health`);
-      if (res.ok) return;
+      if (res.ok) {
+        ready = true;
+        break;
+      }
     } catch {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
-  throw new Error(`Server did not start. Server output:\n${serverOutput}`);
+  if (!ready) {
+    throw new Error(`Server did not start. Server output:\n${serverOutput}`);
+  }
+  // login 获取 Bearer token（seed admin 凭据 admin@example.com/admin123）
+  const loginRes = await fetch(`${BASE_URL}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'admin@example.com', password: 'admin123' }),
+  });
+  if (!loginRes.ok) {
+    throw new Error(`admin login failed (${loginRes.status}). Server output:\n${serverOutput}`);
+  }
+  const loginBody = (await loginRes.json()) as { token?: string };
+  authToken = loginBody.token;
 }, 30000);
 
 afterAll(async () => {
@@ -126,7 +148,7 @@ async function request(path: string, init: RequestInit = {}): Promise<HttpRespon
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...ADMIN_HEADERS,
+      ...authHeaders(),
       ...(init.headers as Record<string, string> | undefined),
     },
   });

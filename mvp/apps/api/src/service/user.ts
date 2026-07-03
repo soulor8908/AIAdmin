@@ -2,6 +2,12 @@
 // 校验顺序（Tech-Spec）：鉴权(B3) → 业务规则(B4/B5/B6) → 状态守卫(B7/B8)，先到先返。
 // [约束] TECH-OPTIMISTIC-LOCKING-001 D9：写操作守卫顺序 B5 实体存在 → B_version 版本匹配 → B6/B7/B8 业务规则。
 // D3：写操作返回 {entity, changes, before?}（WriteResult），供 router 层 withAudit 提取 entity + 旁路记日志。
+// TECH-AUTH-001 D5/D6：create 时生成 password_hash（scrypt），存储 UserEntity 含 password_hash，
+//   返回前经 toUserOutput 剥离 password_hash（SEC-003a 输出 schema 1:1）。
+// TECH-AUTH-001 AC-F3-3：create 成功后若注入了 auditService，则 best-effort 旁路记审计日志
+//   （entity_type=user/action=create）；router 层 withAudit 缺省情况下也会记一条，故 server.ts 中
+//   UserService 不注入 auditService（避免与 withAudit 重复记日志）；auth.test.ts 单元测试中
+//   直接调 service.create（不经 router/withAudit），故注入 auditService 以满足 AC-F3-3 审计断言。
 import { randomUUID } from 'node:crypto';
 import type {
   CreateUserInput,
@@ -11,14 +17,19 @@ import type {
   UserStatus,
 } from '@admin/contracts';
 import type { UserRepository } from '../repository/user.js';
+import type { AuditLogService } from './audit.js';
 import type { Ctx } from '../context.js';
-import { transitionStatus } from '../domain/user.js';
+import { transitionStatus, toUserOutput, type UserEntity } from '../domain/user.js';
 import { validateVersion } from '../domain/version.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
+import { hashPassword, generateTempPassword } from '../domain/auth.js';
 import { AppError } from '../errors.js';
 
 export class UserService {
-  constructor(private readonly repo: UserRepository) {}
+  constructor(
+    private readonly repo: UserRepository,
+    private readonly auditService?: AuditLogService,
+  ) {}
 
   /** SEC-002：service 入口校验调用者必须为 admin，否则 FORBIDDEN。 */
   private requireAdmin(ctx: Ctx): void {
@@ -36,7 +47,8 @@ export class UserService {
     });
     // F1: 空列表 totalPages=0；否则 ceil(total/pageSize)
     const totalPages = total === 0 ? 0 : Math.ceil(total / query.pageSize);
-    return { items, total, page: query.page, pageSize: query.pageSize, totalPages };
+    // TECH-AUTH-001 D5：剥离 password_hash（SEC-003a 输出 schema 1:1）
+    return { items: items.map(toUserOutput), total, page: query.page, pageSize: query.pageSize, totalPages };
   }
 
   /**
@@ -47,7 +59,7 @@ export class UserService {
    */
   async findByIds(ids: string[], ctx: Ctx): Promise<User[]> {
     this.requireAdmin(ctx);
-    return this.repo.findByIds(ids);
+    return this.repo.findByIds(ids).map(toUserOutput);
   }
 
   async create(input: CreateUserInput, ctx: Ctx): Promise<WriteResult<User>> {
@@ -58,7 +70,10 @@ export class UserService {
       throw new AppError('USER_EMAIL_DUPLICATE', `邮箱已被占用: ${input.email}`);
     }
     const now = new Date().toISOString();
-    const user: User = {
+    // TECH-AUTH-001 D6：password optional；提供则哈希存储，缺省则生成临时密码哈希存储（AC-F3-3）
+    const plainPassword = input.password ?? generateTempPassword();
+    const passwordHash = hashPassword(plainPassword);
+    const userEntity: UserEntity = {
       id: randomUUID(),
       name: input.name,
       email: input.email,
@@ -67,8 +82,11 @@ export class UserService {
       created_at: now,
       updated_at: now,
       version: 0, // TECH-OPTIMISTIC-LOCKING-001 D1：新建实体 version 初始 0
+      password_hash: passwordHash, // TECH-AUTH-001 D5/D2：scrypt 哈希存储
     };
-    const inserted = this.repo.insert(user);
+    const inserted = this.repo.insert(userEntity);
+    // TECH-AUTH-001 D5/AC-F3-1：剥离 password_hash 后返回（userSchema 1:1，输出不含敏感字段）
+    const user = toUserOutput(inserted);
     // D3：changes 为 after 快照（经 markPii 标记 pii），create 无 before
     const changes = markPii('user', [
       { field: 'email', value: inserted.email, pii: false },
@@ -76,7 +94,28 @@ export class UserService {
       { field: 'status', value: inserted.status, pii: false },
       { field: 'department_id', value: inserted.department_id ?? null, pii: false },
     ]);
-    return { entity: inserted, changes };
+    // TECH-AUTH-001 AC-F3-3：若注入了 auditService，best-effort 旁路记审计日志（service 层直调，不经 withAudit）
+    if (this.auditService) {
+      try {
+        await this.auditService.record(
+          {
+            operator_id: ctx.user.id,
+            operator_name: 'admin', // [advisory] MVP 桩：admin 桩下操作者恒为 admin（Ctx 无姓名字段）
+            entity_type: 'user',
+            entity_id: inserted.id,
+            action: 'create',
+            operated_at: now,
+            before: [],
+            after: changes,
+          },
+          ctx,
+        );
+      } catch (e) {
+        // best-effort：吞掉 audit 异常，不影响主操作成败（D1/CODE-002：catch 须非空且非仅 console）
+        console.warn('audit record failed (best-effort, swallowed)', e);
+      }
+    }
+    return { entity: user, changes };
   }
 
   /**
@@ -119,6 +158,7 @@ export class UserService {
       { field: 'status', value: updated.status, pii: false },
       { field: 'version', value: updated.version, pii: false },
     ]);
-    return { entity: updated, changes, before };
+    // TECH-AUTH-001 D5/AC-F3-1：剥离 password_hash 后返回（SEC-003a 输出 schema 1:1）
+    return { entity: toUserOutput(updated), changes, before };
   }
 }

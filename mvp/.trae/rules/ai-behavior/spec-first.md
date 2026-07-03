@@ -49,7 +49,8 @@ alwaysApply: true
   - 当 Tech-Spec 涉及既有 service/repository 的 public 方法签名变更（如返回类型从 `Promise<Entity>` 扩展为 `Promise<{entity, changes}>`），Tech Lead 必须额外 grep `apps/api/test/**/*.ts` 中消费该方法返回值/参数的断言点（如 `await service.create(...)` 后访问 `.xxx` 的行），纳入同一"受影响测试清单"章节。
   - 清单生成方式：grep 引用被改符号的测试文件（如改了 `permissionCodeSchema`，则 grep 所有 import/引用 `permissionCodeSchema` 的 `apps/api/test/**/*.ts`），列出文件 + 受影响的断言位置 + 需同步更新的方向（硬编码→派生 / 数据补齐 / 类型对齐）。
   - 清单分两类标注：①contracts 联动驱动（grep 命中）②apps/api 内部签名变更驱动（Tech Lead 手动分析）。两类均须覆盖，缺一记 blocker。
-  - test-writer 据此清单同步更新既有测试的断言数据；**test-writer 须反向核实清单完整性**——若发现清单外的影响点（如 Tech Lead 遗漏的签名变更影响），须在交付报告显式列出差异并修正，编排者据此判断清单准确性。
+  - **①类隐式影响子类（RETRO-ROUND11-001 S-2 反推）**：当 contracts 枚举扩展（如 errorCodeSchema/auditLogActionSchema/auditLogEntityTypeSchema 追加值）时，除 grep 显式引用被改符号的文件外，还须 grep `toEqual([...])` / `toStrictEqual([...])` 中期望值含枚举字面量的**全集断言**——这类断言在枚举扩展时必然失效，属隐式影响（语义耦合而非符号引用）。Tech Lead 须在 ①类清单中单列"隐式影响"子类，标注受影响文件 + 断言位置 + 同步方向（全集→子集 toContain，或更新期望值）。test-writer 须反向核实此类隐式影响是否被列出。
+  - test-writer 据此清单同步更新既有测试的断言数据；**test-writer 须反向核实清单完整性**——若发现清单外的影响点（如 Tech Lead 遗漏的签名变更影响，或枚举扩展导致的全集断言失效），须在交付报告显式列出差异并修正，编排者据此判断清单准确性。R11 范例：test-writer 用 SSOT 派生断言 `[...schema.options].toContain('auth')` 暴露 audit 枚举遗漏（①次），impl-writer 发现全集断言失效（②次），反推本隐式影响子类。
 - 校验方式：Reviewer subagent 检查 Tech-Spec 是否含"受影响测试清单"章节（若 contracts 有联动改动或既有 service/repository 签名变更）；清单缺失或两类标注缺一记 blocker；test-writer 交付报告若含"清单遗漏差异"记录，编排者将该差异回填至复盘（验证 AI-006 增强是否真闭合）。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。
 
 ## AI-007 · 端到端验收测试 + Reviewer PRD 逐条核对（复盘 RETRO-ROUND5 P0 反推）

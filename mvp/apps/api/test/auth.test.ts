@@ -28,10 +28,8 @@
 //     'login'/'login_failed'/'logout'，否则 PRD AC-F1-6/F4-3 不可达。Tech-Spec §5/§9 未列出此 contracts 联动，
 //     本文件以 SSOT 派生 toContain 断言显式表达需求（断言级红），impl-writer / contracts 拥有者须补齐枚举。
 //
-// [AI-002 动态 import 隔离] 未实现模块（service/auth / repository/token-blacklist / domain/auth）改用 lazy loader
-// 加载，避免顶层静态 import 致使整个测试文件在 vitest 收集阶段失败（0 tests 运行）。这样契约测组与 AI-006 audit
-// 枚举断言组（不依赖未实现模块）能在 vitest 中实际运行并产生断言级红证据。tsc 仍对每个 loader 函数体内的
-// import('...') 路径报 TS2307（预期导入级红）。impl-writer 实现模块后，移除 loader 改回顶层静态 import（不改测试断言）。
+// [AI-002 动态 import 隔离 → 已移除] impl-writer 已实现全部模块（service/auth / repository/token-blacklist
+//   / domain/auth），lazy loader 已移除，改回顶层静态 import（不改测试断言，仅改 setup/import 路径）。
 import { describe, it, expect } from 'vitest';
 import {
   loginInputSchema,
@@ -53,21 +51,11 @@ import { UserRepository } from '../src/repository/user.js';
 import { UserService } from '../src/service/user.js';
 import { AuditLogRepository } from '../src/repository/audit.js';
 import { AuditLogService } from '../src/service/audit.js';
+import { AuthService } from '../src/service/auth.js';
+import { TokenBlacklistRepository } from '../src/repository/token-blacklist.js';
+import { signToken, verifyToken, hashPassword, verifyPassword } from '../src/domain/auth.js';
 import { AppError, errorCodeToHttpStatus } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
-
-// 期望导入级红：以下三个 lazy loader 引用未实现模块（impl-writer 阶段产出）。
-// tsc 对每个 import('...') 报 TS2307（预期导入级红，与顶层静态 import 同语义）。
-// vitest 编译时擦除类型注解，loader 函数体在调用时才执行 import → 不致整体加载失败。
-function loadAuthDomain(): Promise<typeof import('../src/domain/auth.js')> {
-  return import('../src/domain/auth.js');
-}
-function loadAuthService(): Promise<typeof import('../src/service/auth.js')> {
-  return import('../src/service/auth.js');
-}
-function loadTokenBlacklistRepo(): Promise<typeof import('../src/repository/token-blacklist.js')> {
-  return import('../src/repository/token-blacklist.js');
-}
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const SEED_TS = '2020-01-01T00:00:00.000Z';
@@ -82,36 +70,33 @@ const anonCtx: Ctx = { user: { id: '', role: 'user' } };
 
 /**
  * 将含 password_hash 的 UserEntity 插入 UserRepository。
- * [impl 桥接] 当前 domain/user.ts 的 UserEntity 别名 = User（无 password_hash），
- *   impl-writer 将对齐为 contracts.UserEntity（含 password_hash）。此处 cast 使本阶段 tsc 通过，
- *   运行时对象保留 password_hash 字段；impl-writer 对齐签名后可移除 cast（不改断言）。
+ * [impl 桥接已移除] domain/user.ts 的 UserEntity 已对齐为 User & { password_hash?: string }，
+ *   repo.insert 接受 UserEntity，无需 cast（password_hash 为 optional，既有不带 password_hash 的 seed 仍兼容）。
  */
 function insertUserWithPassword(repo: UserRepository, entity: UserEntity): void {
-  repo.insert(entity as unknown as Parameters<typeof repo.insert>[0]);
+  repo.insert(entity);
 }
 
 /**
  * auth setup：构造共享 auditRepo + auditService + userService + tokenBlacklistRepo + authService。
  * seed 一个 admin 用户（password_hash = scrypt('admin123')），供 login 成功路径与 seed 凭据验收使用。
  * 返回的 repo/service 可观测存储态（断言黑名单 / 审计日志）。
+ * [注] userService 注入 auditService —— auth.test.ts 直接调 service.create（不经 router/withAudit），
+ *      AC-F3-3 审计断言依赖 service 层直接记日志（与 server.ts 中 UserService 不注入 auditService、
+ *      由 withAudit 记日志的分工不同，二者不冲突：经 router 调时 withAudit 记，直接调 service 时 service 记）。
  */
 async function setupAuth(): Promise<{
   userRepo: UserRepository;
   auditRepo: AuditLogRepository;
   auditService: AuditLogService;
   userService: UserService;
-  tokenBlacklistRepo: unknown; // impl-writer 对齐后改为 TokenBlacklistRepository 类型
-  authService: unknown; // impl-writer 对齐后改为 AuthService 类型
+  tokenBlacklistRepo: TokenBlacklistRepository;
+  authService: AuthService;
 }> {
-  const [{ AuthService }, { TokenBlacklistRepository }, { hashPassword }] = await Promise.all([
-    loadAuthService(),
-    loadTokenBlacklistRepo(),
-    loadAuthDomain(),
-  ]);
   const userRepo = new UserRepository();
   const auditRepo = new AuditLogRepository();
   const auditService = new AuditLogService(auditRepo);
-  const userService = new UserService(userRepo);
+  const userService = new UserService(userRepo, auditService);
   const tokenBlacklistRepo = new TokenBlacklistRepository();
   const authService = new AuthService(userService, userRepo, tokenBlacklistRepo, auditService, AUTH_SECRET);
   // seed admin（password_hash 由 domain/hashPassword 生成，与 server.ts seedDemoData 一致：admin@example.com/admin123）
@@ -397,7 +382,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   };
 
   it('signToken → verifyToken 往返：还原相同 payload', async () => {
-    const { signToken, verifyToken } = await loadAuthDomain();
     const token = signToken(payload, AUTH_SECRET);
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
@@ -410,7 +394,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('token 结构 = base64url(payload).base64url(hmac)（两段，点分隔）', async () => {
-    const { signToken } = await loadAuthDomain();
     const token = signToken(payload, AUTH_SECRET);
     const parts = token.split('.');
     expect(parts.length).toBe(2);
@@ -419,7 +402,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('verifyToken 伪造随机字符串 → { ok: false, errorCode: TOKEN_INVALID }', async () => {
-    const { verifyToken } = await loadAuthDomain();
     const result = verifyToken('totally-fake-token-string', AUTH_SECRET);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -428,7 +410,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('verifyToken 篡改签名段（替换第二段）→ TOKEN_INVALID', async () => {
-    const { signToken, verifyToken } = await loadAuthDomain();
     const token = signToken(payload, AUTH_SECRET);
     const parts = token.split('.');
     const tampered = `${parts[0]!}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
@@ -440,7 +421,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('verifyToken 篡改 payload 段（替换第一段）→ TOKEN_INVALID', async () => {
-    const { signToken, verifyToken } = await loadAuthDomain();
     const token = signToken(payload, AUTH_SECRET);
     const parts = token.split('.');
     const tampered = `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.${parts[1]!}`;
@@ -452,7 +432,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('verifyToken 用错误 secret → TOKEN_INVALID（签名不匹配）', async () => {
-    const { signToken, verifyToken } = await loadAuthDomain();
     const token = signToken(payload, AUTH_SECRET);
     const result = verifyToken(token, 'wrong-secret');
     expect(result.ok).toBe(false);
@@ -463,7 +442,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
 
   it('verifyToken 不检查过期（G4 exp 由 buildCtx 负责）：过期但签名有效的 token → ok:true', async () => {
     // exp 在 1 小时前（已过期），但签名有效 → verifyToken 仍 ok（过期判定 G4 在 buildCtx 中间件，非 verifyToken 职责）
-    const { signToken, verifyToken } = await loadAuthDomain();
     const expiredPayload: TokenPayload = {
       sub: ADMIN_ID,
       role: 'admin',
@@ -481,7 +459,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
   });
 
   it('signToken 不同 payload 产生不同 token（含 sub/role/iat/exp）', async () => {
-    const { signToken } = await loadAuthDomain();
     const t1 = signToken(payload, AUTH_SECRET);
     const t2 = signToken({ ...payload, sub: '00000000-0000-4000-8000-000000000002' }, AUTH_SECRET);
     expect(t1).not.toBe(t2);
@@ -493,7 +470,6 @@ describe('单测 · domain/auth signToken + verifyToken', () => {
 // ===========================================================================
 describe('单测 · domain/auth hashPassword + verifyPassword（D2）', () => {
   it('AC-F3-2: hashPassword 输出为 salt.hash 格式（含点分隔，两段 base64，非明文）', async () => {
-    const { hashPassword } = await loadAuthDomain();
     const hash = hashPassword(ADMIN_PASSWORD);
     expect(typeof hash).toBe('string');
     expect(hash).toContain('.');
@@ -507,32 +483,27 @@ describe('单测 · domain/auth hashPassword + verifyPassword（D2）', () => {
   });
 
   it('hashPassword 每次产生不同 salt（随机性，相同密码 → 不同 hash）', async () => {
-    const { hashPassword } = await loadAuthDomain();
     const h1 = hashPassword(ADMIN_PASSWORD);
     const h2 = hashPassword(ADMIN_PASSWORD);
     expect(h1).not.toBe(h2); // salt 不同
   });
 
   it('AC-F3-4: verifyPassword 正确密码 → true', async () => {
-    const { hashPassword, verifyPassword } = await loadAuthDomain();
     const hash = hashPassword(ADMIN_PASSWORD);
     expect(verifyPassword(ADMIN_PASSWORD, hash)).toBe(true);
   });
 
   it('AC-F3-4: verifyPassword 错误密码 → false', async () => {
-    const { hashPassword, verifyPassword } = await loadAuthDomain();
     const hash = hashPassword(ADMIN_PASSWORD);
     expect(verifyPassword('wrong-password', hash)).toBe(false);
   });
 
   it('verifyPassword 空密码 → false', async () => {
-    const { hashPassword, verifyPassword } = await loadAuthDomain();
     const hash = hashPassword(ADMIN_PASSWORD);
     expect(verifyPassword('', hash)).toBe(false);
   });
 
   it('verifyPassword 对格式错误的 stored（无点分隔）→ false（不抛错）', async () => {
-    const { verifyPassword } = await loadAuthDomain();
     expect(verifyPassword(ADMIN_PASSWORD, 'no-dot-just-string')).toBe(false);
   });
 });
@@ -552,7 +523,6 @@ describe('行为 · AuthService.login 成功签发', () => {
 
   it('AC-F2-6: 登录返回的 token 经 verifyToken 解析后 sub/role 与用户一致（Ctx 来源切换不破坏 service）', async () => {
     const { authService } = await setupAuth();
-    const { verifyToken } = await loadAuthDomain();
     const result = await (authService as { login: (input: { email: string; password: string }, ctx: Ctx) => Promise<{ token: string; expires_at: string }> }).login({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }, anonCtx);
     const verified = verifyToken(result.token, AUTH_SECRET);
     expect(verified.ok).toBe(true);

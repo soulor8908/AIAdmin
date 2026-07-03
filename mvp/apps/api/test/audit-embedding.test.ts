@@ -555,9 +555,12 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
     for (const log of auditRepo.listAll()) {
       expect(validTypes).toContain(log.entity_type);
     }
-    // 四域日志均已落库（user/role/dept/notification 各至少一条）
+    // withAudit 覆盖的 entity_type 子集均已落库（user/role/dept/notification 各至少一条）。
+    // [AI-006 反向核实] 'auth' 由 AuthService 直接调 audit.record（非 withAudit），本测试仅测 withAudit
+    // 路径（user/role/dept/notification router），故不要求 seenTypes 含 'auth'（子集断言，非全集）。
     const seenTypes = new Set(auditRepo.listAll().map((l) => l.entity_type));
-    for (const t of validTypes) {
+    const withAuditTypes = ['user', 'role', 'dept', 'notification'] as const;
+    for (const t of withAuditTypes) {
       expect(seenTypes.has(t)).toBe(true);
     }
   });
@@ -582,14 +585,19 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
     );
     await callProc(roleRouter.delete, { id: role.id, expected_version: 0 }, adminCtx);
     const validActions = [...auditLogActionSchema.options];
-    // 全集断言：枚举覆盖 create/update/delete
-    expect(validActions).toEqual(['create', 'update', 'delete']);
+    // 枚举覆盖 create/update/delete（SSOT 派生 toContain，AI-005）。
+    // [AI-006 反向核实] login/login_failed/logout 由 AuthService 直接调 audit.record（非 withAudit），
+    // 本测试仅测 withAudit 路径，故用 toContain 子集断言（非 toEqual 全集，扩展枚举不破坏本断言）。
+    expect(validActions).toContain('create');
+    expect(validActions).toContain('update');
+    expect(validActions).toContain('delete');
     for (const log of auditRepo.listAll()) {
       expect(validActions).toContain(log.action);
     }
-    // 三类动作均已落库
+    // withAudit 三类动作均已落库（login/login_failed/logout 不经 withAudit，不要求 seenActions 含）
     const seenActions = new Set(auditRepo.listAll().map((l) => l.action));
-    for (const a of validActions) {
+    const withAuditActions = ['create', 'update', 'delete'] as const;
+    for (const a of withAuditActions) {
       expect(seenActions.has(a)).toBe(true);
     }
   });

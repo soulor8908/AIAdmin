@@ -27,15 +27,7 @@
 // CODE-001：无 any 类型标注或断言，用 unknown + 类型守卫 + 具体接口。
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-
-// 期望导入级红：signToken 由 impl-writer 阶段产出（domain/auth.ts），用于 AC-F2-4 签发过期 token。
-// [AI-002 动态 import 隔离] 用 lazy loader 加载未实现模块，避免顶层静态 import 致使整个测试文件在
-// vitest 收集阶段失败（0 tests 运行）。这样不依赖 signToken 的 it（AC-F1/F2-1~F2-3/F2-5/F2-6/F4/F5）
-// 能在 vitest 中实际运行并产生断言级红（路由未注册 → 404 ≠ 期望 status）。tsc 对 import('...') 报
-// TS2307（预期导入级红）。impl-writer 实现模块后改回顶层静态 import（不改测试断言）。
-function loadAuthDomain(): Promise<typeof import('../src/domain/auth.js')> {
-  return import('../src/domain/auth.js');
-}
+import { signToken } from '../src/domain/auth.js';
 
 const TEST_PORT = 4888;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
@@ -118,8 +110,7 @@ async function login(email: string, password: string): Promise<{ token: string; 
 }
 
 /** 用 AUTH_SECRET 签发一个已过期的 token（AC-F2-4）：iat/exp 均在 1 小时前。 */
-async function signExpiredToken(): Promise<string> {
-  const { signToken } = await loadAuthDomain();
+function signExpiredToken(): string {
   const nowSec = Math.floor(Date.now() / 1000);
   return signToken(
     {
@@ -198,7 +189,7 @@ describe('F2 · token 校验中间件端到端', () => {
   });
 
   it('AC-F2-4: 过期 token（1 小时前签发，签名有效）→ 401 TOKEN_EXPIRED', async () => {
-    const expiredToken = await signExpiredToken();
+    const expiredToken = signExpiredToken();
     const { status, body } = await fetchJson('/v1/users', {
       headers: { Authorization: `Bearer ${expiredToken}` },
     });
