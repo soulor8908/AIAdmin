@@ -20,4 +20,4 @@ alwaysApply: true
 ## ARCH-003 · 跨层只经契约
 - 触发条件：前端调用后端能力时。
 - 期望行为：前端只能通过 router 调用，类型来自 @admin/contracts；禁止直连 repository。
-- 校验方式：[预留] 本 MVP 暂无 apps/web，待 web 引入后在 `scripts/check-rules.mjs` 新增对应校验（限制 apps/web 仅可 import contracts）；当前由 ci 整体脚本 + 人工 Review 保障，无专属 enforcement（不触发 META-003）。
+- 校验方式：`scripts/check-rules.mjs` ARCH-003 分支扫描 `apps/web/src/**/*.{ts,tsx}` 的 import 语句，禁止 import `apps/api/src/**`（repository/service/domain/router/server）与 `@admin/api` 包，仅允许 `@admin/contracts` + 第三方依赖 + apps/web 内部模块；违规即报错 exit≠0。

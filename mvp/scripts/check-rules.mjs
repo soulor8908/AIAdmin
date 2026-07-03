@@ -194,6 +194,39 @@ for (const f of allTs) {
   }
 }
 
+// ============ ARCH-003：前端禁止 import 后端模块（跨层只经契约）============
+// TECH-WEB-AUTH-USER-001 §8.2：扫描 apps/web/src/**/*.{ts,tsx} 的 import 语句，
+// 禁止 import apps/api/src/** 与 @admin/api 包，仅允许 @admin/contracts + 第三方 + apps/web 内部模块。
+markEnforcement('ARCH-003');
+function walkWeb(dir, acc = []) {
+  if (!existsSync(dir)) return acc;
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkWeb(p, acc);
+    else if (name.endsWith('.ts') || name.endsWith('.tsx')) acc.push(p); // 扩展 .tsx（既有 walk 仅 .ts）
+  }
+  return acc;
+}
+const webSrc = walkWeb(join(ROOT, 'apps/web/src'));
+// 提取 import/export ... from 'spec' 与 side-effect import 'spec'
+const IMPORT_SPEC_RE = /(?:import|export)[\s\S]*?from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
+// 禁止 specifier（§8.3 三条规则，任一命中即违规）：
+//   - ^@admin\/api\b —— import @admin/api 包（跨层直连后端包）
+//   - api\/src\/ 子串 —— 覆盖绝对 'apps/api/src/...' 与相对逃逸 '../api/src/...'、'../../apps/api/src/...'
+//   - ^apps\/api\b —— 以 apps/api 开头的绝对路径
+// contracts 导出 './schemas/*'，第三方包路径不含 'api/src/'，故子串判定无误伤。
+const ARCH003_FORBIDDEN_RE = /(?:^@admin\/api\b)|(?:api\/src\/)|(?:^apps\/api\b)/;
+for (const f of webSrc) {
+  const src = readFileSync(f, 'utf8');
+  let m;
+  while ((m = IMPORT_SPEC_RE.exec(src)) !== null) {
+    const spec = m[1] || m[2];
+    if (spec && ARCH003_FORBIDDEN_RE.test(spec)) {
+      errors.push(`ARCH-003 违规：${rel(f)} import 了后端模块 "${spec}"（前端只能经 @admin/contracts 调用后端，禁止直连 apps/api/src/** 或 @admin/api）`);
+    }
+  }
+}
+
 // ============ AI-005：禁止硬编码跨域可变集合断言 ============
 markEnforcement('AI-005');
 // 扫描测试文件中 .toEqual([字面量, 字面量, ...]) 形式，若字面量匹配跨域枚举模式则 suggestion
