@@ -14,9 +14,10 @@ import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
  * 此处仅列举前端实际遇到的码，全集由 [...errorCodeSchema.options] SSOT 派生（D11）。
  * R14 扩展（D9）：追加角色/部门域码（TECH-ROLE/DEPT-001 §11 矩阵）。
  * R15 扩展（D9）：追加通知/报表域码（TECH-WEB-NOTIFICATION-REPORT-001 §11 矩阵）。
+ * R16 扩展（D9）：追加 transfer/inheritance 域码（TECH-WEB-TRANSFER-INHERITANCE-001 §11 矩阵，全码映射收尾）。
  * [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）。
- * [advisory] TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK。
- *   （R14 S-11 同步注释：R15 扩展后已移除 REPORT/NOTIFICATION 域的 FALLBACK，仅 TRANSFER/ROLE_INHERITANCE 域保持 FALLBACK。）
+ * 全码映射收尾（R14 S-11 闭合）：R16 扩展后 errorCodeSchema 全集所有已知域码均映射具体中文提示，
+ *   FALLBACK 仅作未来新增码兜底（R12 user/auth + R14 role/dept + R15 notification/report + R16 transfer/inheritance）。
  */
 const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_ERROR: '输入校验失败',
@@ -50,9 +51,18 @@ const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   NOTIFICATION_INVALID_TRANSITION: '通知状态不允许此操作',
   REPORT_GROUP_BY_REQUIRED: '请至少选择一个分组维度',
   REPORT_TIME_RANGE_INVALID: '开始时间不能晚于结束时间',
+  // ===== R16 transfer/inheritance 域扩展（D9，TECH-WEB-TRANSFER-INHERITANCE-001 §11，全码映射收尾）=====
+  TRANSFER_SAME_ROLE: '新角色不能与原角色相同',
+  TRANSFER_OLD_ROLE_NOT_ASSIGNED: '用户未持有原角色',
+  TRANSFER_FAILED: '调岗失败',
+  TRANSFER_COMPENSATION_FAILED: '调岗补偿失败，请联系运维',
+  ROLE_SELF_INHERITANCE: '不能继承自身',
+  ROLE_BUILTIN_PARENT_FORBIDDEN: '内置角色不可设为父角色',
+  ROLE_INHERITANCE_CYCLE: '会形成继承环',
+  ROLE_HAS_CHILDREN: '角色仍有子角色，请先解除子角色继承',
 };
 
-/** 未映射码（其余 TRANSFER/ROLE_INHERITANCE 域等本轮前端不触发）通用提示。 */
+/** 未映射码通用提示（全码映射收尾后仅作未来新增码兜底，[advisory] AUDIT_LOG_NOT_FOUND 沿用）。 */
 const FALLBACK = '操作失败，请稍后重试';
 
 /**
@@ -69,7 +79,7 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = Object.fromEntries(
 
 /**
  * ErrorCode → 中文用户提示。
- * 未映射码（TRANSFER/ROLE_INHERITANCE 域等）返回通用"操作失败，请稍后重试"（AC-F7-2）。
+ * 全码映射收尾（R16）：errorCodeSchema 全集所有已知域码均映射具体中文，FALLBACK 仅作未来新增码兜底。
  */
 export function mapErrorToMessage(code: ErrorCode): string {
   return ERROR_MESSAGES[code] ?? FALLBACK;
