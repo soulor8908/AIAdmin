@@ -13,8 +13,10 @@ import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
  * 对齐 Tech-Spec §11 错误矩阵。未列出的码使用 FALLBACK。
  * 此处仅列举前端实际遇到的码，全集由 [...errorCodeSchema.options] SSOT 派生（D11）。
  * R14 扩展（D9）：追加角色/部门域码（TECH-ROLE/DEPT-001 §11 矩阵）。
+ * R15 扩展（D9）：追加通知/报表域码（TECH-WEB-NOTIFICATION-REPORT-001 §11 矩阵）。
  * [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）。
- * [advisory] REPORT/NOTIFICATION/TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK。
+ * [advisory] TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK。
+ *   （R14 S-11 同步注释：R15 扩展后已移除 REPORT/NOTIFICATION 域的 FALLBACK，仅 TRANSFER/ROLE_INHERITANCE 域保持 FALLBACK。）
  */
 const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_ERROR: '输入校验失败',
@@ -41,9 +43,16 @@ const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   DEPT_NAME_DUPLICATE: '同级别下部门名称已存在',
   DEPT_HAS_CHILDREN: '请先删除子部门',
   DEPT_DEPTH_EXCEEDED: '部门层级超过上限',
+  // ===== R15 通知/报表域扩展（D9，TECH-WEB-NOTIFICATION-REPORT-001 §11）=====
+  NOTIFICATION_NOT_FOUND: '通知不存在',
+  NOTIFICATION_RECIPIENT_NOT_FOUND: '收件人不存在',
+  NOTIFICATION_RECIPIENT_DISABLED: '收件人已禁用',
+  NOTIFICATION_INVALID_TRANSITION: '通知状态不允许此操作',
+  REPORT_GROUP_BY_REQUIRED: '请至少选择一个分组维度',
+  REPORT_TIME_RANGE_INVALID: '开始时间不能晚于结束时间',
 };
 
-/** 未映射码（其余 ROLE/DEPT/NOTIFICATION/TRANSFER 域等本轮不触发）通用提示。 */
+/** 未映射码（其余 TRANSFER/ROLE_INHERITANCE 域等本轮前端不触发）通用提示。 */
 const FALLBACK = '操作失败，请稍后重试';
 
 /**
@@ -60,7 +69,7 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = Object.fromEntries(
 
 /**
  * ErrorCode → 中文用户提示。
- * 未映射码（ROLE/DEPT 域等）返回通用"操作失败，请稍后重试"（AC-F7-2）。
+ * 未映射码（TRANSFER/ROLE_INHERITANCE 域等）返回通用"操作失败，请稍后重试"（AC-F7-2）。
  */
 export function mapErrorToMessage(code: ErrorCode): string {
   return ERROR_MESSAGES[code] ?? FALLBACK;

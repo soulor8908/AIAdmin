@@ -17,7 +17,9 @@ import { getToken, clearToken } from '../auth/tokenStore.js';
 
 export type RequestOptions = {
   body?: unknown;
-  query?: Record<string, string | number | undefined>;
+  // R15 D8：扩展 query 值类型新增 string[]（承接报表 group_by 数组 query，对齐 server.ts m.query.getAll 语义）。
+  // string/number/undefined 行为不变（后向兼容），string[] 为新增能力（repeated key）。
+  query?: Record<string, string | number | string[] | undefined>;
   versioned?: boolean;
   expectedVersion?: number;
   skipAuth?: boolean;
@@ -103,12 +105,23 @@ async function safeReadJson(res: Response): Promise<unknown> {
   }
 }
 
-/** 构建完整 URL（base + path + query string，D5 用 URLSearchParams）。 */
-function buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
+/**
+ * 构建完整 URL（base + path + query string，D5 用 URLSearchParams）。
+ * R15 D8：对 Array.isArray(value) 分支逐元素 append 为 repeated key（对齐 server.ts m.query.getAll），
+ *         string/number/undefined 行为不变；空数组跳过避免拼接 `?key=` 空值。
+ */
+function buildUrl(
+  path: string,
+  query?: Record<string, string | number | string[] | undefined>,
+): string {
   if (!query) return BASE_URL + path;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      // 数组值：每个元素 append 为 repeated key（对齐 server.ts m.query.getAll）
+      for (const v of value) params.append(key, String(v));
+    } else {
       params.append(key, String(value));
     }
   }

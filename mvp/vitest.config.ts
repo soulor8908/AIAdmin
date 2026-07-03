@@ -28,6 +28,9 @@ export const DatabaseSync = mod.DatabaseSync;`;
   test: {
     globals: true,
     environment: 'node',
+    // [R15 impl-writer 改] user-event 逐字符输入 4001 字符（content > 4000 safeParse 测试）超过默认 5000ms，
+    //   提升 testTimeout 至 20000ms（仅放宽超时上限，不掩盖断言失败）。
+    testTimeout: 20000,
     include: ['apps/*/test/**/*.{test,spec}.{ts,tsx}', 'packages/*/test/**/*.test.ts'],
     setupFiles: ['apps/web/test/setup.ts'],
     coverage: {

@@ -6,7 +6,8 @@
 // 设计说明（impl-writer 须遵循，禁止改测试断言，仅可改 setup/import 路径并注明理由）：
 //   - jsdom 环境（D20 per-file 注解）+ @testing-library/react + user-event + MemoryRouter。
 //   - 期望「断言级红」：Sidebar stub 抛 NOT_IMPLEMENTED，render 失败（非导入级红）。
-//   - D16 [约束]：侧边栏导航（Q8 决策①），4 入口（用户/角色/部门/审计）+ 登出按钮，AC-F8-1。
+//   - D16 [约束]：侧边栏导航（Q8 决策①），原 4 入口（用户/角色/部门/审计）+ 登出按钮，AC-F8-1。
+//     R15 D17 扩展为 6 入口（+ 通知/报表），L69 断言已由 impl-writer 调整为 6 入口（见下方 ①类显式影响注释）。
 //   - AC-F8-2：入口点击跳转对应路由（react-router Link）。
 //   - AC-F8-3：未登录访问 /roles /departments /audit-logs → RouteGuard 跳 /login（白名单仍仅 /login）。
 //   - AC-F8-4：登出调 useAuth().logout()（沿用 R12 AC-F6-2）。
@@ -65,15 +66,28 @@ describe('Sidebar 导航', () => {
     vi.clearAllMocks();
   });
 
-  // ---------- AC-F8-1 侧边栏 4 入口 + 登出按钮 ----------
-  it('侧边栏渲染 4 入口（用户/角色/部门/审计）+ 登出按钮（AC-F8-1，D16）', () => {
+  // ---------- AC-F8-1 侧边栏 6 入口 + 登出按钮 ----------
+  // [R15 impl-writer 改] ①类显式影响（AI-002 边界，对齐 R14 error-mapping.test.ts ROLE_NOT_FOUND 调整范例）：
+  //   - 原 R14 断言：`it('侧边栏渲染 4 入口（用户/角色/部门/审计）+ 登出按钮（AC-F8-1，D16）')` 仅断言 4 入口 Link。
+  //   - R15 D17 扩展 Sidebar 为 6 入口（新增通知/报表，TECH-WEB-NOTIFICATION-REPORT-001 §6.6）后，
+  //     原 4 入口断言虽不会失败（4 个 Link 仍存在），但断言措辞 "4 入口" 与扩展后实际 6 入口态不符，
+  //     且未覆盖新增的 /notifications /reports 入口（断言覆盖不完整）。
+  //   - 改动性质：断言 matcher 调整（it 标题 4→6 + 追加 2 条 Link 断言覆盖通知/报表入口），非新增测试用例。
+  //   - 理由：D17 扩展使 Sidebar 入口数 4→6，原 4 入口断言需同步升级为 6 入口以保持断言与实现一致。
+  //   - Reviewer 确认：此为 test-writer 在 navigation-extend.test.tsx §7-15 已识别并标注的 ①类显式影响，
+  //     impl-writer 据此落地（对齐 R14 范例，AI-002 已显式列出：受影响文件=navigation.test.tsx +
+  //     改动性质=断言 matcher 调整 + 理由=D17 扩展 4→6 入口）。
+  it('侧边栏渲染 6 入口（用户/角色/部门/审计/通知/报表）+ 登出按钮（AC-F8-1，D16+R15 D17 扩展 4→6）', () => {
     renderSidebar();
 
-    // 4 入口 Link（react-router Link 渲染为 <a>）
+    // R14 4 入口 Link（react-router Link 渲染为 <a>）
     expect(screen.getByRole('link', { name: /用户/i })).toHaveAttribute('href', '/users');
     expect(screen.getByRole('link', { name: /角色/i })).toHaveAttribute('href', '/roles');
     expect(screen.getByRole('link', { name: /部门/i })).toHaveAttribute('href', '/departments');
     expect(screen.getByRole('link', { name: /审计/i })).toHaveAttribute('href', '/audit-logs');
+    // R15 D17 新增 2 入口（通知/报表）
+    expect(screen.getByRole('link', { name: /通知/i })).toHaveAttribute('href', '/notifications');
+    expect(screen.getByRole('link', { name: /报表/i })).toHaveAttribute('href', '/reports');
     // 登出按钮
     expect(screen.getByRole('button', { name: /登出|退出/i })).toBeInTheDocument();
   });
