@@ -55,6 +55,7 @@ import { createNotificationRouter } from '../src/router/notification.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const SEED_TS = '2020-01-01T00:00:00.000Z';
@@ -79,11 +80,13 @@ function setup(): {
   auditRouter: ReturnType<typeof createAuditRouter>;
   reportRouter: ReturnType<typeof createReportRouter>;
 } {
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（五域 router 共享 auditService 埋点写入同一 auditRepo，跨 repo 查询需一致）
+  const db = createTestDb();
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
-  const userRepo = new UserRepository();
-  const roleRepo = new RoleRepository();
-  const deptRepo = new DepartmentRepository();
+  const userRepo = new UserRepository(db);
+  const roleRepo = new RoleRepository(db);
+  const deptRepo = new DepartmentRepository(db);
   // seed admin 用户（role.assign / dept.assignUserDepartment 依赖用户存在；department_id 缺省=未归属）
   userRepo.insert({
     id: ADMIN_ID,
@@ -99,7 +102,7 @@ function setup(): {
   const deptService = new DepartmentService(deptRepo, userRepo);
   const reportService = new ReportService(auditRepo);
   // notification 域（跨域联动①）：注入共享 userService（D1 跨 service 依赖）+ 独立 notificationRepo
-  const notificationRepo = new NotificationRepository();
+  const notificationRepo = new NotificationRepository(db);
   const notificationService = new NotificationService(userService, notificationRepo);
   // 方案A：四域 router 共享同一 auditService（→ 同一 auditRepo，埋点可观测）
   const userRouter = createUserRouter(userService, auditService);
@@ -510,9 +513,10 @@ describe('F1 端到端 · 读操作与失败场景', () => {
 
   it('§76 埋点失败不影响主操作（best-effort）：audit.record 抛错 → 主操作仍成功返回 + 日志未入库', async () => {
     // 独立 setup：用 ThrowingAuditLogService 替换共享 auditService（record 抛错）
-    const throwingRepo = new AuditLogRepository();
+    const db = createTestDb();
+    const throwingRepo = new AuditLogRepository(db);
     const throwingAudit = new ThrowingAuditLogService(throwingRepo);
-    const userRepo = new UserRepository();
+    const userRepo = new UserRepository(db);
     const userService = new UserService(userRepo);
     const userRouter = createUserRouter(userService, throwingAudit);
     // 主操作仍成功返回 user（埋点异常被 withAudit 吞掉，不抛给调用方）
@@ -555,9 +559,12 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
     for (const log of auditRepo.listAll()) {
       expect(validTypes).toContain(log.entity_type);
     }
-    // 四域日志均已落库（user/role/dept/notification 各至少一条）
+    // withAudit 覆盖的 entity_type 子集均已落库（user/role/dept/notification 各至少一条）。
+    // [AI-006 反向核实] 'auth' 由 AuthService 直接调 audit.record（非 withAudit），本测试仅测 withAudit
+    // 路径（user/role/dept/notification router），故不要求 seenTypes 含 'auth'（子集断言，非全集）。
     const seenTypes = new Set(auditRepo.listAll().map((l) => l.entity_type));
-    for (const t of validTypes) {
+    const withAuditTypes = ['user', 'role', 'dept', 'notification'] as const;
+    for (const t of withAuditTypes) {
       expect(seenTypes.has(t)).toBe(true);
     }
   });
@@ -582,14 +589,19 @@ describe('F1 端到端 · SSOT 派生（AI-005）', () => {
     );
     await callProc(roleRouter.delete, { id: role.id, expected_version: 0 }, adminCtx);
     const validActions = [...auditLogActionSchema.options];
-    // 全集断言：枚举覆盖 create/update/delete
-    expect(validActions).toEqual(['create', 'update', 'delete']);
+    // 枚举覆盖 create/update/delete（SSOT 派生 toContain，AI-005）。
+    // [AI-006 反向核实] login/login_failed/logout 由 AuthService 直接调 audit.record（非 withAudit），
+    // 本测试仅测 withAudit 路径，故用 toContain 子集断言（非 toEqual 全集，扩展枚举不破坏本断言）。
+    expect(validActions).toContain('create');
+    expect(validActions).toContain('update');
+    expect(validActions).toContain('delete');
     for (const log of auditRepo.listAll()) {
       expect(validActions).toContain(log.action);
     }
-    // 三类动作均已落库
+    // withAudit 三类动作均已落库（login/login_failed/logout 不经 withAudit，不要求 seenActions 含）
     const seenActions = new Set(auditRepo.listAll().map((l) => l.action));
-    for (const a of validActions) {
+    const withAuditActions = ['create', 'update', 'delete'] as const;
+    for (const a of withAuditActions) {
       expect(seenActions.has(a)).toBe(true);
     }
   });

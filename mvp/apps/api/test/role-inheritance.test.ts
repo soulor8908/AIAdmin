@@ -38,6 +38,7 @@ import {
 import { UserRepository } from '../src/repository/user.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const SEED_TS = '2020-01-01T00:00:00.000Z';
@@ -67,8 +68,10 @@ function setup(): {
   service: RoleService;
   router: ReturnType<typeof createRoleRouter>;
 } {
-  const repo = new RoleRepository();
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（RoleService 跨 role/user repo 查询，getEffectivePermissions 联查 user_roles）
+  const db = createTestDb();
+  const repo = new RoleRepository(db);
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',

@@ -46,6 +46,7 @@ import {
 } from '@admin/contracts';
 import { AuditLogRepository } from '../src/repository/audit.js';
 import { AuditLogService } from '../src/service/audit.js';
+import { createTestDb } from './helpers/db.js';
 import { createAuditRouter, type AuditProcedure } from '../src/router/audit.js';
 import {
   redactEmail,
@@ -70,7 +71,7 @@ function setup(): {
   service: AuditLogService;
   router: ReturnType<typeof createAuditRouter>;
 } {
-  const auditRepo = new AuditLogRepository();
+  const auditRepo = new AuditLogRepository(createTestDb());
   const service = new AuditLogService(auditRepo);
   const router = createAuditRouter(service);
   return { auditRepo, service, router };
@@ -248,14 +249,14 @@ describe('契约测 · changeFieldSchema（D5：{field, value, pii}）', () => {
 
 describe('单测 · repository append-only（内存）', () => {
   it('初始化为空（无内置 audit seed）：list 返回 items=[] total=0', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const result = repo.list({ page: 1, pageSize: 20 });
     expect(result.items).toEqual([]);
     expect(result.total).toBe(0);
   });
 
   it('insert 后 list 可查回（按 id 一致）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const log = makeLog(1);
     repo.insert(log);
     const result = repo.list({ page: 1, pageSize: 20 });
@@ -265,14 +266,14 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('insert 返回写入的 log（值一致）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const log = makeLog(2);
     const inserted = repo.insert(log);
     expect(inserted).toEqual(log);
   });
 
   it('list 按 operated_at 倒序排列（最新优先）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     repo.insert(makeLog(1, { operated_at: '2024-01-01T10:00:00.000Z' }));
     repo.insert(makeLog(2, { operated_at: '2024-01-05T10:00:00.000Z' }));
     repo.insert(makeLog(3, { operated_at: '2024-01-03T10:00:00.000Z' }));
@@ -283,7 +284,7 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('list 按 operated_from 闭区间过滤（含边界）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     repo.insert(makeLog(1, { operated_at: '2024-01-01T10:00:00.000Z' }));
     repo.insert(makeLog(2, { operated_at: '2024-01-02T10:00:00.000Z' }));
     repo.insert(makeLog(3, { operated_at: '2024-01-03T10:00:00.000Z' }));
@@ -300,7 +301,7 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('list 按 operated_to 闭区间过滤（含边界）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     repo.insert(makeLog(1, { operated_at: '2024-01-01T10:00:00.000Z' }));
     repo.insert(makeLog(2, { operated_at: '2024-01-02T10:00:00.000Z' }));
     repo.insert(makeLog(3, { operated_at: '2024-01-03T10:00:00.000Z' }));
@@ -317,7 +318,7 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('list 按 operator_id 过滤', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const otherOp = '00000000-0000-4000-8000-000000000050';
     repo.insert(makeLog(1, { operator_id: ADMIN_ID }));
     repo.insert(makeLog(2, { operator_id: otherOp }));
@@ -330,7 +331,7 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('list 按 entity_type 过滤', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     repo.insert(makeLog(1, { entity_type: 'user' }));
     repo.insert(makeLog(2, { entity_type: 'role' }));
     repo.insert(makeLog(3, { entity_type: 'dept' }));
@@ -343,7 +344,7 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('list 分页切片：25 条 page=2 pageSize=10 → 10 条 + total=25', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     for (let i = 1; i <= 25; i++) {
       repo.insert(
         makeLog(i, { operated_at: `2024-01-${String(i).padStart(2, '0')}T10:00:00.000Z` }),
@@ -355,17 +356,17 @@ describe('单测 · repository append-only（内存）', () => {
   });
 
   it('append-only：repository 不暴露 update 方法（编译期保障）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { update?: unknown }).update).toBeUndefined();
   });
 
   it('append-only：repository 不暴露 delete 方法（编译期保障）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { delete?: unknown }).delete).toBeUndefined();
   });
 
   it('append-only：重复 insert 相同记录允许（不去重，视为追加）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const log = makeLog(10);
     repo.insert(log);
     expect(() => repo.insert(log)).not.toThrow();
@@ -879,12 +880,12 @@ describe('边界 · F3 PII 脱敏', () => {
 
 describe('边界 · F4 append-only', () => {
   it('F4: repository 不暴露 update 方法（编译期保障）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { update?: unknown }).update).toBeUndefined();
   });
 
   it('F4: repository 不暴露 delete 方法（编译期保障）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { delete?: unknown }).delete).toBeUndefined();
   });
 
@@ -896,7 +897,7 @@ describe('边界 · F4 append-only', () => {
   });
 
   it('F4: 重复 insert 相同记录允许（append-only 不去重）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const log = makeLog(99);
     repo.insert(log);
     expect(() => repo.insert(log)).not.toThrow();
@@ -1021,12 +1022,12 @@ describe('权限 · SEC-001 procedure 元数据声明', () => {
 // ---------------------------------------------------------------------------
 describe('状态机 · append-only 不可变（无修改/删除路径）', () => {
   it('repository 不暴露 update 方法（编译期保障，无路径可修改日志）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { update?: unknown }).update).toBeUndefined();
   });
 
   it('repository 不暴露 delete 方法（编译期保障，无路径可删除日志）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     expect((repo as unknown as { delete?: unknown }).delete).toBeUndefined();
   });
 
@@ -1044,7 +1045,7 @@ describe('状态机 · append-only 不可变（无修改/删除路径）', () =>
   });
 
   it('append-only 闭环：insert 后再 insert 同记录 → 追加为 2 条（不覆盖、不去重、不报错）', () => {
-    const repo = new AuditLogRepository();
+    const repo = new AuditLogRepository(createTestDb());
     const log = makeLog(7);
     repo.insert(log);
     repo.insert(log);

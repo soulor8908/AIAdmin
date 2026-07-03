@@ -12,3 +12,4 @@ export * from './schemas/report.js';
 export * from './schemas/notification.js';
 export * from './schemas/transfer.js';
 export * from './schemas/role-inheritance.js';
+export * from './schemas/auth.js';

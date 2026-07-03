@@ -15,6 +15,7 @@ import {
 import type { NotificationService } from '../service/notification.js';
 import { AuditLogService } from '../service/audit.js';
 import { AuditLogRepository } from '../repository/audit.js';
+import { createTestDb } from '../db/connection.js';
 import type { Ctx } from '../context.js';
 import type { Procedure } from './user.js';
 import { withAudit } from './audit.js';
@@ -79,7 +80,7 @@ export function createNotificationRouter(
   service: NotificationService,
   auditService?: AuditLogService,
 ): NotificationRouter {
-  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository(createTestDb()));
   return {
     list: {
       input: listNotificationQuerySchema,

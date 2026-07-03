@@ -48,6 +48,7 @@ import {
 } from '@admin/contracts';
 import { AuditLogRepository } from '../src/repository/audit.js';
 import { ReportService } from '../src/service/report.js';
+import { createTestDb } from './helpers/db.js';
 import { createReportRouter, type ReportProcedure } from '../src/router/report.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
@@ -67,7 +68,7 @@ function setup(): {
   service: ReportService;
   router: ReturnType<typeof createReportRouter>;
 } {
-  const auditRepo = new AuditLogRepository();
+  const auditRepo = new AuditLogRepository(createTestDb());
   const service = new ReportService(auditRepo);
   const router = createReportRouter(service);
   return { auditRepo, service, router };

@@ -44,6 +44,7 @@ import type { UserEntity } from '../src/domain/user.js';
 import type { WriteResult } from '../src/domain/audit.js';
 import { TransferService } from '../src/service/transfer.js'; // 预期导入红（impl 尚未存在）
 import { createTransferRouter } from '../src/router/transfer.js'; // 预期导入红（impl 尚未存在）
+import { createTestDb } from './helpers/db.js';
 
 // --- 固定 UUID（seed 用）---
 const ADMIN_ID = 'admin-00000000-0000-4000-8000-000000000099';
@@ -156,6 +157,9 @@ function seedSharedData(
   roleRepo: RoleRepository,
   deptRepo: DepartmentRepository,
 ): void {
+  // 先 seed fromDept + toDept（users.department_id FK → departments.id，PRAGMA foreign_keys=ON 要求父先于子）
+  deptRepo.insert({ id: FROM_DEPT_ID, name: 'Engineering', parent_id: null, created_at: SEED_TS });
+  deptRepo.insert({ id: TO_DEPT_ID, name: 'Sales', parent_id: null, created_at: SEED_TS });
   // seed admin 用户（adminCtx 操作者）
   userRepo.insert({
     id: ADMIN_ID,
@@ -177,9 +181,6 @@ function seedSharedData(
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
-  // seed fromDept + toDept
-  deptRepo.insert({ id: FROM_DEPT_ID, name: 'Engineering', parent_id: null, created_at: SEED_TS });
-  deptRepo.insert({ id: TO_DEPT_ID, name: 'Sales', parent_id: null, created_at: SEED_TS });
   // seed oldRole(builtin:false) + newRole
   roleRepo.insert({
     id: OLD_ROLE_ID,
@@ -225,16 +226,18 @@ function setupShared(): {
   transferService: TransferService;
   router: ReturnType<typeof createTransferRouter>;
 } {
-  const userRepo = new UserRepository();
-  const roleRepo = new RoleRepository();
-  const deptRepo = new DepartmentRepository();
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（transfer 事务跨 user/role/dept/audit repo，FK + 补偿回滚 + 埋点需一致）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
+  const roleRepo = new RoleRepository(db);
+  const deptRepo = new DepartmentRepository(db);
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
   seedSharedData(userRepo, roleRepo, deptRepo);
   const userService = new UserService(userRepo);
   const roleService = new RoleService(roleRepo, userRepo);
   const deptService = new DepartmentService(deptRepo, userRepo);
-  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
+  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo, db);
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, auditService, transferService, router };
 }
@@ -253,10 +256,12 @@ function setupWithThrowingRole(failStep: 'remove' | 'assign'): {
   transferService: TransferService;
   router: ReturnType<typeof createTransferRouter>;
 } {
-  const userRepo = new UserRepository();
-  const roleRepo = new RoleRepository();
-  const deptRepo = new DepartmentRepository();
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（transfer 事务跨 user/role/dept/audit repo，FK + 补偿回滚 + 埋点需一致）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
+  const roleRepo = new RoleRepository(db);
+  const deptRepo = new DepartmentRepository(db);
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
   seedSharedData(userRepo, roleRepo, deptRepo);
   const userService = new UserService(userRepo);
@@ -269,6 +274,7 @@ function setupWithThrowingRole(failStep: 'remove' | 'assign'): {
     userRepo,
     roleRepo,
     deptRepo,
+    db,
   );
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, transferService, router };
@@ -286,10 +292,12 @@ function setupWithCompensationFailure(): {
   auditRepo: AuditLogRepository;
   router: ReturnType<typeof createTransferRouter>;
 } {
-  const userRepo = new ThrowingUserRepo();
-  const roleRepo = new RoleRepository();
-  const deptRepo = new DepartmentRepository();
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（ThrowingUserRepo 与 roleRepo/deptRepo/auditRepo 共用，FK + 补偿回滚 + 埋点需一致）
+  const db = createTestDb();
+  const userRepo = new ThrowingUserRepo(db);
+  const roleRepo = new RoleRepository(db);
+  const deptRepo = new DepartmentRepository(db);
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
   seedSharedData(userRepo, roleRepo, deptRepo);
   const userService = new UserService(userRepo);
@@ -304,6 +312,7 @@ function setupWithCompensationFailure(): {
     userRepo,
     roleRepo,
     deptRepo,
+    db,
   );
   const router = createTransferRouter(transferService, auditService);
   return { userRepo, roleRepo, deptRepo, auditRepo, router };

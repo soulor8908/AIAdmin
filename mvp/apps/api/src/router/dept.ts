@@ -15,6 +15,7 @@ import {
 import type { DepartmentService } from '../service/dept.js';
 import { AuditLogService } from '../service/audit.js';
 import { AuditLogRepository } from '../repository/audit.js';
+import { createTestDb } from '../db/connection.js';
 import type { Procedure } from './user.js';
 import { withAudit } from './audit.js';
 
@@ -49,7 +50,7 @@ export type DeptRouter = {
  *             生产环境应传入共享实例以聚合日志，测试桩下缺省即可（best-effort 日志去向不影响测试断言）。
  */
 export function createDeptRouter(service: DepartmentService, auditService?: AuditLogService): DeptRouter {
-  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository(createTestDb()));
   return {
     tree: {
       input: departmentTreeQuerySchema,

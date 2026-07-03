@@ -16,6 +16,7 @@ import {
 } from '@admin/contracts';
 import { UserRepository } from '../src/repository/user.js';
 import { UserService } from '../src/service/user.js';
+import { createTestDb } from './helpers/db.js';
 import {
   createUserRouter,
   updateUserStatusProcedureInputSchema,
@@ -33,7 +34,7 @@ const adminCtx: Ctx = { user: { id: ADMIN_ID, role: 'admin' } };
 const userCtx: Ctx = { user: { id: USER_ROLE_ID, role: 'user' } };
 
 function setup(): { repo: UserRepository; service: UserService; router: ReturnType<typeof createUserRouter> } {
-  const repo = new UserRepository();
+  const repo = new UserRepository(createTestDb());
   const service = new UserService(repo);
   const router = createUserRouter(service);
   return { repo, service, router };

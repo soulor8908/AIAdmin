@@ -58,6 +58,7 @@ import {
 import { MAX_DEPARTMENT_DEPTH } from '../src/domain/dept.js';
 import { UserRepository } from '../src/repository/user.js';
 import { AppError } from '../src/errors.js';
+import { createTestDb } from './helpers/db.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
 
@@ -75,8 +76,9 @@ function setup(): {
   service: DepartmentService;
   router: ReturnType<typeof createDeptRouter>;
 } {
-  const deptRepo = new DepartmentRepository();
-  const userRepo = new UserRepository();
+  const db = createTestDb();
+  const deptRepo = new DepartmentRepository(db);
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -145,24 +147,24 @@ describe('单测 · domain 常量', () => {
 
 describe('单测 · repository CRUD（内存）', () => {
   it('初始化为空（无内置部门 seed）：list() 返回空', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     expect(repo.list()).toEqual([]);
   });
 
   it('insert/findById：写入后可按 id 查回', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     const d = makeDept(1);
     repo.insert(d);
     expect(repo.findById(d.id)).toEqual(d);
   });
 
   it('findById：不存在返回 undefined', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     expect(repo.findById(MISSING_ID)).toBeUndefined();
   });
 
   it('findByParent(null)：返回根部门（parent_id=null）', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     const r1 = makeDept(1, { name: 'root1' });
     const r2 = makeDept(2, { name: 'root2' });
     const child = makeDept(3, { name: 'c', parent_id: r1.id });
@@ -175,7 +177,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('findByParent(id)：返回该父的直接子部门', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     const r = makeDept(1);
     repo.insert(r);
     const c1 = makeDept(2, { name: 'c1', parent_id: r.id });
@@ -188,7 +190,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('list()：返回全部部门（保持插入顺序）', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     repo.insert(makeDept(1, { name: 'a' }));
     repo.insert(makeDept(2, { name: 'b' }));
     expect(repo.list()).toHaveLength(2);
@@ -196,7 +198,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('delete：删除后 findById 为空，返回 true；不存在返回 false', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     const d = makeDept(1);
     repo.insert(d);
     expect(repo.delete(d.id)).toBe(true);
@@ -205,7 +207,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('existsByNameUnderParent：同父同名 → true；不同父同名 → false；同父不同名 → false', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     const r1 = makeDept(1, { name: 'r1' });
     const r2 = makeDept(2, { name: 'r2' });
     repo.insert(r1);
@@ -223,7 +225,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('computeDepth：根(null)=1；root=2；child=3；grandchild=4（逐层 +1）', () => {
-    const repo = new DepartmentRepository();
+    const repo = new DepartmentRepository(createTestDb());
     expect(repo.computeDepth(null)).toBe(1);
     const r = makeDept(1, { name: 'r' });
     repo.insert(r);

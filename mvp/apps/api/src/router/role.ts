@@ -18,6 +18,7 @@ import {
 import type { RoleService } from '../service/role.js';
 import { AuditLogService } from '../service/audit.js';
 import { AuditLogRepository } from '../repository/audit.js';
+import { createTestDb } from '../db/connection.js';
 import type { Procedure } from './user.js';
 import { withAudit } from './audit.js';
 
@@ -113,7 +114,7 @@ export type RoleRouter = {
  *             生产环境应传入共享实例以聚合日志，测试桩下缺省即可（best-effort 日志去向不影响测试断言）。
  */
 export function createRoleRouter(service: RoleService, auditService?: AuditLogService): RoleRouter {
-  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository(createTestDb()));
   return {
     list: {
       input: listRoleQuerySchema,

@@ -30,6 +30,7 @@ import { NotificationService } from '../src/service/notification.js';
 import { validateVersion } from '../src/domain/version.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const TARGET_ID = '00000000-0000-4000-8000-000000000002';
@@ -53,7 +54,8 @@ const NOTIFICATION_SERVICE_SRC = resolve(__dirname, '../src/service/notification
  * 返回的 repo/service 可观测存储态（断言 version/status 不变性）。
  */
 function setupUser(): { repo: UserRepository; service: UserService } {
-  const repo = new UserRepository();
+  const db = createTestDb();
+  const repo = new UserRepository(db);
   repo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -81,8 +83,10 @@ function setupUser(): { repo: UserRepository; service: UserService } {
  * RoleService 构造签名：new RoleService(roleRepo, userRepo)。
  */
 function setupRole(): { repo: RoleRepository; userRepo: UserRepository; service: RoleService } {
-  const repo = new RoleRepository();
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（RoleService 跨 role/user repo 查询，需一致）
+  const db = createTestDb();
+  const repo = new RoleRepository(db);
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -106,7 +110,9 @@ function setupNotification(): {
   repo: NotificationRepository;
   service: NotificationService;
 } {
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（NotificationService 经 userService 查 user，notification 引用 recipient）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -126,7 +132,7 @@ function setupNotification(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const repo = new NotificationRepository();
+  const repo = new NotificationRepository(db);
   const service = new NotificationService(userService, repo);
   return { userRepo, userService, repo, service };
 }
