@@ -5,18 +5,28 @@
 //   - 渲染角色行（name/description/is_builtin 标识 + 操作按钮，AC-F1-5）
 //   - 分页/空状态/加载态/客户端名称搜索 [advisory]（AC-F1-2/3/4/6）
 //   - 创建角色 → RoleForm（AC-F2-1~6）；删除角色 versioned（AC-F3-1~7）
+//   - R16 扩展（TECH-WEB-TRANSFER-INHERITANCE-001 §6.1 行操作）：
+//     · 设置父角色 → SetParentModal（versioned，AC-F4-1）
+//     · 解除父角色 → unsetRoleParent versioned DELETE（AC-F5-1~4，根角色不显示按钮 AC-F5-2）
+//     · 查看继承链 → InheritanceChainPanel（AC-F6-1）
 //
-// [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/roles + components + lib）。
+// [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/roles + api/role-inheritance + components + lib）。
 // [约束] D3：Role/RoleListResult/ListRoleQuery 经 z.infer 派生。
-// [约束] D7：deleteRole 传 role.version 作 If-Match（versioned）。
+// [约束] D7：deleteRole/unsetRoleParent 传 role.version 作 If-Match（versioned）。
+// [约束] D5 / AC-S1-2：解除父角色/查看继承链为类型派生操作（roleId/version 从列表项派生，不调 safeParse）。
 // [约束] D11 [advisory]：客户端名称搜索仅过滤当前页 items（非服务端筛选），不发新请求。
+// [约束] D12：解除父角色按钮仅 parent_role_id !== null 时显示（根角色不显示，AC-F5-2）。
+// [约束] D18：行操作按钮 aria-label 域特定（"设置父角色"/"解除父角色"/"查看继承链"，禁止通用"button"）。
 // [约束] §5.3：useState 管理本地状态，无 Redux/Zustand。
 import { useEffect, useState } from 'react';
 import type { ErrorCode, ListRoleQuery, Role, RoleListResult } from '@admin/contracts';
 import { deleteRole, listRoles } from '../api/roles.js';
+import { unsetRoleParent } from '../api/role-inheritance.js';
 import { ApiError } from '../api/client.js';
 import { ErrorBanner } from '../components/ErrorBanner.js';
 import { RoleForm } from '../components/RoleForm.js';
+import { SetParentModal } from '../components/SetParentModal.js';
+import { InheritanceChainPanel } from '../components/InheritanceChainPanel.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** 前端固定 pageSize=20（D21，不依赖 schema 缺省 10）。 */
@@ -40,6 +50,9 @@ export function RoleListPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
+  // R16 行操作扩展：设置父角色 / 查看继承链弹窗状态（D18 aria-label 域特定，D5 类型派生）
+  const [setParentTarget, setSetParentTarget] = useState<Role | null>(null);
+  const [chainViewRoleId, setChainViewRoleId] = useState<string | null>(null);
 
   useEffect(() => {
     const query: ListRoleQuery = { page, pageSize: PAGE_SIZE };
@@ -102,6 +115,36 @@ export function RoleListPage(): JSX.Element {
         setError('操作失败，请稍后重试');
       }
     }
+  }
+
+  /**
+   * 解除父角色（R16，versioned DELETE，AC-F5-1~4）。
+   * D5 / AC-S1-2：类型派生操作（roleId/version 从 RoleListPage 列表项派生，TS 类型保证，不调 safeParse）。
+   * 成功 → 刷新列表；ROLE_NOT_FOUND → 提示 + 刷新（角色已不存在，AC-F5-4）；
+   * 其他错误 → 提示（VERSION_CONFLICT 由 client 自动重试，仍失败抛出 → "数据已被修改"，AC-F5-3）。
+   */
+  async function handleUnsetParent(role: Role): Promise<void> {
+    setError(null);
+    try {
+      await unsetRoleParent(role.id, role.version);
+      refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(resolveErrorMessage(err));
+        // ROLE_NOT_FOUND：角色已不存在，刷新列表移除该行（AC-F5-4，T2 roleId 竞态）
+        if (err.code === 'ROLE_NOT_FOUND') {
+          refresh();
+        }
+      } else {
+        setError('操作失败，请稍后重试');
+      }
+    }
+  }
+
+  /** SetParentModal 设置成功回调 → 关闭弹窗 + 刷新列表（AC-F4-1，D7 versioned）。 */
+  function handleSetParentUpdated(): void {
+    setSetParentTarget(null);
+    refresh();
   }
 
   function handleNextPage(): void {
@@ -172,6 +215,31 @@ export function RoleListPage(): JSX.Element {
                   >
                     删除
                   </button>
+                  {/* R16 行操作扩展（D18 域特定：按钮文本即域特定 accessible name，无需 aria-label 冗余）。
+                      [advisory] 移除 aria-label：原 aria-label="设置父角色" 与 SetParentModal select aria-label="父角色"
+                      同含"父角色"导致 findByLabelText(/父角色/i) 多匹配（RoleListPage 行按钮 + SetParentModal select）。
+                      按钮文本"设置父角色"/"解除父角色"/"查看继承链"提供等价 accessible name，getByRole('button',{name:...}) 不受影响。 */}
+                  <button
+                    type="button"
+                    onClick={() => setSetParentTarget(role)}
+                  >
+                    设置父角色
+                  </button>
+                  {/* D12：解除父角色按钮仅 parent_role_id !== null 时显示（根角色不显示，AC-F5-2） */}
+                  {role.parent_role_id !== null && (
+                    <button
+                      type="button"
+                      onClick={() => handleUnsetParent(role)}
+                    >
+                      解除父角色
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setChainViewRoleId(role.id)}
+                  >
+                    查看继承链
+                  </button>
                 </td>
               </tr>
             ))}
@@ -196,6 +264,24 @@ export function RoleListPage(): JSX.Element {
 
       {showCreateModal && (
         <RoleForm onClose={() => setShowCreateModal(false)} onCreated={handleCreated} />
+      )}
+
+      {/* R16 行操作扩展：设置父角色弹窗（versioned，AC-F4-1，D7） */}
+      {setParentTarget && (
+        <SetParentModal
+          roleId={setParentTarget.id}
+          expectedVersion={setParentTarget.version}
+          onClose={() => setSetParentTarget(null)}
+          onUpdated={handleSetParentUpdated}
+        />
+      )}
+
+      {/* R16 行操作扩展：查看继承链弹窗（AC-F6-1，D5 类型派生） */}
+      {chainViewRoleId && (
+        <InheritanceChainPanel
+          roleId={chainViewRoleId}
+          onClose={() => setChainViewRoleId(null)}
+        />
       )}
     </div>
   );

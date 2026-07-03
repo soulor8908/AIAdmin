@@ -72,8 +72,19 @@ describe('Sidebar 导航 R15 扩展（6 入口 + 通知/报表路由守卫）', 
     vi.clearAllMocks();
   });
 
-  // ---------- AC-F8-1 侧边栏 6 入口 + 登出按钮（4→6 扩展，D17）----------
-  it('侧边栏渲染 6 入口（用户/角色/部门/审计/通知/报表）+ 登出按钮（AC-F8-1，D17，①类显式影响 4→6）', () => {
+  // ---------- AC-F8-1 侧边栏 7 入口 + 登出按钮（4→6→7 扩展，D17+R16 D15）----------
+  //
+  // [R16 impl-writer 改] ①类显式影响（AI-002 边界，对齐 R14/R15 范例）：
+  //   - 原 R15 断言：`it('侧边栏渲染 6 入口（用户/角色/部门/审计/通知/报表）+ 登出按钮（...）')` 仅断言 6 入口 Link。
+  //   - R16 D15 扩展 Sidebar 为 7 入口（新增调岗，TECH-WEB-TRANSFER-INHERITANCE-001 §6.8）后，
+  //     原 6 入口断言虽不会失败（6 个 Link 仍存在，regex /用户|角色|部门|审计|通知|报表/i 不匹配"调岗"），
+  //     但断言措辞 "6 入口" 与扩展后实际 7 入口态不符，且未覆盖新增的 /transfer 入口（断言覆盖不完整）。
+  //   - 改动性质：断言 matcher 调整（it 标题 6→7 + 追加 1 条 Link 断言覆盖调岗入口），非新增测试用例。
+  //   - 理由：D15 扩展使 Sidebar 入口数 6→7，原 6 入口断言需同步升级为 7 入口以保持断言与实现一致。
+  //   - Reviewer 确认：此为 test-writer 在 navigation-extend-3.test.tsx §7-18 已识别并标注的 ①类显式影响，
+  //     impl-writer 据此落地（对齐 R14/R15 范例，AI-002 已显式列出：受影响文件=navigation-extend.test.tsx +
+  //     改动性质=断言 matcher 调整 + 理由=D15 扩展 6→7 入口）。
+  it('侧边栏渲染 7 入口（用户/角色/部门/审计/通知/报表/调岗）+ 登出按钮（AC-F8-1，D17 4→6+R16 D15 6→7，①类显式影响）', () => {
     renderSidebar();
 
     // R14 4 入口
@@ -84,6 +95,8 @@ describe('Sidebar 导航 R15 扩展（6 入口 + 通知/报表路由守卫）', 
     // R15 新增 2 入口（D17）
     expect(screen.getByRole('link', { name: /通知/i })).toHaveAttribute('href', '/notifications');
     expect(screen.getByRole('link', { name: /报表/i })).toHaveAttribute('href', '/reports');
+    // R16 D15 新增 1 入口（调岗）
+    expect(screen.getByRole('link', { name: /调岗/i })).toHaveAttribute('href', '/transfer');
     // 登出按钮
     expect(screen.getByRole('button', { name: /登出|退出/i })).toBeInTheDocument();
   });

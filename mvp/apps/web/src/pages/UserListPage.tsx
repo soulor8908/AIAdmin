@@ -11,9 +11,13 @@
 //     - USER_DISABLE_SELF_FORBIDDEN：显示"不能禁用自身账号"（AC-F4-5）
 //     - USER_ALREADY_DISABLED/ACTIVE：显示对应提示（AC-F4-6）
 //   - 登出按钮：调 useAuth().logout()（AC-F6-2）
+//   - R16 扩展（TECH-WEB-TRANSFER-INHERITANCE-001 §6.7 行操作）：
+//     · 有效权限按钮 → EffectivePermissionsPanel modal（AC-F7-1~4）
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/users + auth/AuthContext + components + lib）。
 // [约束] D3：User/UserListResult/ListUserQuery 经 z.infer 派生。
+// [约束] D5 / AC-S1-2：有效权限按钮为类型派生操作（userId 从行派生自 User.id，不调 safeParse）。
+// [约束] D18/R16：有效权限按钮 aria-label 域特定（"有效权限"）。
 // [约束] §5.3：用 useState 管理本地状态，无 Redux/Zustand（D5）。
 import { useEffect, useState } from 'react';
 import type { ErrorCode, ListUserQuery, User, UserListResult, UserStatus } from '@admin/contracts';
@@ -24,6 +28,7 @@ import { ErrorBanner } from '../components/ErrorBanner.js';
 import { UserRow } from '../components/UserRow.js';
 import { CreateUserModal } from '../components/CreateUserModal.js';
 import { UserRolesPanel } from '../components/UserRolesPanel.js';
+import { EffectivePermissionsPanel } from '../components/EffectivePermissionsPanel.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** 前端固定 pageSize=20（D14，不依赖 schema 缺省 10）。 */
@@ -42,6 +47,8 @@ export function UserListPage(): JSX.Element {
   const [showCreateModal, setShowCreateModal] = useState(false);
   // D24：角色分配面板 modal 状态（目标用户 id，null 表示面板关闭）
   const [rolesPanelUserId, setRolesPanelUserId] = useState<string | null>(null);
+  // R16：有效权限面板 modal 状态（目标用户 id，null 表示面板关闭，AC-F7-1）
+  const [effectivePermUserId, setEffectivePermUserId] = useState<string | null>(null);
 
   // 列表加载：依赖 page + statusFilter，首次及状态变化均触发（AC-F2-1/2/3/4）
   useEffect(() => {
@@ -137,6 +144,15 @@ export function UserListPage(): JSX.Element {
     setRolesPanelUserId(user.id);
   }
 
+  /**
+   * R16：行内"有效权限"按钮点击 → 弹 EffectivePermissionsPanel modal（设置目标 userId，AC-F7-1）。
+   * D5 / AC-S1-2：类型派生操作（userId 从行 User.id 派生，TS 类型保证，不调 safeParse）。
+   */
+  function handleViewEffectivePermissions(user: User): void {
+    setError(null);
+    setEffectivePermUserId(user.id);
+  }
+
   return (
     <div>
       <header>
@@ -187,6 +203,7 @@ export function UserListPage(): JSX.Element {
                 user={u}
                 onToggleStatus={handleToggleStatus}
                 onToggleRoles={handleToggleRoles}
+                onViewEffectivePermissions={handleViewEffectivePermissions}
               />
             ))}
           </tbody>
@@ -220,6 +237,14 @@ export function UserListPage(): JSX.Element {
         <UserRolesPanel
           userId={rolesPanelUserId}
           onClose={() => setRolesPanelUserId(null)}
+        />
+      )}
+
+      {/* R16：有效权限面板 modal（AC-F7-1，D5 类型派生 userId） */}
+      {effectivePermUserId && (
+        <EffectivePermissionsPanel
+          userId={effectivePermUserId}
+          onClose={() => setEffectivePermUserId(null)}
         />
       )}
     </div>

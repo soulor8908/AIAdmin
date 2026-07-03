@@ -12,9 +12,11 @@
 // [约束] D5：类型派生操作（roleId 从列表派生，TS 类型保证，不调 safeParse，R13 S-1）。
 // [约束] D10：链形文本（" → " 分隔，Q6 决策①，不做树形/图表，D23）。
 // [约束] D18：aria-label="继承链"；D21/R15 S-14：label 跨组件唯一。
-//
-// [test-writer stub] AI-002 test-first：本文件为 stub，组件 render 抛 NOT_IMPLEMENTED，测试期断言级红。
-//   impl-writer 阶段落地真实实现（见 Spec §6.5 实现提示）。
+import { useEffect, useState } from 'react';
+import type { ErrorCode, Role } from '@admin/contracts';
+import { getInheritanceChain } from '../api/role-inheritance.js';
+import { ApiError } from '../api/client.js';
+import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** InheritanceChainPanel 组件 props（roleId 从 RoleListPage 行派生，onClose 可选）。 */
 export type InheritanceChainPanelProps = {
@@ -22,12 +24,64 @@ export type InheritanceChainPanelProps = {
   onClose?: () => void;
 };
 
-/**
- * InheritanceChainPanel —— 继承链展示（F6，链形文本 + 根角色空数组"无父角色"）。
- * impl-writer 落地：getInheritanceChain 加载 + 链形文本渲染 + 根角色空数组"无父角色" + ROLE_NOT_FOUND 提示（§6.5）。
- */
-export function InheritanceChainPanel(_props: InheritanceChainPanelProps): JSX.Element {
-  // [test-writer stub] impl-writer 替换为真实继承链展示。
-  void _props;
-  throw new Error('NOT_IMPLEMENTED');
+/** ApiError → 中文提示。LocalErrorCode 兜底通用提示，contracts 码走 mapErrorToMessage。 */
+function resolveErrorMessage(err: ApiError): string {
+  if (err.code === 'NETWORK_ERROR' || err.code === 'INTERNAL_ERROR') {
+    return '操作失败，请稍后重试';
+  }
+  return mapErrorToMessage(err.code as ErrorCode);
 }
+
+/** InheritanceChainPanel 组件（链形文本 + 根角色空数组"无父角色"）。 */
+export function InheritanceChainPanel(props: InheritanceChainPanelProps): JSX.Element {
+  const { roleId, onClose } = props;
+  const [chain, setChain] = useState<Role[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getInheritanceChain(roleId)
+      .then((result: Role[]) => {
+        if (!cancelled) setChain(result);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? resolveErrorMessage(err) : '操作失败，请稍后重试');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roleId]);
+
+  return (
+    <div>
+      <h2>继承链</h2>
+      {onClose && (
+        <button type="button" onClick={onClose}>
+          关闭
+        </button>
+      )}
+      {error && <div role="alert">{error}</div>}
+      {loading && <div>加载中...</div>}
+      {!loading && !error && chain !== null && (
+        <div>
+          {chain.length === 0 ? (
+            <div>无父角色</div>
+          ) : (
+            <div>{chain.map((r) => r.name).join(' → ')}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 导出类型（contracts 派生），供测试引用。 */
+export type { Role };

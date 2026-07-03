@@ -1,7 +1,8 @@
-// apps/web/src/App.tsx —— 路由表 + AuthProvider 包裹（TECH-WEB-AUTH-USER-001 §7 + TECH-WEB-ROLE-DEPT-AUDIT-001 §6 路由扩展 + TECH-WEB-NOTIFICATION-REPORT-001 §7）
-// /login /users /roles /departments /audit-logs /notifications /reports 均经 RouteGuard 判定（AC-F6-1 未登录访问 → 跳 /login，白名单仅 /login）。
-// AC-F8-3：未登录访问 /roles /departments /audit-logs /notifications /reports → RouteGuard 跳 /login（白名单仍仅 /login）。
+// apps/web/src/App.tsx —— 路由表 + AuthProvider 包裹（TECH-WEB-AUTH-USER-001 §7 + TECH-WEB-ROLE-DEPT-AUDIT-001 §6 路由扩展 + TECH-WEB-NOTIFICATION-REPORT-001 §7 + TECH-WEB-TRANSFER-INHERITANCE-001 §7）
+// /login /users /roles /departments /audit-logs /notifications /reports /transfer 均经 RouteGuard 判定（AC-F6-1 未登录访问 → 跳 /login，白名单仅 /login）。
+// AC-F8-3：未登录访问 /roles /departments /audit-logs /notifications /reports /transfer → RouteGuard 跳 /login（白名单仍仅 /login）。
 // R15 扩展：新增 /notifications /reports 两条 RouteGuard 包裹的路由（§7，AC-F8-1 6 入口路由侧落点）。
+// R16 扩展：新增 /transfer 一条 RouteGuard 包裹的路由（§7，AC-F8-1 6→7 入口路由侧落点）。
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext.js';
 import { RouteGuard } from './auth/RouteGuard.js';
@@ -12,6 +13,7 @@ import { DeptTreePage } from './pages/DeptTreePage.js';
 import { AuditLogPage } from './pages/AuditLogPage.js';
 import { NotificationListPage } from './pages/NotificationListPage.js';  // + R15
 import { ReportPage } from './pages/ReportPage.js';                       // + R15
+import { TransferPage } from './pages/TransferPage.js';                   // + R16
 
 export function App() {
   return (
@@ -71,6 +73,15 @@ export function App() {
           element={
             <RouteGuard>
               <ReportPage />
+            </RouteGuard>
+          }
+        />
+        {/* + R16 §7：调岗路由，AC-F8-1 6→7 入口路由侧落点 */}
+        <Route
+          path="/transfer"
+          element={
+            <RouteGuard>
+              <TransferPage />
             </RouteGuard>
           }
         />

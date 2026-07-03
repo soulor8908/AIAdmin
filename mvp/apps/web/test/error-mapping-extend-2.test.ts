@@ -68,16 +68,25 @@ describe('errorMapping R15 扩展（通知/报表域码中文提示）', () => {
     expect(mapErrorToMessage('REPORT_TIME_RANGE_INVALID')).toBe('开始时间不能晚于结束时间');
   });
 
-  // ========== AC-F9-3 同步注释核验（R14 S-11）：扩展后未映射域仍 FALLBACK ==========
+  // ========== AC-F9-3 同步注释核验（R14 S-11）：R16 全码映射收尾后 TRANSFER/ROLE_INHERITANCE 域码升具体中文 ==========
+  //
+  // ①类显式影响（AI-006，R16 D9 全码映射收尾）：
+  //   - R15 test-writer 阶段 TRANSFER_SAME_ROLE/ROLE_INHERITANCE_CYCLE 仍 FALLBACK（断言 toContain('操作失败')）；
+  //   - R16 D9 扩展 SPECIFIC_MESSAGES 后这两码升具体中文（"新角色不能与原角色相同" / "会形成继承环"），
+  //     原 FALLBACK 断言失效（不再含"操作失败"）；
+  //   - impl-writer 调整：FALLBACK 断言 → 具体中文断言（对齐 R14 S-11 / R15 范例 ①类显式影响处理：
+  //     "调整 assertion 期望值 + 注明理由"），理由为 R16 D9 全码映射收尾（errorMapping.ts 注释同步闭合）。
+  //   - AI-002 边界：仅调整失效断言的期望值（toContain('操作失败') → toBe(具体中文)）+ 同步注释，
+  //     不删除测试用例、不改测试名（保持测试覆盖意图：核验 D9 扩展后映射值正确）。
 
-  it('TRANSFER_SAME_ROLE → FALLBACK "操作失败"（AC-F9-3，R14 S-11 同步注释：TRANSFER 域本期前端不触发）', () => {
-    // 扩展后 TRANSFER 域码仍 FALLBACK；注释须反映"未映射域含 TRANSFER"（而非 NOTIFICATION/REPORT）
-    expect(mapErrorToMessage('TRANSFER_SAME_ROLE')).toContain('操作失败');
+  it('TRANSFER_SAME_ROLE → "新角色不能与原角色相同"（AC-F9-3，R16 D9 全码映射收尾：TRANSFER 域码升具体中文）', () => {
+    // R16 D9 扩展后 TRANSFER 域码升具体中文（全码映射收尾，R14 S-11 闭合）
+    expect(mapErrorToMessage('TRANSFER_SAME_ROLE')).toBe('新角色不能与原角色相同');
   });
 
-  it('ROLE_INHERITANCE_CYCLE → FALLBACK "操作失败"（AC-F9-3，R14 S-11 同步注释：ROLE_INHERITANCE 域本期前端不触发）', () => {
-    // 扩展后 ROLE_INHERITANCE 域码仍 FALLBACK；注释须反映"未映射域含 ROLE_INHERITANCE"
-    expect(mapErrorToMessage('ROLE_INHERITANCE_CYCLE')).toContain('操作失败');
+  it('ROLE_INHERITANCE_CYCLE → "会形成继承环"（AC-F9-3，R16 D9 全码映射收尾：ROLE_INHERITANCE 域码升具体中文）', () => {
+    // R16 D9 扩展后 ROLE_INHERITANCE 域码升具体中文（全码映射收尾，R14 S-11 闭合）
+    expect(mapErrorToMessage('ROLE_INHERITANCE_CYCLE')).toBe('会形成继承环');
   });
 
   // ========== R12/R14 既有码不破坏（D9 扩展不影响已映射码）==========
