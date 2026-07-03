@@ -63,6 +63,8 @@ import {
 import { createTransferRouter, transferProcedureInputSchema } from './router/transfer.js';
 import { AppError, errorCodeToHttpStatus } from './errors.js';
 import { detailEtag, listEtag, parseIfNoneMatch } from './etag.js';
+import { createDb, applySchema, seedAdmin } from './db/connection.js';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Ctx } from './context.js';
 import type { Procedure } from './router/user.js';
 
@@ -73,13 +75,19 @@ if (!process.env.AUTH_SECRET) {
   console.warn('[server] AUTH_SECRET 未设置，使用开发缺省值。生产环境须通过 AUTH_SECRET 环境变量注入强随机密钥。');
 }
 
-const userRepo = new UserRepository();
-const roleRepo = new RoleRepository();
-const deptRepo = new DepartmentRepository();
-const auditRepo = new AuditLogRepository();
-const notificationRepo = new NotificationRepository();
-// TECH-AUTH-001 D4：token 黑名单（内存 Set，logout 吊销；进程重启清空，MVP 可接受）
-const tokenBlacklistRepo = new TokenBlacklistRepository();
+// TECH-PERSIST-001 D1/D3/D12/D15：建 DB 连接 + DDL 建表 + admin seed
+// createDb 内部：DB_PATH env / 缺省 ./data/admin.db / mkdirSync 父目录 / PRAGMA foreign_keys=ON
+const db: DatabaseSync = createDb();
+applySchema(db);
+seedAdmin(db);
+
+const userRepo = new UserRepository(db);
+const roleRepo = new RoleRepository(db);
+const deptRepo = new DepartmentRepository(db);
+const auditRepo = new AuditLogRepository(db);
+const notificationRepo = new NotificationRepository(db);
+// TECH-AUTH-001 D4：token 黑名单（DB 持久化，logout 吊销；重启不丢，TECH-PERSIST-001）
+const tokenBlacklistRepo = new TokenBlacklistRepository(db);
 
 const userService = new UserService(userRepo);
 const roleService = new RoleService(roleRepo, userRepo);
@@ -98,7 +106,8 @@ const deptRouter = createDeptRouter(deptService, auditService);
 const auditRouter = createAuditRouter(auditService);
 const reportRouter = createReportRouter(reportService);
 const notificationRouter = createNotificationRouter(notificationService, auditService);
-const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
+// TECH-PERSIST-001 D8：TransferService 注入 db 用于 withTransaction 包裹 A/B/C 三步（§3.1）
+const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo, db);
 const transferRouter = createTransferRouter(transferService, auditService);
 const authRouter = createAuthRouter(authService);
 
@@ -615,5 +624,11 @@ server.listen(PORT, () => {
 
 process.on('SIGINT', () => {
   console.log('\n[server] shutting down...');
+  // TECH-PERSIST-001 §7：shutdown 关闭 db 连接（advisory，确保文件 DB 刷盘）
+  try {
+    db.close();
+  } catch {
+    // db 已关闭或未建则忽略（best-effort 刷盘）
+  }
   server.close(() => process.exit(0));
 });

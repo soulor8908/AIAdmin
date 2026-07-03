@@ -110,12 +110,12 @@ export class NotificationService {
     // 取 max(Date.now(), prev+1ms) 确保 updated_at 严格晚于前值（测试断言 updated_at 刷新）。
     const prevMs = Date.parse(n.updated_at);
     const now = new Date(Math.max(Date.now(), prevMs + 1)).toISOString();
-    const updated = this.notificationRepo.update(id, {
-      title: input.title,
-      content: input.content,
-      recipient_id: input.recipient_id,
-      updated_at: now,
-    });
+    // 仅传递实际定义的字段（undefined 字段不纳入 patch，repo read-merge-write 保留原值）
+    const patch: { title?: string; content?: string; recipient_id?: string; updated_at: string } = { updated_at: now };
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.content !== undefined) patch.content = input.content;
+    if (input.recipient_id !== undefined) patch.recipient_id = input.recipient_id;
+    const updated = this.notificationRepo.update(id, patch);
     if (!updated) {
       // 极小竞态：刚查到又被并发删除，按不存在处理
       throw new AppError('NOTIFICATION_NOT_FOUND', `通知不存在: ${id}`);

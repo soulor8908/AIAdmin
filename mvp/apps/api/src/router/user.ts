@@ -12,6 +12,7 @@ import {
 import type { UserService } from '../service/user.js';
 import { AuditLogService } from '../service/audit.js';
 import { AuditLogRepository } from '../repository/audit.js';
+import { createTestDb } from '../db/connection.js';
 import type { Ctx } from '../context.js';
 import { withAudit } from './audit.js';
 
@@ -49,7 +50,7 @@ export type UserRouter = {
  *             生产环境应传入共享实例以聚合日志，测试桩下缺省即可（best-effort 日志去向不影响测试断言）。
  */
 export function createUserRouter(service: UserService, auditService?: AuditLogService): UserRouter {
-  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository(createTestDb()));
   return {
     list: {
       input: listUserQuerySchema,

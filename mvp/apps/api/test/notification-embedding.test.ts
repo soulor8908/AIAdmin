@@ -54,6 +54,7 @@ import { createNotificationRouter } from '../src/router/notification.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const U_VALID = '00000000-0000-4000-8000-000000000002';
@@ -79,9 +80,11 @@ function setup(): {
   notificationService: NotificationService;
   notificationRouter: ReturnType<typeof createNotificationRouter>;
 } {
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（notificationService 经 userService 查收件人 + withAudit 埋点写入 auditRepo）
+  const db = createTestDb();
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
-  const userRepo = new UserRepository();
+  const userRepo = new UserRepository(db);
   // seed 操作者 admin + active/disabled 收件人（F3 校验靶子）
   userRepo.insert({
     id: ADMIN_ID,
@@ -111,7 +114,7 @@ function setup(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const notificationRepo = new NotificationRepository();
+  const notificationRepo = new NotificationRepository(db);
   const notificationService = new NotificationService(userService, notificationRepo);
   // 方案A：notificationRouter 共享 auditService（→ 同一 auditRepo，埋点可观测）
   const notificationRouter = createNotificationRouter(notificationService, auditService);
@@ -144,9 +147,10 @@ function setupThrowingAudit(): {
   throwingRepo: AuditLogRepository;
   notificationRouter: ReturnType<typeof createNotificationRouter>;
 } {
-  const throwingRepo = new AuditLogRepository();
+  const db = createTestDb();
+  const throwingRepo = new AuditLogRepository(db);
   const throwingAudit = new ThrowingAuditLogService(throwingRepo);
-  const userRepo = new UserRepository();
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -166,7 +170,7 @@ function setupThrowingAudit(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const notificationRepo = new NotificationRepository();
+  const notificationRepo = new NotificationRepository(db);
   const notificationService = new NotificationService(userService, notificationRepo);
   const notificationRouter = createNotificationRouter(notificationService, throwingAudit);
   return { throwingRepo, notificationRouter };

@@ -16,13 +16,19 @@
 // 使用 alice 作为 target 不产生副作用；F2-4 改用新建用户以避免禁用 alice 后影响
 // notification send 测试的收件人 active 校验（B8）。
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { existsSync, unlinkSync } from 'node:fs';
 
 const TEST_PORT = 3999;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 // TECH-AUTH-001 D3：server.ts 已切换为 Bearer 验签，embedding 测试须 login 获取 token
 // （原 X-User-Id/X-User-Role header mock 不再被 buildCtx 接受）
 const AUTH_SECRET = 'test-optimistic-secret';
+// 临时文件 DB（TECH-PERSIST-001：spawn 真实 server 须传 DB_PATH，避免内存版 + 隔离测试间状态）
+const DB_PATH = join(tmpdir(), `optimistic-embed-${randomUUID()}.db`);
 const ALICE_ID = '00000000-0000-4000-8000-000000000002';
 
 let serverProcess: ChildProcess | undefined;
@@ -36,7 +42,7 @@ function authHeaders(): Record<string, string> {
 
 beforeAll(async () => {
   serverProcess = spawn('npx', ['tsx', 'apps/api/src/server.ts'], {
-    env: { ...process.env, PORT: String(TEST_PORT), AUTH_SECRET },
+    env: { ...process.env, PORT: String(TEST_PORT), AUTH_SECRET, DB_PATH },
     stdio: 'pipe',
     cwd: '/workspace/mvp',
   });
@@ -77,9 +83,21 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(async () => {
+  // [端口级 kill] npx tsx 会 fork node(server.ts) 子进程，serverProcess.kill('SIGTERM')
+  // 只杀 npx 父进程，node 子进程（实际 server）继续 listen 端口 → 下次运行假连旧 server。
+  // 用 lsof -ti:PORT -sTCP:LISTEN 杀所有 listen 该端口的进程，最可靠。
   if (serverProcess) {
-    serverProcess.kill('SIGTERM');
-    await new Promise((r) => setTimeout(r, 500));
+    try {
+      serverProcess.kill('SIGTERM');
+    } catch { /* 进程可能已退出 */ }
+  }
+  try {
+    execSync(`lsof -ti:${TEST_PORT} -sTCP:LISTEN | xargs -r kill -9 2>/dev/null || true`, { encoding: 'utf8' });
+  } catch { /* lsof 不可用时忽略 */ }
+  await new Promise((r) => setTimeout(r, 600));
+  // 清理临时 DB 文件（避免 tmpdir 残留）
+  if (existsSync(DB_PATH)) {
+    unlinkSync(DB_PATH);
   }
 });
 

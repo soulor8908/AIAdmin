@@ -34,8 +34,9 @@ alwaysApply: true
     3. Reviewer 逐条确认 [约束] 项偏离的理由是否成立：理由成立 + Spec 已同步 + 验收对齐（PRD Given/When/Then 逐条对齐）+ 三件套全绿 → 视为 Spec 已演进（非越界，不记 blocker）；理由不成立 或 Spec 未同步 或 验收偏离 → 记 blocker。
     4. 该流程将"严格禁止 [约束] 偏离"演进为"[约束] 偏离须经 Reviewer 确认理由成立 + Spec 同步 + 验收对齐后方可合规"，更贴近工程实际（实现期发现 Spec 设计不足时的合理演进路径），同时保留 [约束] 项的强约束力（默认禁止 + 显式标注 + Reviewer 把关）。
   - 对 Spec 的 `[advisory]` 项：允许偏离，但必须在 PR 描述写"反向同步 Spec：{{项}}"，并相应更新 Tech-Spec，消除单向漂移。
+  - **advisory 偏离反向同步可验证性（RETRO-ROUND12 S-1 反推）**：impl-writer 在代码注释声明"已反向同步"不等于 Spec 文件实际已改（伪同步）。impl-writer 须自检 `grep` Spec 文件确认对应章节已实际修改，并在交付报告列出"反向同步的 Spec 文件路径 + 修改行号"。Reviewer 须 `git diff` Spec 文件核实章节已改（非仅信代码注释）。
   - 对 Spec 未提及项：一律禁止，停下回报"超出 Spec 范围：{{项}}"。
-- 校验方式：Reviewer subagent 扫描 diff 新增导出符号在 `docs/spec` + contracts 有来源；advisory 偏离检查 PR 描述含"反向同步 Spec"字样，无则记 blocker；[约束] 项偏离检查 impl-writer 交付报告是否含"[约束] 项偏离"显式标注 + Tech-Spec 是否已反向同步（[advisory] 标注 + 理由），缺失或理由不成立记 blocker。
+- 校验方式：Reviewer subagent 扫描 diff 新增导出符号在 `docs/spec` + contracts 有来源；advisory 偏离检查 PR 描述含"反向同步 Spec"字样 + `git diff` Spec 文件确认章节已改（无则记 blocker，含伪同步——代码注释声明但 Spec 未改）；[约束] 项偏离检查 impl-writer 交付报告是否含"[约束] 项偏离"显式标注 + Tech-Spec 是否已反向同步（[advisory] 标注 + 理由），缺失或理由不成立记 blocker。
 
 ## AI-004 · 每次改动必跑三件套
 - 触发条件：AI 完成一批代码改动、提交前。
@@ -52,6 +53,7 @@ alwaysApply: true
   - **①类隐式影响子类（RETRO-ROUND11-001 S-2 反推）**：当 contracts 枚举扩展（如 errorCodeSchema/auditLogActionSchema/auditLogEntityTypeSchema 追加值）时，除 grep 显式引用被改符号的文件外，还须 grep `toEqual([...])` / `toStrictEqual([...])` 中期望值含枚举字面量的**全集断言**——这类断言在枚举扩展时必然失效，属隐式影响（语义耦合而非符号引用）。Tech Lead 须在 ①类清单中单列"隐式影响"子类，标注受影响文件 + 断言位置 + 同步方向（全集→子集 toContain，或更新期望值）。test-writer 须反向核实此类隐式影响是否被列出。
   - test-writer 据此清单同步更新既有测试的断言数据；**test-writer 须反向核实清单完整性**——若发现清单外的影响点（如 Tech Lead 遗漏的签名变更影响，或枚举扩展导致的全集断言失效），须在交付报告显式列出差异并修正，编排者据此判断清单准确性。R11 范例：test-writer 用 SSOT 派生断言 `[...schema.options].toContain('auth')` 暴露 audit 枚举遗漏（①次），impl-writer 发现全集断言失效（②次），反推本隐式影响子类。
 - 校验方式：Reviewer subagent 检查 Tech-Spec 是否含"受影响测试清单"章节（若 contracts 有联动改动或既有 service/repository 签名变更）；清单缺失或两类标注缺一记 blocker；test-writer 交付报告若含"清单遗漏差异"记录，编排者将该差异回填至复盘（验证 AI-006 增强是否真闭合）。脚本无专属 enforcement 分支，由 Reviewer 流程校验（不触发 META-003）。
+- **技术预判可实测性（RETRO-ROUND12 反推）**：AI-006 反向核实不仅覆盖"受影响测试清单完整性"，还覆盖"Spec 技术预判的可实测性"——当 Tech-Spec 对运行时行为做预判时（如 PRAGMA 默认值、API 返回类型、库行为），test-writer 须用实测断言核实预判准确性，发现预判错误须在交付报告显式列出 + 反向同步 Spec。R12 范例：test-writer 实测 PRAGMA foreign_keys 默认 ON，纠正 Spec §11#5 预判 OFF。
 
 ## AI-007 · 端到端验收测试 + Reviewer PRD 逐条核对（复盘 RETRO-ROUND5 P0 反推）
 - 触发条件：PRD 含"验收标准（Given/When/Then）"且涉及跨层行为（如埋点、联动、聚合等无法由单层断言覆盖的场景）时。

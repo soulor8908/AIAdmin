@@ -36,6 +36,7 @@ import { createRoleRouter } from '../src/router/role.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
 import type { Procedure } from '../src/router/user.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = 'admin-00000000-0000-4000-8000-000000000099';
 const SEED_TS = '2020-01-01T00:00:00.000Z';
@@ -118,9 +119,11 @@ function setupShared(): {
   service: RoleService;
   router: ReturnType<typeof createRoleRouter>;
 } {
-  const roleRepo = new RoleRepository();
-  const userRepo = new UserRepository();
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（RoleService 跨 role/user repo 查询，getEffectivePermissions 联查 user_roles；审计埋点写入同一 auditRepo）
+  const db = createTestDb();
+  const roleRepo = new RoleRepository(db);
+  const userRepo = new UserRepository(db);
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
   userRepo.insert({
     id: ADMIN_ID,

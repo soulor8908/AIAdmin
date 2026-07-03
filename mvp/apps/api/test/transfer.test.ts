@@ -25,6 +25,7 @@ import type { UserEntity } from '../src/domain/user.js';
 import type { WriteResult } from '../src/domain/audit.js';
 import { validateTransferInput } from '../src/domain/transfer.js'; // 预期导入红
 import { TransferService } from '../src/service/transfer.js'; // 预期导入红
+import { createTestDb } from './helpers/db.js';
 
 // --- 固定 UUID（seed 用）---
 const ADMIN_ID = 'admin-00000000-0000-4000-8000-000000000099';
@@ -57,6 +58,9 @@ function seed(
   roleRepo: RoleRepository,
   deptRepo: DepartmentRepository,
 ): void {
+  // 先 insert dept（users.department_id FK → departments.id，PRAGMA foreign_keys=ON 要求父先于子）
+  deptRepo.insert({ id: FROM_DEPT_ID, name: 'Engineering', parent_id: null, created_at: SEED_TS });
+  deptRepo.insert({ id: TO_DEPT_ID, name: 'Sales', parent_id: null, created_at: SEED_TS });
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -76,8 +80,6 @@ function seed(
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
-  deptRepo.insert({ id: FROM_DEPT_ID, name: 'Engineering', parent_id: null, created_at: SEED_TS });
-  deptRepo.insert({ id: TO_DEPT_ID, name: 'Sales', parent_id: null, created_at: SEED_TS });
   roleRepo.insert({
     id: OLD_ROLE_ID,
     name: 'engineer',
@@ -116,14 +118,16 @@ function setup(): {
   deptService: DepartmentService;
   transferService: TransferService;
 } {
-  const userRepo = new UserRepository();
-  const roleRepo = new RoleRepository();
-  const deptRepo = new DepartmentRepository();
+  // 多 repo 共享同一 db（transfer 事务跨 user/role/dept repo，FK + 补偿回滚需一致）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
+  const roleRepo = new RoleRepository(db);
+  const deptRepo = new DepartmentRepository(db);
   seed(userRepo, roleRepo, deptRepo);
   const userService = new UserService(userRepo);
   const roleService = new RoleService(roleRepo, userRepo);
   const deptService = new DepartmentService(deptRepo, userRepo);
-  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo);
+  const transferService = new TransferService(userService, deptService, roleService, userRepo, roleRepo, deptRepo, db);
   return { userRepo, roleRepo, deptRepo, userService, roleService, deptService, transferService };
 }
 
@@ -414,14 +418,15 @@ class ThrowingUserRepo extends UserRepository {
 
 describe('service · transfer 执行失败回滚（补偿闭包逆序执行）', () => {
   it('步骤 B 失败 → 补偿 A：用户部门恢复 fromDept，oldRole 仍在（未成功移除）', async () => {
-    const userRepo = new UserRepository();
-    const roleRepo = new RoleRepository();
-    const deptRepo = new DepartmentRepository();
+    const db = createTestDb();
+    const userRepo = new UserRepository(db);
+    const roleRepo = new RoleRepository(db);
+    const deptRepo = new DepartmentRepository(db);
     seed(userRepo, roleRepo, deptRepo);
     const throwingRoleService = new ThrowingRoleService(roleRepo, userRepo, 'remove');
     const userService = new UserService(userRepo);
     const deptService = new DepartmentService(deptRepo, userRepo);
-    const transferService = new TransferService(userService, deptService, throwingRoleService, userRepo, roleRepo, deptRepo);
+    const transferService = new TransferService(userService, deptService, throwingRoleService, userRepo, roleRepo, deptRepo, db);
 
     const input = makeInput();
     await expect(transferService.transfer(input, adminCtx)).rejects.toMatchObject({
@@ -436,14 +441,15 @@ describe('service · transfer 执行失败回滚（补偿闭包逆序执行）',
   });
 
   it('步骤 C 失败 → 补偿 B+A：用户部门恢复 fromDept，oldRole 重新分配，newRole 未分配', async () => {
-    const userRepo = new UserRepository();
-    const roleRepo = new RoleRepository();
-    const deptRepo = new DepartmentRepository();
+    const db = createTestDb();
+    const userRepo = new UserRepository(db);
+    const roleRepo = new RoleRepository(db);
+    const deptRepo = new DepartmentRepository(db);
     seed(userRepo, roleRepo, deptRepo);
     const throwingRoleService = new ThrowingRoleService(roleRepo, userRepo, 'assign');
     const userService = new UserService(userRepo);
     const deptService = new DepartmentService(deptRepo, userRepo);
-    const transferService = new TransferService(userService, deptService, throwingRoleService, userRepo, roleRepo, deptRepo);
+    const transferService = new TransferService(userService, deptService, throwingRoleService, userRepo, roleRepo, deptRepo, db);
 
     const input = makeInput();
     await expect(transferService.transfer(input, adminCtx)).rejects.toMatchObject({
@@ -459,9 +465,10 @@ describe('service · transfer 执行失败回滚（补偿闭包逆序执行）',
   });
 
   it('补偿失败 → TRANSFER_COMPENSATION_FAILED（非静默吞）', async () => {
-    const throwingUserRepo = new ThrowingUserRepo();
-    const roleRepo = new RoleRepository();
-    const deptRepo = new DepartmentRepository();
+    const db = createTestDb();
+    const throwingUserRepo = new ThrowingUserRepo(db);
+    const roleRepo = new RoleRepository(db);
+    const deptRepo = new DepartmentRepository(db);
     seed(throwingUserRepo, roleRepo, deptRepo);
     const throwingRoleService = new ThrowingRoleService(roleRepo, throwingUserRepo, 'remove');
     const userService = new UserService(throwingUserRepo);
@@ -473,6 +480,7 @@ describe('service · transfer 执行失败回滚（补偿闭包逆序执行）',
       throwingUserRepo,
       roleRepo,
       deptRepo,
+      db,
     );
 
     const input = makeInput();

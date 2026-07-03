@@ -9,6 +9,7 @@ import { transferInputSchema, type User } from '@admin/contracts';
 import type { TransferService } from '../service/transfer.js';
 import { AuditLogService } from '../service/audit.js';
 import { AuditLogRepository } from '../repository/audit.js';
+import { createTestDb } from '../db/connection.js';
 import type { Ctx } from '../context.js';
 import type { Procedure } from './user.js';
 import { withAudit } from './audit.js';
@@ -61,7 +62,7 @@ export function createTransferRouter(
   service: TransferService,
   auditService?: AuditLogService,
 ): TransferRouter {
-  const audit = auditService ?? new AuditLogService(new AuditLogRepository());
+  const audit = auditService ?? new AuditLogService(new AuditLogRepository(createTestDb()));
   return {
     transfer: {
       input: transferProcedureInputSchema,

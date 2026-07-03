@@ -56,6 +56,7 @@ import { TokenBlacklistRepository } from '../src/repository/token-blacklist.js';
 import { signToken, verifyToken, hashPassword, verifyPassword } from '../src/domain/auth.js';
 import { AppError, errorCodeToHttpStatus } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const SEED_TS = '2020-01-01T00:00:00.000Z';
@@ -93,11 +94,13 @@ async function setupAuth(): Promise<{
   tokenBlacklistRepo: TokenBlacklistRepository;
   authService: AuthService;
 }> {
-  const userRepo = new UserRepository();
-  const auditRepo = new AuditLogRepository();
+  // 多 repo 共享同一 db（auth 写 audit_log 引用 user，FK + 跨 repo 查询需一致）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
+  const auditRepo = new AuditLogRepository(db);
   const auditService = new AuditLogService(auditRepo);
   const userService = new UserService(userRepo, auditService);
-  const tokenBlacklistRepo = new TokenBlacklistRepository();
+  const tokenBlacklistRepo = new TokenBlacklistRepository(db);
   const authService = new AuthService(userService, userRepo, tokenBlacklistRepo, auditService, AUTH_SECRET);
   // seed admin（password_hash 由 domain/hashPassword 生成，与 server.ts seedDemoData 一致：admin@example.com/admin123）
   const adminEntity: UserEntity = {

@@ -45,6 +45,7 @@ import type { Procedure } from '../src/router/user.js';
 import { BUILTIN_ADMIN_ROLE_NAME } from '../src/domain/role.js';
 import type { Ctx } from '../src/context.js';
 import { AppError } from '../src/errors.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const TARGET_ID = '00000000-0000-4000-8000-000000000002';
@@ -86,7 +87,8 @@ function setupUser(): {
   service: UserService;
   router: ReturnType<typeof createUserRouter>;
 } {
-  const repo = new UserRepository();
+  const db = createTestDb();
+  const repo = new UserRepository(db);
   repo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -119,7 +121,8 @@ function setupUserWithVersions(): {
   service: UserService;
   router: ReturnType<typeof createUserRouter>;
 } {
-  const repo = new UserRepository();
+  const db = createTestDb();
+  const repo = new UserRepository(db);
   repo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -159,8 +162,10 @@ function setupRole(): {
   service: RoleService;
   router: ReturnType<typeof createRoleRouter>;
 } {
-  const repo = new RoleRepository();
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（RoleService 跨 role/user repo 查询）
+  const db = createTestDb();
+  const repo = new RoleRepository(db);
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -183,7 +188,9 @@ function setupNotification(): {
   service: NotificationService;
   router: ReturnType<typeof createNotificationRouter>;
 } {
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（NotificationService 经 userService 查 user）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -203,7 +210,7 @@ function setupNotification(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const repo = new NotificationRepository();
+  const repo = new NotificationRepository(db);
   const service = new NotificationService(userService, repo);
   const router = createNotificationRouter(service);
   return { userRepo, userService, repo, service, router };
@@ -218,7 +225,9 @@ function setupNotificationWithVersions(): {
   service: NotificationService;
   router: ReturnType<typeof createNotificationRouter>;
 } {
-  const userRepo = new UserRepository();
+  // 多 repo 共享同一 db（NotificationService 经 userService 查 user）
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -238,7 +247,7 @@ function setupNotificationWithVersions(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const repo = new NotificationRepository();
+  const repo = new NotificationRepository(db);
   const ids = [
     '00000000-0000-4000-8000-000000000101',
     '00000000-0000-4000-8000-000000000102',

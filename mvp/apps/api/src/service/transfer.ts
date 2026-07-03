@@ -26,11 +26,15 @@ import type { UserRepository } from '../repository/user.js';
 import type { RoleRepository } from '../repository/role.js';
 import type { DepartmentRepository } from '../repository/dept.js';
 import type { Ctx } from '../context.js';
+import type { DatabaseSync } from 'node:sqlite';
 import { validateTransferInput } from '../domain/transfer.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
+import { withTransaction } from '../db/transaction.js';
 import { AppError } from '../errors.js';
 
 export class TransferService {
+  // [advisory] TECH-PERSIST-001 D8/§3.1：第 7 依赖 db 用于 withTransaction 包裹 A/B/C 三步跨 repo 写操作。
+  //   属 service 层 impl 改动（Spec §3.2 已预判 service 层 transfer.ts 须调整）；transfer 方法签名不变（D2 闭合核心）。
   constructor(
     private readonly userService: UserService,
     private readonly deptService: DepartmentService,
@@ -38,6 +42,7 @@ export class TransferService {
     private readonly userRepo: UserRepository,
     private readonly roleRepo: RoleRepository,
     private readonly deptRepo: DepartmentRepository,
+    private readonly db: DatabaseSync,
   ) {}
 
   /** SEC-002：service 入口校验调用者必须为 admin，否则 FORBIDDEN。 */
@@ -81,45 +86,61 @@ export class TransferService {
     // 此时 user 非空、oldRole 非空、newRole 非空（校验已通过）
     const fromDeptId = user!.department_id ?? null;
 
-    // --- 执行阶段（A→B→C，每步成功后 push 补偿闭包） ---
+    // --- 执行阶段（A→B→C，每步成功后 push 补偿闭包；DB 事务包裹 D8 双保障） ---
+    // TECH-PERSIST-001 D8/§3.1：withTransaction 包裹 A/B/C，任一步失败 → DB ROLLBACK（数据层回滚）；
+    //   随后 catch 块运行 R7 补偿闭包（应用层双保障，逆序）。补偿闭包须幂等（§3.2 advisory #1）：
+    //   DB ROLLBACK 已恢复的状态下，补偿再操作命中"已恢复"不应视为失败。
     const compensations: Array<() => void> = [];
     try {
-      // 步骤 A：改部门（经 deptService.assignUserDepartment，含 requireAdmin + 内部校验）
-      await this.deptService.assignUserDepartment(input.userId, input.toDepartmentId, ctx);
-      compensations.push(() => {
-        this.userRepo.updateDepartmentId(input.userId, fromDeptId, new Date().toISOString());
-      });
-
-      // 步骤 B：移除旧角色（经 roleService.remove，含 requireAdmin + 内部校验）
-      await this.roleService.remove(input.userId, input.oldRoleId, ctx);
-      compensations.push(() => {
-        this.roleRepo.insertUserRole({
-          id: crypto.randomUUID(),
-          user_id: input.userId,
-          role_id: input.oldRoleId,
-          assigned_at: new Date().toISOString(),
+      return await withTransaction(this.db, async () => {
+        // 步骤 A：改部门（经 deptService.assignUserDepartment，含 requireAdmin + 内部校验）
+        await this.deptService.assignUserDepartment(input.userId, input.toDepartmentId, ctx);
+        compensations.push(() => {
+          this.userRepo.updateDepartmentId(input.userId, fromDeptId, new Date().toISOString());
         });
-      });
 
-      // 步骤 C：分配新角色（经 roleService.assign，含 requireAdmin + 内部校验）
-      await this.roleService.assign(input.userId, input.newRoleId, ctx);
-      compensations.push(() => {
-        this.roleRepo.deleteUserRole(input.userId, input.newRoleId);
-      });
+        // 步骤 B：移除旧角色（经 roleService.remove，含 requireAdmin + 内部校验）
+        await this.roleService.remove(input.userId, input.oldRoleId, ctx);
+        compensations.push(() => {
+          // §3.2 advisory #1：DB ROLLBACK 已恢复 oldRole 关联时，再 INSERT 命中 UNIQUE(user_id,role_id)
+          // → roleRepo.insertUserRole 抛 USER_ROLE_ALREADY_ASSIGNED → 视为"已恢复"=补偿成功，不抛（幂等）
+          try {
+            this.roleRepo.insertUserRole({
+              id: crypto.randomUUID(),
+              user_id: input.userId,
+              role_id: input.oldRoleId,
+              assigned_at: new Date().toISOString(),
+            });
+          } catch (compErr) {
+            if (compErr instanceof AppError && compErr.code === 'USER_ROLE_ALREADY_ASSIGNED') {
+              // DB ROLLBACK 已恢复 oldRole 关联 → 补偿幂等成功（不抛）
+              return;
+            }
+            throw compErr;
+          }
+        });
 
-      // --- 三步全成功 → 构造聚合 WriteResult<User>（D5） ---
-      const updated = this.userRepo.findById(input.userId)!;
-      const before = markPii('user', [
-        { field: 'department_id', value: fromDeptId, pii: false },
-        { field: 'role_id', value: input.oldRoleId, pii: false },
-      ]);
-      const changes = markPii('user', [
-        { field: 'department_id', value: input.toDepartmentId, pii: false },
-        { field: 'role_id', value: input.newRoleId, pii: false },
-      ]);
-      return { entity: updated, changes, before };
+        // 步骤 C：分配新角色（经 roleService.assign，含 requireAdmin + 内部校验）
+        await this.roleService.assign(input.userId, input.newRoleId, ctx);
+        compensations.push(() => {
+          // C 补偿天然幂等：ROLLBACK 后 newRole 关联本就不存在 → DELETE 0 行返回 false 不抛
+          this.roleRepo.deleteUserRole(input.userId, input.newRoleId);
+        });
+
+        // --- 三步全成功 → COMMIT + 构造聚合 WriteResult<User>（D5） ---
+        const updated = this.userRepo.findById(input.userId)!;
+        const before = markPii('user', [
+          { field: 'department_id', value: fromDeptId, pii: false },
+          { field: 'role_id', value: input.oldRoleId, pii: false },
+        ]);
+        const changes = markPii('user', [
+          { field: 'department_id', value: input.toDepartmentId, pii: false },
+          { field: 'role_id', value: input.newRoleId, pii: false },
+        ]);
+        return { entity: updated, changes, before };
+      });
     } catch (e) {
-      // --- 补偿阶段（逆序执行，D2） ---
+      // --- 补偿阶段（逆序执行，D2；DB ROLLBACK 已在 withTransaction 内完成） ---
       const originalError = e instanceof Error ? e : new Error(String(e));
       for (let i = compensations.length - 1; i >= 0; i--) {
         try {

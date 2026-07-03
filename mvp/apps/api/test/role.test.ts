@@ -37,6 +37,7 @@ import {
 } from '../src/domain/role.js';
 import { UserRepository } from '../src/repository/user.js';
 import { AppError } from '../src/errors.js';
+import { createTestDb } from './helpers/db.js';
 import type { Ctx } from '../src/context.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
@@ -53,8 +54,9 @@ function setup(): {
   service: RoleService;
   router: ReturnType<typeof createRoleRouter>;
 } {
-  const repo = new RoleRepository();
-  const userRepo = new UserRepository();
+  const db = createTestDb();
+  const repo = new RoleRepository(db);
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -136,7 +138,7 @@ describe('单测 · domain 常量', () => {
 
 describe('单测 · repository CRUD（内存）', () => {
   it('初始化时内置 admin 角色已 seed：is_builtin=true，permission_codes=全集', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     const admin = repo.findByName(BUILTIN_ADMIN_ROLE_NAME);
     expect(admin).toBeDefined();
     if (admin) {
@@ -147,14 +149,14 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('roles insert/findById：写入后可按 id 查回', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     const r = makeRole(1);
     repo.insert(r);
     expect(repo.findById(r.id)).toEqual(r);
   });
 
   it('roles findByName：按名称查回（区分大小写）', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     const r = makeRole(2, { name: 'editor' });
     repo.insert(r);
     expect(repo.findByName('editor')).toEqual(r);
@@ -162,7 +164,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('roles list：分页计算 total/切片（25 条 + admin = 26）', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     for (let i = 1; i <= 25; i++) repo.insert(makeRole(i));
     const r1 = repo.list({ page: 1, pageSize: 10 });
     expect(r1.total).toBe(26);
@@ -172,7 +174,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('roles list：空库（删除 admin 后）total=0 items=[]', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     repo.delete(builtinAdminId(repo));
     const { items, total } = repo.list({ page: 1, pageSize: 10 });
     expect(items).toHaveLength(0);
@@ -180,7 +182,7 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('roles delete：删除后 findById 为空', () => {
-    const repo = new RoleRepository();
+    const repo = new RoleRepository(createTestDb());
     const r = makeRole(3);
     repo.insert(r);
     expect(repo.delete(r.id)).toBe(true);
@@ -188,7 +190,10 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('user_roles insert/findByUser：写入后可按 user 查回列表', () => {
-    const repo = new RoleRepository();
+    // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
+    const db = createTestDb();
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    const repo = new RoleRepository(db);
     const r1 = makeRole(1);
     const r2 = makeRole(2);
     repo.insert(r1);
@@ -200,7 +205,10 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('user_roles existsPair/findByUserRole：检测 (user,role) 是否存在', () => {
-    const repo = new RoleRepository();
+    // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
+    const db = createTestDb();
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    const repo = new RoleRepository(db);
     const r = makeRole(5);
     repo.insert(r);
     const ur = makeUserRole(5, { user_id: ADMIN_ID, role_id: r.id });
@@ -211,7 +219,10 @@ describe('单测 · repository CRUD（内存）', () => {
   });
 
   it('user_roles delete：按 (user,role) 删除', () => {
-    const repo = new RoleRepository();
+    // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
+    const db = createTestDb();
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    const repo = new RoleRepository(db);
     const r = makeRole(6);
     repo.insert(r);
     repo.insertUserRole(makeUserRole(6, { user_id: ADMIN_ID, role_id: r.id }));

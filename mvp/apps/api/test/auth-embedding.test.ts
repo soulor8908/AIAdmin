@@ -26,13 +26,19 @@
 //
 // CODE-001：无 any 类型标注或断言，用 unknown + 类型守卫 + 具体接口。
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { existsSync, unlinkSync } from 'node:fs';
 import { signToken } from '../src/domain/auth.js';
 
 const TEST_PORT = 4888;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 // 与 server spawn 注入的 AUTH_SECRET 一致（D10），便于 AC-F2-4 用同 secret 签发过期 token
 const AUTH_SECRET = 'test-embedding-secret';
+// 临时文件 DB（TECH-PERSIST-001：spawn 真实 server 须传 DB_PATH，避免内存版 + 隔离测试间状态）
+const DB_PATH = join(tmpdir(), `auth-embed-${randomUUID()}.db`);
 const ADMIN_EMAIL = 'admin@example.com';
 const ADMIN_PASSWORD = 'admin123';
 
@@ -40,7 +46,7 @@ let serverProcess: ChildProcess | undefined;
 
 beforeAll(async () => {
   serverProcess = spawn('npx', ['tsx', 'apps/api/src/server.ts'], {
-    env: { ...process.env, PORT: String(TEST_PORT), AUTH_SECRET },
+    env: { ...process.env, PORT: String(TEST_PORT), AUTH_SECRET, DB_PATH },
     stdio: 'pipe',
     cwd: '/workspace/mvp',
   });
@@ -64,9 +70,21 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(async () => {
+  // [端口级 kill] npx tsx 会 fork node(server.ts) 子进程，serverProcess.kill('SIGTERM')
+  // 只杀 npx 父进程，node 子进程（实际 server）继续 listen 端口 → 下次运行假连旧 server。
+  // 用 lsof -ti:PORT -sTCP:LISTEN 杀所有 listen 该端口的进程，最可靠。
   if (serverProcess) {
-    serverProcess.kill('SIGTERM');
-    await new Promise((r) => setTimeout(r, 500));
+    try {
+      serverProcess.kill('SIGTERM');
+    } catch { /* 进程可能已退出 */ }
+  }
+  try {
+    execSync(`lsof -ti:${TEST_PORT} -sTCP:LISTEN | xargs -r kill -9 2>/dev/null || true`, { encoding: 'utf8' });
+  } catch { /* lsof 不可用时忽略 */ }
+  await new Promise((r) => setTimeout(r, 600));
+  // 清理临时 DB 文件（避免 tmpdir 残留）
+  if (existsSync(DB_PATH)) {
+    unlinkSync(DB_PATH);
   }
 });
 

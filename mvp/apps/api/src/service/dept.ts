@@ -20,6 +20,7 @@ import type { UserRepository } from '../repository/user.js';
 import type { Ctx } from '../context.js';
 import { MAX_DEPARTMENT_DEPTH } from '../domain/dept.js';
 import { markPii, type WriteResult } from '../domain/audit.js';
+import { toUserOutput } from '../domain/user.js';
 import { AppError } from '../errors.js';
 
 export class DepartmentService {
@@ -134,7 +135,8 @@ export class DepartmentService {
     const changes = markPii('user', [
       { field: 'department_id', value: updated.department_id ?? null, pii: false },
     ]);
-    return { entity: updated, changes, before };
+    // TECH-AUTH-001 D5：剥离 password_hash（SEC-003a 输出 schema 1:1）
+    return { entity: toUserOutput(updated), changes, before };
   }
 
   async tree(ctx: Ctx): Promise<DepartmentTreeResult> {

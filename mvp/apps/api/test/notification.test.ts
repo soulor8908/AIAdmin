@@ -52,6 +52,7 @@ import {
 import { transitionStatus, ALLOWED_NOTIFICATION_TRANSITIONS } from '../src/domain/notification.js';
 import { AppError } from '../src/errors.js';
 import type { Ctx } from '../src/context.js';
+import { createTestDb } from './helpers/db.js';
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 const U_VALID = '00000000-0000-4000-8000-000000000002';
@@ -76,7 +77,8 @@ function setup(): {
   notificationService: NotificationService;
   router: ReturnType<typeof createNotificationRouter>;
 } {
-  const userRepo = new UserRepository();
+  const db = createTestDb();
+  const userRepo = new UserRepository(db);
   userRepo.insert({
     id: ADMIN_ID,
     name: 'admin',
@@ -114,7 +116,7 @@ function setup(): {
     version: 0,
   });
   const userService = new UserService(userRepo);
-  const notificationRepo = new NotificationRepository();
+  const notificationRepo = new NotificationRepository(db);
   const notificationService = new NotificationService(userService, notificationRepo);
   const router = createNotificationRouter(notificationService);
   return { userRepo, userService, notificationRepo, notificationService, router };

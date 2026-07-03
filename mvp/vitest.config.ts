@@ -1,6 +1,30 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  plugins: [
+    {
+      // node:sqlite 是 Node 22+ 新增内置模块，Vite 5.4 的 builtin 列表未收录，
+      // 收集期报 "Failed to load url sqlite"。用虚拟模块（\0 前缀）拦截，
+      // 内部用 createRequire 走 Node 原生 require 加载（与 persist.test.ts 同模式）。
+      name: 'externalize-node-sqlite',
+      enforce: 'pre',
+      resolveId(source) {
+        if (source === 'node:sqlite') {
+          return '\0node:sqlite';
+        }
+        return null;
+      },
+      load(id) {
+        if (id === '\0node:sqlite') {
+          return `import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const mod = require('node:sqlite');
+export const DatabaseSync = mod.DatabaseSync;`;
+        }
+        return null;
+      },
+    },
+  ],
   test: {
     globals: true,
     environment: 'node',
