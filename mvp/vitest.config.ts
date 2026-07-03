@@ -28,10 +28,11 @@ export const DatabaseSync = mod.DatabaseSync;`;
   test: {
     globals: true,
     environment: 'node',
-    include: ['apps/*/test/**/*.test.ts', 'packages/*/test/**/*.test.ts'],
+    include: ['apps/*/test/**/*.{test,spec}.{ts,tsx}', 'packages/*/test/**/*.test.ts'],
+    setupFiles: ['apps/web/test/setup.ts'],
     coverage: {
       provider: 'v8',
-      include: ['apps/*/src/**/*.ts'],
+      include: ['apps/*/src/**/*.{ts,tsx}'],
       exclude: ['**/index.ts', '**/*.d.ts'],
       thresholds: {
         lines: 80,
