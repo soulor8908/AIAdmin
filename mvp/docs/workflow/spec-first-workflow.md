@@ -68,6 +68,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - §10 advisory 偏离预判须含"多[约束]组合副作用"分析（R11 token碰撞范例）
 - 实现性描述显式标 [约束](默认禁止偏离) / [advisory](允许偏离须反向同步)
 - 不改 service/repo/domain/router/server.ts（impl-writer 阶段）
+- Tech-Spec §3.2 表单校验复用清单须区分"自由文本表单"（须 safeParse，因有自由输入）与"类型派生操作"（TS 类型保证，schema 校验冗余，可不调或保留 defensive safeParse）。AC 措辞须精确限定为"自由文本输入表单"。（R12 S-1）
+- Tech-Spec §10 advisory 偏离预判须明确同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 §10 但须在 Review 报告记录。（R12 S-2）
 门禁 G3：tsc 编译 + Spec 与契约 1:1 + 边界覆盖 + 受影响清单两类完整
 ```
 
@@ -85,6 +87,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 跨域枚举用 SSOT 派生断言 [...schema.options].toContain()，禁止硬编码全集（AI-005）
 - AI-006 反向核实：发现清单外影响点（含枚举扩展导致的全集断言失效）须显式列出
 - 输出 schema 用 .strict() 断言拒绝多余字段（SEC-003a）
+- AC 覆盖矩阵自检——每条 AC 须有至少 1 个测试用例直接覆盖，未覆盖的显式列出 reason（如"实现正确但缺直接测试"/"组合场景未单独测"）。交付报告附 AC↔测试用例覆盖矩阵表。（R12 S-3）
+- 组合场景测试——当 AC 涉及多操作组合（如筛选+分页、启停双向、登出 action），须单独测组合场景，不可仅分别测单一操作后假设组合正确。（R12 S-3）
 门禁 G4：编排者实跑 vitest 确认断言级红（非导入级红）
 ```
 
@@ -100,6 +104,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 实现期发现[约束]组合副作用bug时，按advisory处理(格式/schema不变则非[约束]偏离)
 - 改既有测试 setup 时，交付报告显式列每个文件+改动性质+理由
 - 断言 matcher 改动(如 toEqual→toContain) 须特别标注，由 Reviewer 判定
+- advisory 偏离反向同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 Spec §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 Spec §10 但须在交付报告列出。（R12 S-2）
+- 对类型派生操作（如 toggle，值经 TS 类型派生非自由输入）不调 schema.safeParse 时，须显式标注 [约束] 偏离 + 反向同步 Spec §3.2（注明"类型派生操作，schema 校验冗余"），不可静默偏离。（R12 S-1）
 门禁 G5：三件套全绿（typecheck + lint:rules + test 全转绿）
 ```
 
@@ -119,6 +125,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 约束：
 - SEC-002 须逐个 public 方法独立核对（不依赖扫描器 exit 0，R11 S-1 盲区）
 - 断言 matcher 改动( toEqual→toContain )判定：根因是枚举扩展且保留SSOT派生+语义不弱化→pass
+- AC-ARCH-4（表单校验复用 Zod schema）partial 判定依据——须区分"自由文本表单"（须 safeParse，未调判 partial）与"类型派生操作"（TS 类型保证，safeParse 冗余，未调可判合理偏离须补同步）。partial 判定须注明根因（措辞未区分 vs 实际遗漏）。（R12 S-1）
+- CODE 扫描器前端覆盖核对——当 apps/web 存在时，确认 allTs 已含 apps/web/src + apps/web/test（R13 S-4 固化后已覆盖）；若扫描器未覆盖，须手动 grep 核对 CODE-001/002/003/AI-005 在前端的合规性。（R12 S-4）
 - verdict=block 时给出精确修复路径（文件:行 + 修复动作 + 影响面）
 门禁 G6：零 blocker 方可合入；blocker 修复后重跑 G5+G6（G6.1）
 ```

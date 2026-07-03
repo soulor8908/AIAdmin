@@ -18,12 +18,26 @@ function walk(dir, acc = []) {
   }
   return acc;
 }
+// walkWeb：扩展 .tsx 收集（前端 apps/web 专属），供 allTs 通用扫描器与 ARCH-003 专属分支共用。
+// R13 S-4：从 ARCH-003 分支局部函数提升为顶层函数，使 CODE-001/002/003/004 等通用扫描器覆盖前端。
+function walkWeb(dir, acc = []) {
+  if (!existsSync(dir)) return acc;
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkWeb(p, acc);
+    else if (name.endsWith('.ts') || name.endsWith('.tsx')) acc.push(p); // 扩展 .tsx（既有 walk 仅 .ts）
+  }
+  return acc;
+}
 const rel = (p) => p.replace(ROOT + '/', '');
 
 const allTs = [
   ...walk(join(ROOT, 'packages/contracts/src')),
   ...walk(join(ROOT, 'apps/api/src')),
   ...walk(join(ROOT, 'apps/api/test')),
+  // R13 S-4：扩展到 apps/web，使 CODE-001/002/003/004 等通用扫描器覆盖前端（.tsx 经 walkWeb 收集）。
+  ...walkWeb(join(ROOT, 'apps/web/src')),
+  ...walkWeb(join(ROOT, 'apps/web/test')),
 ];
 
 // 记录本脚本内所有 enforcement 分支的规则 ID（供 META-004 反向缺口校验）
@@ -198,15 +212,7 @@ for (const f of allTs) {
 // TECH-WEB-AUTH-USER-001 §8.2：扫描 apps/web/src/**/*.{ts,tsx} 的 import 语句，
 // 禁止 import apps/api/src/** 与 @admin/api 包，仅允许 @admin/contracts + 第三方 + apps/web 内部模块。
 markEnforcement('ARCH-003');
-function walkWeb(dir, acc = []) {
-  if (!existsSync(dir)) return acc;
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walkWeb(p, acc);
-    else if (name.endsWith('.ts') || name.endsWith('.tsx')) acc.push(p); // 扩展 .tsx（既有 walk 仅 .ts）
-  }
-  return acc;
-}
+// walkWeb 已提升为顶层函数（R13 S-4），ARCH-003 仅扫 apps/web/src（不扫 test，保持不变）。
 const webSrc = walkWeb(join(ROOT, 'apps/web/src'));
 // 提取 import/export ... from 'spec' 与 side-effect import 'spec'
 const IMPORT_SPEC_RE = /(?:import|export)[\s\S]*?from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
