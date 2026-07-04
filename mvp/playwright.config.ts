@@ -31,6 +31,14 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   // 禁用并行：临时 DB 单文件，并发写竞争可能冲突；改为串行确保状态隔离（每 test 文件顺序跑，文件内 test 也顺序跑）。
   fullyParallel: false,
+  // R24 D3 [advisory] 偏离反向同步（§3.3 / §7.3 / §10.1）：
+  // 原 spec 决策 `workers: process.env.CI ? 3 : 1`（CI 并行 3 worker），impl 阶段实测 CI=true 工作目录下
+  // 66 tests 全量跑 21 passed / 45 failed（chromium DB 写竞争致 roles.spec.ts AC-E5/E6 表断言失败 +
+  // firefox/webkit browserType.launch 并发启动失败）。spec §3.3 D3 + §7.3 + §10.1 已预期此场景为
+  // [advisory] 偏离，按方案 C 降级为 `workers: 1`（CI 时间换稳定性，与 R20 既有单 worker 一致）。
+  // 关键核验：Playwright 单 worker pool 共享，workers:3 + fullyParallel:false 不能保证"同 project 内
+  // test 文件串行"——同 project 内不同 spec 文件会被分配到不同 worker 并发跑，共享 webServer + 临时 DB
+  // 致 DB 写竞争。spec 原假设"Playwright 按 project 分配 worker（每 project 独立 worker pool）"不准确。
   workers: 1,
   // retries=0（task spec 要求；spec §3.2 原文 CI?2:0，本 impl 取 0 简化）。
   retries: 0,
@@ -44,8 +52,7 @@ export default defineConfig({
   use: {
     // D7：baseURL 指向前端 dev server（5173），page.goto('/login') 解析为 http://localhost:5173/login。
     baseURL: 'http://localhost:5173',
-    // D6：仅 chromium，headless（CI 无显示 + 本地不占桌面）。
-    browserName: 'chromium',
+    // R24 D2：移除顶层 use.browserName='chromium'，由 project 级 device descriptor 的 defaultBrowserType 提供浏览器类型。
     headless: true,
     // §6.3 凭据不入 artifact：trace 仅首次重试时录（retries=0 不录）；screenshot 仅失败时截。
     trace: 'on-first-retry',
@@ -55,11 +62,20 @@ export default defineConfig({
     // 每个 test 的 action（fill/click/expect）默认 10s 超时。
     actionTimeout: 10000,
   },
-  // D6：单 chromium project（PRD Q4 仅 chromium）。
+  // R24 D1：扩展为 chromium + firefox + webkit 三 project，每 project 用 Playwright 内置 device descriptor
+  // （devices['Desktop X'] 含 defaultBrowserType 字段驱动 Playwright 启动对应浏览器，§2.4 实测核验）。
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
     },
   ],
   webServer: [
