@@ -19,5 +19,5 @@
       "@admin/contracts/*": ["packages/contracts/src/*"]
     }
   },
-  "include": ["packages/*/src", "apps/*/src", "apps/*/test"]
+  "include": ["packages/*/src", "apps/*/src", "apps/*/test", "apps/e2e"]
 }

@@ -7,3 +7,8 @@ build/
 .DS_Store
 coverage/
 .vitest-cache/
+# R20 E2E：临时数据库目录（不使用，但保留忽略以防本地 dev 误生成）+ E2E 产物（test-results / playwright-report / .auth）
+/data/
+apps/e2e/.auth/
+apps/e2e/test-results/
+playwright-report/
