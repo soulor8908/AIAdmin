@@ -12,7 +12,7 @@
 //   - D15 [约束]：date_range 用 datetime-local + ISO 归一，AC-F7-5。
 //   - D21 [约束]：前端显式传 pageSize=20（不依赖 schema 缺省 20）。
 //   - AC-F7-11：只读无写入口（无创建/编辑/删除按钮）。
-//   - AC-F7-6 [R13 S-3]：筛选+分页组合场景（翻页保持筛选条件）。
+//   - AC-F7-6：筛选+分页组合场景（翻页保持筛选条件）。
 //   - AC-F7-3：entity_type select 选项从 [...auditLogEntityTypeSchema.options] SSOT 派生（AI-005）。
 //   - SEC-003b：测试中不 console.log/记录 operator_id/operator_name/before/after 字段。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -195,7 +195,7 @@ describe('AuditLogPage', () => {
     });
   });
 
-  // ---------- AC-F7-6 筛选+分页组合场景（R13 S-3）----------
+  // ---------- AC-F7-6 筛选+分页组合场景 ----------
   it('筛选+分页组合：选 entity_type=role 后翻页 → listAuditLogs({page:2, entity_type:"role"})（AC-F7-6，R13 S-3）', async () => {
     listAuditLogsMock.mockResolvedValue(
       makeListResult([makeRedactedLog()], { total: 25, page: 1, totalPages: 2 }),
@@ -212,7 +212,7 @@ describe('AuditLogPage', () => {
       );
     });
 
-    // 2. 翻页（保持筛选条件，R13 S-3 组合场景）
+    // 2. 翻页（保持筛选条件，组合场景）
     await user.click(screen.getByRole('button', { name: /下一页|>|next/i }));
 
     await waitFor(() => {

@@ -1,7 +1,8 @@
 ---
 alwaysApply: true
 ---
-# PII 脱敏（复盘拆细：SEC-003 → SEC-003a/003b，消除判定灰区）
+# PII 脱敏（SEC-003 → SEC-003a/003b，消除判定灰区）
+> 历史演进明细见 docs/retro/lessons-learned.md。
 
 ## SEC-003a · 响应不返回未声明 PII
 - 触发条件：API 响应序列化时。

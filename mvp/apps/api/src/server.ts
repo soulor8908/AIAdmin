@@ -1,5 +1,13 @@
 // apps/api/src/server.ts —— HTTP 运行时入口（工程脚手架，非业务功能）
 //
+// WARNING: 本文件为流程实验载体，未做生产就绪加固。生产部署前须解决：
+//   - AUTH_SECRET 强制环境变量注入（当前有开发默认值 'dev-auth-secret-do-not-use-in-prod'）
+//   - CORS_ORIGIN 收紧为前端实际域名（当前默认 '*'）
+//   - readBody 加 body size limit（防 DoS）
+//   - tokenBlacklistRepo 改为分布式存储（当前 SQLite 进程内，多实例失效）
+//   - 加速率限制 + 请求日志
+//   - SQLite 单文件 + 同步 API，无法横向扩展，须迁移到可扩展存储
+//
 // [advisory] 本文件为运行时入口（工程基础设施），不在任何 PRD/Spec 范围内。
 //   按 AI-003 advisory 偏离机制：此处显式声明偏离 spec-first（AI-001），理由为
 //   "补齐 HTTP 运行时入口"是工程脚手架而非业务功能，不产生新的业务契约/领域逻辑。

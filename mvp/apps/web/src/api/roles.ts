@@ -13,7 +13,7 @@
 // [约束] D7：deleteRole 须 versioned=true + expectedVersion → client 注入 If-Match（AC-F3-7）。
 // [约束] D9：409 VERSION_CONFLICT 由 client 自动重试 1 次（用 409 body current_version，不 GET 单条）。
 // [约束] B5：listUserRoles 返回裸 UserRole[]（无 envelope，wire 直接是数组）。
-// [约束] R13 S-1：本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] 本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
 //                调用方（自由文本表单）负责 safeParse 校验后再传入。
 import type {
   CreateRoleInput,

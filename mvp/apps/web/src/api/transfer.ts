@@ -7,9 +7,9 @@
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/client），禁止 import apps/api/src/**。
 // [约束] D3：全部类型经 z.infer 派生自 contracts。
 // [约束] D8：transfer 非 versioned（T4，server.ts L249-261 defineRoute 第 5 参缺省 false），不传 If-Match。
-// [约束] R13 S-1：本文件为类型派生操作（input 类型经 z.infer 派生），不调 safeParse。
+// [约束] 本文件为类型派生操作（input 类型经 z.infer 派生），不调 safeParse。
 //                调用方（自由文本/选择器混合表单 TransferForm）负责 safeParse 校验后再传入。
-// [约束] D17（R14 S-8）：函数命名对齐本 Spec §4.2.1 声明（transferUser）。
+// [约束] D17：函数命名对齐本 Spec §4.2.1 声明（transferUser）。
 //
 // [test-writer stub] AI-002 test-first：本文件为 stub，函数体抛 NOT_IMPLEMENTED，测试期断言级红
 //   （api-transfer.test.ts mock global.fetch 期望 request 发出，stub 抛错 → fetch 未调用 → 断言失败）。

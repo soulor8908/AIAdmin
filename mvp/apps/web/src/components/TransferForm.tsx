@@ -11,11 +11,11 @@
 //   - 成功：onSubmitted 回调（TransferPage 显示"调岗成功" + 重置，AC-F1-3）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts（transferInputSchema 复用，D4）+ apps/web 内部（api/）+ 第三方。
-// [约束] D4：自由文本/选择器混合表单须 transferInputSchema.safeParse（覆盖 superRefine + .strict() + uuid，R13 S-1）。
+// [约束] D4：自由文本/选择器混合表单须 transferInputSchema.safeParse（覆盖 superRefine + .strict() + uuid）。
 // [约束] D13：userId 自由文本 + oldRoleId/newRoleId/toDepartmentId select（选择器数据源见 §6.1/§6.2）。
-// [约束] D14：提交按钮原子提交（R14 S-9 教训：userId 输入失焦/完整 uuid 触发 listUserRoles，不每键入触发）。
+// [约束] D14：提交按钮原子提交（userId 输入失焦/完整 uuid 触发 listUserRoles，不每键入触发）。
 // [约束] D18：aria-label 域特定（"用户 ID"/"目标部门"/"原角色"/"新角色"/"提交调岗"）。
-// [约束] D21/R15 S-13：测试 fixture 须用有效 hex UUID；R15 S-14：label 跨组件唯一。
+// [约束] D21：测试 fixture 须用有效 hex UUID；label 跨组件唯一。
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -88,7 +88,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
   }, []);
 
   /**
-   * userId 失焦 → 若为有效 uuid 则触发 listUserRoles（AC-F1-2，D14/R14 S-9 教训：不每键入触发）。
+   * userId 失焦 → 若为有效 uuid 则触发 listUserRoles（AC-F1-2，D14：不每键入触发）。
    * listUserRoles 用于加载用户已分配角色（前端可据此预填/过滤 oldRoleId，但 oldRoleId select 仍展示全量角色，
    * 服务端通过 TRANSFER_OLD_ROLE_NOT_ASSIGNED 兜底校验用户是否持有 oldRoleId）。
    */
@@ -107,7 +107,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
     setFieldError(null);
     setFormError(null);
 
-    // D4：混合表单须 transferInputSchema.safeParse（覆盖 superRefine + .strict() + uuid，R13 S-1）
+    // D4：混合表单须 transferInputSchema.safeParse（覆盖 superRefine + .strict() + uuid）
     const raw = { userId, toDepartmentId, oldRoleId, newRoleId };
     const result = transferInputSchema.safeParse(raw);
     if (!result.success) {

@@ -59,7 +59,7 @@ function makeUser(overrides: Partial<User> = {}): User {
   };
 }
 
-/** 生成 n 个有效用户（UUID v4 格式，R15 S-13：z.string().uuid() 严格校验）。 */
+/** 生成 n 个有效用户（UUID v4 格式，z.string().uuid() 严格校验）。 */
 function makeUsers(n: number): User[] {
   return Array.from({ length: n }, (_, i) => {
     // 12 位 hex 后缀（padStart 到 12 位），保持 UUID 8-4-4-4-12 格式合法。

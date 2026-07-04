@@ -8,9 +8,9 @@
 //   - jsdom 环境（D20 per-file 注解）+ @testing-library/react + user-event。
 //   - mock api.notifications（createNotification/updateNotification），AuthContext.Provider 提供已登录态。
 //   - 期望「断言级红」：NotificationForm stub 抛 NOT_IMPLEMENTED，render 失败（非导入级红）。
-//   - D4：自由文本表单须 createNotificationInputSchema.safeParse / updateNotificationInputSchema.safeParse（R13 S-1）。
+//   - D4：自由文本表单须 createNotificationInputSchema.safeParse / updateNotificationInputSchema.safeParse。
 //   - D15：recipient_id 自由文本 UUID 输入 + 存在性延后至 send（N4）。
-//   - D21：aria-label 域特定（通知标题/通知内容/收件人 ID，R14 S-10 教训）。
+//   - D21：aria-label 域特定（通知标题/通知内容/收件人 ID）。
 //   - AC-F2-6：create 仅 recipient_id uuid 格式校验，存在性延后至 send（不触发 RECIPIENT_NOT_FOUND）。
 //   - AC-F3-5：partial 空对象合法（N2）+ .strict() 拒绝多余字段。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。

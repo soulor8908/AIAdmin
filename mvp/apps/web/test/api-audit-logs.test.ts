@@ -135,7 +135,7 @@ describe('api/audit-logs 审计域 endpoint 契约', () => {
     expect(calledUrl).not.toContain('action=');
   });
 
-  // ---------- AC-F7-6 筛选+分页复合（R13 S-3 组合场景）----------
+  // ---------- AC-F7-6 筛选+分页复合（组合场景）----------
   it('listAuditLogs 筛选+分页复合 → query 同时含 entity_type + page=2（AC-F7-6，R13 S-3）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, makeListResult([], { page: 2, totalPages: 2, total: 25 })));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;

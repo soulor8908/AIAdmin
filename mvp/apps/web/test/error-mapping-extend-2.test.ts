@@ -1,6 +1,6 @@
 // apps/web/test/error-mapping-extend-2.test.ts —— ③类新增 errorMapping R15 扩展测（TECH-WEB-NOTIFICATION-REPORT-001 §9.3 T9）
 //
-// 覆盖 AC：AC-F9-1（通知域码中文）、AC-F9-2（报表域码中文）、AC-F9-3（SSOT 派生断言+同步注释 R14 S-11+401/网络沿用）
+// 覆盖 AC：AC-F9-1（通知域码中文）、AC-F9-2（报表域码中文）、AC-F9-3（SSOT 派生断言+同步注释+401/网络沿用）
 //
 // ①类显式影响标注（AI-002 边界，test-writer 仅标注，由 impl-writer 落地核验）：
 //   - R14 既有 `apps/web/test/error-mapping-extend.test.ts` 断言 ROLE/DEPT/AUDIT/INVALID_CREDENTIALS/VERSION_CONFLICT 码
@@ -16,7 +16,7 @@
 //   - 纯单测（无 jsdom 注解，不渲染组件），直接 import mapErrorToMessage 断言返回值。
 //   - D9 [约束]：扩展 SPECIFIC_MESSAGES 新增通知/报表码中文提示，键仍从 [...errorCodeSchema.options] SSOT 派生（R12 D11 沿用）。
 //   - AC-F9-3 SSOT 派生断言：映射表键覆盖 errorCodeSchema 全集（通知/报表码本就在枚举内，非新增枚举键）。
-//   - AC-F9-3 同步注释核验（R14 S-11）：扩展后 TRANSFER/ROLE_INHERITANCE 域码仍 FALLBACK（断言其返回含"操作失败"，
+//   - AC-F9-3 同步注释核验：扩展后 TRANSFER/ROLE_INHERITANCE 域码仍 FALLBACK（断言其返回含"操作失败"，
 //     间接验证"未映射码"注释应反映 TRANSFER/ROLE_INHERITANCE 域，而非 NOTIFICATION/REPORT）。
 //   - AC-F9-3 401/网络错误沿用 R12/R14：401 拦截（client.ts D8 AUTH_401_CODES）+ NETWORK_ERROR（client.ts 兜底）
 //     由 T1/T2 + R12/R14 api-client 测覆盖，本文件不重复（errorMapping 仅映射 ErrorCode，NETWORK_ERROR 为 LocalErrorCode 非 ErrorCode）。
@@ -68,24 +68,24 @@ describe('errorMapping R15 扩展（通知/报表域码中文提示）', () => {
     expect(mapErrorToMessage('REPORT_TIME_RANGE_INVALID')).toBe('开始时间不能晚于结束时间');
   });
 
-  // ========== AC-F9-3 同步注释核验（R14 S-11）：R16 全码映射收尾后 TRANSFER/ROLE_INHERITANCE 域码升具体中文 ==========
+  // ========== AC-F9-3 同步注释核验：R16 全码映射收尾后 TRANSFER/ROLE_INHERITANCE 域码升具体中文 ==========
   //
   // ①类显式影响（AI-006，R16 D9 全码映射收尾）：
   //   - R15 test-writer 阶段 TRANSFER_SAME_ROLE/ROLE_INHERITANCE_CYCLE 仍 FALLBACK（断言 toContain('操作失败')）；
   //   - R16 D9 扩展 SPECIFIC_MESSAGES 后这两码升具体中文（"新角色不能与原角色相同" / "会形成继承环"），
   //     原 FALLBACK 断言失效（不再含"操作失败"）；
-  //   - impl-writer 调整：FALLBACK 断言 → 具体中文断言（对齐 R14 S-11 / R15 范例 ①类显式影响处理：
+  //   - impl-writer 调整：FALLBACK 断言 → 具体中文断言（对齐 R15 范例 ①类显式影响处理：
   //     "调整 assertion 期望值 + 注明理由"），理由为 R16 D9 全码映射收尾（errorMapping.ts 注释同步闭合）。
   //   - AI-002 边界：仅调整失效断言的期望值（toContain('操作失败') → toBe(具体中文)）+ 同步注释，
   //     不删除测试用例、不改测试名（保持测试覆盖意图：核验 D9 扩展后映射值正确）。
 
   it('TRANSFER_SAME_ROLE → "新角色不能与原角色相同"（AC-F9-3，R16 D9 全码映射收尾：TRANSFER 域码升具体中文）', () => {
-    // R16 D9 扩展后 TRANSFER 域码升具体中文（全码映射收尾，R14 S-11 闭合）
+    // R16 D9 扩展后 TRANSFER 域码升具体中文（全码映射收尾）
     expect(mapErrorToMessage('TRANSFER_SAME_ROLE')).toBe('新角色不能与原角色相同');
   });
 
   it('ROLE_INHERITANCE_CYCLE → "会形成继承环"（AC-F9-3，R16 D9 全码映射收尾：ROLE_INHERITANCE 域码升具体中文）', () => {
-    // R16 D9 扩展后 ROLE_INHERITANCE 域码升具体中文（全码映射收尾，R14 S-11 闭合）
+    // R16 D9 扩展后 ROLE_INHERITANCE 域码升具体中文（全码映射收尾）
     expect(mapErrorToMessage('ROLE_INHERITANCE_CYCLE')).toBe('会形成继承环');
   });
 

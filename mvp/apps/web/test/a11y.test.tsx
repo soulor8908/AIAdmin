@@ -76,7 +76,7 @@ const listUserRolesMock = vi.mocked(apiRoles.listUserRoles);
 const getEffectivePermissionsMock = vi.mocked(apiRoleInheritance.getEffectivePermissions);
 const getInheritanceChainMock = vi.mocked(apiRoleInheritance.getInheritanceChain);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const ROLE_ID = '00000000-0000-4000-8000-0000000000a1';
 const USER_ID = '00000000-0000-4000-8000-0000000000u1';
 

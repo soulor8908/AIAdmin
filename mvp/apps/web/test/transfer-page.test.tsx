@@ -18,8 +18,8 @@
 //   - D18：aria-label 域特定（"用户 ID"/"目标部门"/"原角色"/"新角色"/"提交调岗"）。
 //   - D19/T1：错误码遵循 contracts SSOT，USER_NOT_FOUND/DEPT_NOT_FOUND/ROLE_NOT_FOUND/ROLE_BUILTIN_FORBIDDEN 复用各域既有码
 //             （非臆造 TRANSFER_*_NOT_FOUND）；transfer 专属码 TRANSFER_SAME_ROLE/TRANSFER_OLD_ROLE_NOT_ASSIGNED/TRANSFER_FAILED/TRANSFER_COMPENSATION_FAILED。
-//   - R15 S-13：fixture 须用有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）。
-//   - R15 S-14：组件 label 跨组件唯一（"用户 ID"/"目标部门"/"原角色"/"新角色"/"提交调岗" 不与既有 label 冲突）。
+//   - fixture 须用有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）。
+//   - 组件 label 跨组件唯一（"用户 ID"/"目标部门"/"原角色"/"新角色"/"提交调岗" 不与既有 label 冲突）。
 //   - SEC-003b：测试中不 console.log/记录 password 或 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -58,7 +58,7 @@ const listRolesMock = vi.mocked(apiRoles.listRoles);
 const listUserRolesMock = vi.mocked(apiRoles.listUserRoles);
 const getDeptTreeMock = vi.mocked(apiDepartments.getDeptTree);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 const DEPT_ID = '00000000-0000-4000-8000-0000000000d1';
 const OLD_ROLE_ID = '00000000-0000-4000-8000-0000000000b1';
@@ -166,7 +166,7 @@ describe('TransferPage + TransferForm 调岗页', () => {
     renderTransferPage();
 
     await screen.findByLabelText(/用户\s*ID/i);
-    // 输入完整 uuid（失焦/完整 uuid 触发 listUserRoles，R14 S-9 不每键入触发）
+    // 输入完整 uuid（失焦/完整 uuid 触发 listUserRoles，不每键入触发）
     await user.type(screen.getByLabelText(/用户\s*ID/i), USER_ID);
     // 触发失焦（Tab）以模拟失焦触发 listUserRoles
     await user.tab();

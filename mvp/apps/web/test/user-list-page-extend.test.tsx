@@ -23,8 +23,8 @@
 //   - D5 / AC-S1-2：有效权限按钮为类型派生操作（userId 从 UserListPage 行派生自 User.id，TS 类型保证，不调 safeParse）。
 //   - D11：权限码中文化映射 SSOT 派生（键从 [...permissionCodeSchema.options] 派生 11 项全集，AI-005，禁止硬编码），
 //          具体中文化映射渲染由 effective-permissions-panel.test.tsx（T6）覆盖，本测仅覆盖"有效权限"按钮触发行为。
-//   - D18：行操作按钮 aria-label 域特定（"有效权限"，禁止通用"button"）；R15 S-14：跨组件唯一（不与 UserListPage 既有"启停"/"角色"冲突）。
-//   - R15 S-13：fixture 须用有效 hex UUID。
+//   - D18：行操作按钮 aria-label 域特定（"有效权限"，禁止通用"button"）；跨组件唯一（不与 UserListPage 既有"启停"/"角色"冲突）。
+//   - fixture 须用有效 hex UUID。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -53,7 +53,7 @@ vi.mock('../src/api/role-inheritance.js', () => ({
 const listUsersMock = vi.mocked(apiUsers.listUsers);
 const getEffectivePermissionsMock = vi.mocked(apiRoleInheritance.getEffectivePermissions);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -152,7 +152,7 @@ describe('UserListPage 行操作扩展（R16 有效权限按钮触发 EffectiveP
     await userEventInst.click(screen.getByRole('button', { name: /有效权限/i }));
 
     // EffectivePermissionsPanel 渲染权限码中文化（D11，至少一项中文化提示出现）
-    // 具体中文化措辞由 impl-writer 定（须 Review 报告记录，R13 S-2），本测断言至少出现中文化或权限码文本
+    // 具体中文化措辞由 impl-writer 定（须 Review 报告记录），本测断言至少出现中文化或权限码文本
     await waitFor(() => {
       expect(getEffectivePermissionsMock).toHaveBeenCalledWith(USER_ID);
     });

@@ -9,7 +9,7 @@
 //   - jsdom 环境（D20 per-file 注解）+ @testing-library/react + user-event。
 //   - mock api.reports.queryOperations（控制 resolve/reject + 断言入参），AuthContext.Provider 提供已登录态。
 //   - 期望「断言级红」：ReportPage stub 抛 NOT_IMPLEMENTED，render 失败（非导入级红）。
-//   - D12 / R14 S-9：报表整体筛选采用"应用筛选"按钮触发请求（不每键入触发），datetime-local/operator_id 文本输入
+//   - D12：报表整体筛选采用"应用筛选"按钮触发请求（不每键入触发），datetime-local/operator_id 文本输入
 //     均经"应用筛选"按钮原子提交，无须 debounce。
 //   - AC-F7-1：group_by checkbox 选项从 [...reportGroupByDimSchema.options] SSOT 派生（4 项，AI-005）。
 //   - AC-F7-4：entity_type select 从 [...auditLogEntityTypeSchema.options] SSOT 派生（5 项）+ action select 从
@@ -318,7 +318,7 @@ describe('ReportPage', () => {
     expect(screen.getByText(/1.*\/.*2.*页|第\s*1\s*\/\s*2/)).toBeInTheDocument();
   });
 
-  // ---------- AC-F7-5 筛选+分页复合（R13 S-3 组合场景）----------
+  // ---------- AC-F7-5 筛选+分页复合（组合场景）----------
   it('筛选+分页复合：勾选 group_by 后翻页 → queryOperations 含 group_by + page=2（AC-F7-5，R13 S-3）', async () => {
     queryOperationsMock.mockResolvedValue(
       makeReportResult({ total: 25, page: 1, totalPages: 2 }),

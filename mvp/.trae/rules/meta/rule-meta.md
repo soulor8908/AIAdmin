@@ -1,7 +1,8 @@
 ---
 alwaysApply: true
 ---
-# 规则元约束（复盘 RETRO-MVP-001 P0 补强 + RETRO-ROUND2 漂移治理）
+# 规则元约束
+> 历史演进明细见 docs/retro/lessons-learned.md。
 
 ## META-001 · 无校验不立规
 - 触发条件：新增/修改 `.trae/rules/**` 下任意规则文件时。

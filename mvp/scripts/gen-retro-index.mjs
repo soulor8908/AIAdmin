@@ -1,5 +1,5 @@
-// scripts/gen-retro-index.mjs —— 扫描 docs/retro/*.md 生成 docs/retro/lessons-learned.md（≤5KB）
-// 目的：为 subagent 提供 retro 压缩索引，替代全量 retro 阅读（14 轮 retro 累计 >200KB → ≤5KB）。
+// scripts/gen-retro-index.mjs —— 扫描 docs/retro/*.md 生成 docs/retro/lessons-learned.md（≤8KB）
+// 目的：为 subagent 提供 retro 压缩索引，替代全量 retro 阅读（24 轮 retro 累计 >300KB → ≤8KB）。
 // 保留原始 retro 不动；如需明细循"来源"读对应 roundN-retro.md。
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,9 +7,8 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const RETRO_DIR = join(ROOT, 'docs/retro');
 const OUT = join(RETRO_DIR, 'lessons-learned.md');
-// R17 调整：从 5KB 提升至 6KB。原 5KB 上限设于 R13（4 轮固化），R17 累计 6 轮固化 + 17 轮一句话教训，
-// 已固化表 + 关键教训表自然增长至 5.3KB。6KB 上限为 17 轮演进后的合理调整，仍保持"压缩索引"目的。
-const MAX_BYTES = 6 * 1024;
+// R17 调整：从 5KB 提升至 6KB；R25 调整：从 6KB 提升至 10KB（24 轮累计 + 新增量化对比表，预留 ~1KB 余量）。
+const MAX_BYTES = 10 * 1024;
 
 function roundOf(filename) {
   if (filename === 'mvp-retro.md') return 0;
@@ -44,6 +43,28 @@ const retros = files.map(({ name, round }) => {
   }
   return { name, round, verdict, scope, items, src };
 });
+
+// 轮次类型分类（业务轮 / 元改进轮 / 测试基础设施 / 早期 CRUD）
+function classifyRound(scope) {
+  if (/元改进轮/.test(scope)) return 'meta';
+  if (/测试基础设施|E2E|Playwright|跨浏览器/.test(scope)) return 'infra';
+  if (/业务轮/.test(scope)) return 'business';
+  return 'early';
+}
+
+// 从 verdict 提取量化指标：AC 数 / 测试数 / blocker 数
+function extractMetrics(verdict, src) {
+  // AC 数：优先匹配 "N AC 全对齐" / "N/M AC 对齐" / "N/17 AC"
+  const acMatch = verdict.match(/(\d+)\s*\/\s*(\d+)\s*AC/) || verdict.match(/(\d+)\s*AC\s*全?对?齐?/);
+  const ac = acMatch ? (acMatch[2] || acMatch[1]) : '';
+  // 测试数：匹配 "vitest N files M tests" 或 "M tests"
+  const testMatch = verdict.match(/(\d+)\s*tests/) || src.match(/vitest[^;]*?(\d+)\s*tests/);
+  const tests = testMatch ? testMatch[1] : '';
+  // blocker 数：匹配 "N blocker" 或 "0 blocker"
+  const blockerMatch = verdict.match(/(\d+)\s*blocker/i);
+  const blocker = blockerMatch ? blockerMatch[1] : (verdict.includes('blocker') ? '?' : '0');
+  return { ac, tests, blocker };
+}
 
 // 最新 retro 的"剩余改进项"→ 仍在生效集合（按 R{round}-{id} 复合键，因 S-N 每轮重新计数）
 // 用粗体 **S-N**（R{round} …）模式扫描全文件：该模式仅出现在 §6 剩余改进项清单（heading 用纯文本，不含粗体+R 标注）。
@@ -87,9 +108,25 @@ const lessons = retros
   })
   .join('\n');
 
+// 量化对比表（轮次 / 类型 / AC / 测试数 / blocker / verdict 摘要）
+const TYPE_LABEL = { early: 'CRUD', business: '业务', meta: '元改进', infra: '基础设施' };
+const quantRows = retros.map((r) => {
+  const tag = r.round === 0 ? 'MVP' : `R${r.round}`;
+  const type = TYPE_LABEL[classifyRound(r.scope)] || '?';
+  const m = extractMetrics(r.verdict, r.src);
+  const v = (r.verdict || '').slice(0, 40).replace(/\|/g, '/');
+  return `| ${tag} | ${type} | ${m.ac || '-'} | ${m.tests || '-'} | ${m.blocker} | ${v} |`;
+});
+
 const doc = `# 复盘教训索引（自动生成，勿手改）
-> 由 \`scripts/gen-retro-index.mjs\` 扫描 docs/retro/*.md 生成 · 目标 ≤6KB · 原始 retro 不动。
+> 由 \`scripts/gen-retro-index.mjs\` 扫描 docs/retro/*.md 生成 · 目标 ≤10KB · 原始 retro 不动。
 > 供 subagent 替代全量 retro 阅读；如需明细循"来源"读对应 roundN-retro.md。
+
+## 量化对比表（轮次演进速览）
+| 轮次 | 类型 | AC | 测试 | blocker | verdict 摘要 |
+|---|---|---|---|---|---|
+${quantRows.join('\n')}
+类型：CRUD=早期领域演练 / 业务=业务功能轮 / 元改进=纯元资产轮 / 基础设施=测试或 E2E 基础设施轮。
 
 ## 已固化规则表（已反推到规则/Spec/提示词层）
 | ID | 来源 | 教训 | 固化方式 |

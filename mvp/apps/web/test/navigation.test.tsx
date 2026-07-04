@@ -186,11 +186,11 @@ describe('Sidebar 导航', () => {
 });
 
 // ---------- AC-ARCH-1 lint:rules 探针验证 ARCH-003 机器化 ----------
-// 注：此 AC 由 scripts/check-rules.mjs ARCH-003 分支机器化校验（R12 §8 已落地 + R13 S-4 已扩展 walkWeb）。
+// 注：此 AC 由 scripts/check-rules.mjs ARCH-003 分支机器化校验（R12 §8 已落地 + 已扩展 walkWeb）。
 // test-writer 阶段不直接在测试中断言（避免重复实现校验逻辑），通过 `npm run lint:rules` 探针验证：
 //   - apps/web/src 全部新增模块（Sidebar.tsx 等）import 仅 @admin/contracts + 第三方 + apps/web 内部
 //   - 违规即 exit≠0
-// 此测试文件本身也受 ARCH-003 覆盖（apps/web/test 已纳入 allTs，R13 S-4）。
+// 此测试文件本身也受 ARCH-003 覆盖（apps/web/test 已纳入 allTs）。
 // AC-ARCH-1 验收依赖：lint:rules 探针 + Reviewer 逐文件核对（§9.3 T8 备注）。
 
 // ---------- AC-F10-3 零新依赖（工程核验）----------

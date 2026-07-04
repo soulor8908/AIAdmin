@@ -12,7 +12,7 @@
 //   - D8/T4：transfer 非 versioned，不传 versioned/expectedVersion → client 不注入 If-Match（区别于 R14/R15 versioned 写端点）。
 //   - D19/T1：错误码遵循 contracts SSOT，USER_NOT_FOUND/DEPT_NOT_FOUND/ROLE_NOT_FOUND/ROLE_BUILTIN_FORBIDDEN 复用各域既有码
 //             （非臆造 TRANSFER_*_NOT_FOUND）；transfer 专属码 TRANSFER_SAME_ROLE/TRANSFER_OLD_ROLE_NOT_ASSIGNED/TRANSFER_FAILED/TRANSFER_COMPENSATION_FAILED。
-//   - R15 S-13：fixture 须用有效 hex UUID（如 00000000-0000-4000-8000-000000000001），避免 z.string().uuid() 严格校验拒绝非 hex 字符。
+//   - fixture 须用有效 hex UUID（如 00000000-0000-4000-8000-000000000001），避免 z.string().uuid() 严格校验拒绝非 hex 字符。
 //   - SEC-003b：测试中不 console.log/记录 password 或 token 字符串。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { TransferInput } from '@admin/contracts';
@@ -43,7 +43,7 @@ function mockResponse(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 const DEPT_ID = '00000000-0000-4000-8000-0000000000d1';
 const OLD_ROLE_ID = '00000000-0000-4000-8000-0000000000b1';

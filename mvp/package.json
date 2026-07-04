@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test --project=chromium",
     "lint:rules": "node scripts/check-rules.mjs",
+    "lint:spec-binding": "node scripts/check-spec-binding.mjs",
     "gen:snapshot": "node scripts/gen-context-snapshot.mjs",
     "gen:delta": "node scripts/gen-round-delta.mjs",
     "gen:retro-index": "node scripts/gen-retro-index.mjs",

@@ -11,8 +11,8 @@
 // [约束] D7：setRoleParent/unsetRoleParent 须 versioned=true + expectedVersion → client 注入 If-Match（T3 versioned）。
 // [约束] D9：409 VERSION_CONFLICT 由 client 自动重试 1 次（用 409 body current_version，不 GET 单条）。
 //            409 ROLE_INHERITANCE_CYCLE/ROLE_BUILTIN_PARENT_FORBIDDEN 不重试（非 VERSION_CONFLICT，抛 ApiError）。
-// [约束] R13 S-1：本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
-// [约束] D17（R14 S-8）：函数命名对齐本 Spec §4.2.2 声明（setRoleParent/unsetRoleParent/getInheritanceChain/getEffectivePermissions）。
+// [约束] 本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] D17：函数命名对齐本 Spec §4.2.2 声明（setRoleParent/unsetRoleParent/getInheritanceChain/getEffectivePermissions）。
 //
 // [test-writer stub] AI-002 test-first：本文件为 stub，函数体抛 NOT_IMPLEMENTED，测试期断言级红。
 //   impl-writer 阶段落地真实实现（见 Spec §4.2.2 实现提示）。

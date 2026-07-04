@@ -16,8 +16,8 @@ import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
  * R15 扩展（D9）：追加通知/报表域码（TECH-WEB-NOTIFICATION-REPORT-001 §11 矩阵）。
  * R16 扩展（D9）：追加 transfer/inheritance 域码（TECH-WEB-TRANSFER-INHERITANCE-001 §11 矩阵，全码映射收尾）。
  * [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）。
- * 全码映射收尾（R14 S-11 闭合）：R16 扩展后 errorCodeSchema 全集所有已知域码均映射具体中文提示，
- *   FALLBACK 仅作未来新增码兜底（R12 user/auth + R14 role/dept + R15 notification/report + R16 transfer/inheritance）。
+ * 全码映射收尾：R16 扩展后 errorCodeSchema 全集所有已知域码均映射具体中文提示，
+ *   FALLBACK 仅作未来新增码兜底。
  */
 const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_ERROR: '输入校验失败',

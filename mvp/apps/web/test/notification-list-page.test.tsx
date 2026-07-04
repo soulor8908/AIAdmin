@@ -13,7 +13,7 @@
 //   - D16：首次加载 pageSize=20（不依赖 schema 缺省 10，N1）。
 //   - D10：status 文案中文化（草稿/已发送/已读）+ 按 status 动态显示操作按钮（Q3/Q11）。
 //   - AC-F1-3：status 选项从 [...notificationStatusSchema.options] SSOT 派生（3 项，AI-005）。
-//   - AC-F1-4：筛选+分页复合（R13 S-3 组合场景）。
+//   - AC-F1-4：筛选+分页复合（组合场景）。
 //   - AC-S1-2：send/markRead/delete 为类型派生操作（id/version 从列表派生，TS 类型保证，不调 safeParse）。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -207,7 +207,7 @@ describe('NotificationListPage', () => {
     });
   });
 
-  // ---------- AC-F1-4 筛选+分页复合（R13 S-3 组合场景）----------
+  // ---------- AC-F1-4 筛选+分页复合（组合场景）----------
   it('筛选+分页复合：选 status=sent 后翻页 → 保持 status=sent&page=2（AC-F1-4，R13 S-3）', async () => {
     listNotificationsMock.mockResolvedValue(
       makeListResult([makeNotification({ status: 'sent' })], { total: 25, page: 1, totalPages: 2 }),

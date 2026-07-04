@@ -7,7 +7,7 @@
 // [约束] D3：全部类型经 z.infer 派生自 contracts。
 // [约束] D10：消费 RedactedAuditLog（脱敏态），禁用 auditLogSchema（存储态含未脱敏 PII）。
 // [约束] B3：query 仅 page/pageSize/operated_from/operated_to/operator_id/entity_type（无 action）。
-// [约束] R13 S-1：本文件为类型派生操作（query/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] 本文件为类型派生操作（query/output 类型经 z.infer 派生），不调 safeParse。
 import type { AuditLogListResult, ListAuditLogQuery } from '@admin/contracts';
 import { request } from './client.js';
 

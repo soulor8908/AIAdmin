@@ -11,7 +11,7 @@
 // [约束] D8：deleteDepartment 非 versioned（无 If-Match，server.ts L320 无第 5 参 true）。
 //           409 DEPT_HAS_CHILDREN 不触发 client 409 重试（仅 VERSION_CONFLICT 重试，client.ts D9）。
 // [约束] B4：assignUserDepartment 覆盖式幂等（重复分配同部门=200/204，无"已在该部门"码）。
-// [约束] R13 S-1：本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] 本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
 import type {
   CreateDepartmentInput,
   Department,

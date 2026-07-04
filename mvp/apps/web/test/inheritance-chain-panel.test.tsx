@@ -13,7 +13,7 @@
 //   - T3：GET /v1/roles/:roleId/inheritance-chain 非 cacheable，不发 If-None-Match（由 T1 api-role-inheritance 测覆盖，本文件不重复）。
 //   - D5 / AC-S1-2：类型派生操作（roleId 从 RoleListPage 行派生，TS 类型保证，不调 safeParse）。
 //   - T2/D20：错误码遵循 contracts SSOT，ROLE_NOT_FOUND 复用 role 域既有码（非臆造 ROLE_INHERITANCE_NOT_FOUND）。
-//   - R15 S-13：fixture 须用有效 hex UUID；R15 S-14：组件 label 跨组件唯一（"继承链" 消歧）。
+//   - fixture 须用有效 hex UUID；组件 label 跨组件唯一（"继承链" 消歧）。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -33,7 +33,7 @@ vi.mock('../src/api/role-inheritance.js', () => ({
 
 const getInheritanceChainMock = vi.mocked(apiRoleInheritance.getInheritanceChain);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const ROLE_ID = '00000000-0000-4000-8000-0000000000a1';
 
 function makeRole(overrides: Partial<Role> = {}): Role {

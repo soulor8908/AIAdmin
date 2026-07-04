@@ -6,8 +6,8 @@
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/client）。
 // [约束] D3：全部类型经 z.infer 派生自 contracts。
 // [约束] D8：group_by 为数组，经扩展后的 RequestOptions.query（支持 string[]）拼接为 repeated key（?group_by=A&group_by=B）。
-// [约束] D20（R14 S-8）：函数命名对齐本 Spec §4.2.2 声明。
-// [约束] R13 S-1：本文件为类型派生操作（query/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] D20：函数命名对齐本 Spec §4.2.2 声明。
+// [约束] 本文件为类型派生操作（query/output 类型经 z.infer 派生），不调 safeParse。
 import type { ReportQuery, ReportResult } from '@admin/contracts';
 import { request } from './client.js';
 

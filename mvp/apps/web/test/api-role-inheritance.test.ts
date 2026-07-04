@@ -15,7 +15,7 @@
 //   - D7 注：409 ROLE_INHERITANCE_CYCLE/ROLE_BUILTIN_PARENT_FORBIDDEN 非 VERSION_CONFLICT，不重试抛 ApiError（T2）。
 //   - T3：getInheritanceChain/getEffectivePermissions 非 cacheable，不发 If-None-Match（R12 D15 前端统一不发，行为一致）。
 //   - D20/T2：错误码遵循 contracts SSOT，非臆造 ROLE_INHERITANCE_NOT_FOUND（roleId 不存在复用 ROLE_NOT_FOUND）。
-//   - R15 S-13：fixture 须用有效 hex UUID。
+//   - fixture 须用有效 hex UUID。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { PermissionCode, Role } from '@admin/contracts';
@@ -51,7 +51,7 @@ function mockResponse(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const ROLE_ID = '00000000-0000-4000-8000-0000000000a1';
 const PARENT_ROLE_ID = '00000000-0000-4000-8000-0000000000a2';
 const USER_ID = '00000000-0000-4000-8000-000000000001';

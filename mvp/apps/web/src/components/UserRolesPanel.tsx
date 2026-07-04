@@ -9,7 +9,7 @@
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/roles + api/client + lib/errorMapping）。
 // [约束] D3：UserRole/Role 经 z.infer 派生。
-// [约束] D5 [R13 S-1]：类型派生操作（roleId 从全量角色列表派生，TS 类型保证 uuid），不调 safeParse（AC-ARCH-4）。
+// [约束] D5：类型派生操作（roleId 从全量角色列表派生，TS 类型保证 uuid），不调 safeParse（AC-ARCH-4）。
 //            toggle 直接派发 assignRole/removeRole，无中间 schema 校验层。
 import { useEffect, useRef, useState } from 'react';
 import type { ErrorCode, Role, UserRole } from '@admin/contracts';

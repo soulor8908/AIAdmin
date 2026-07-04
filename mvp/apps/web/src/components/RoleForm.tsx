@@ -7,7 +7,7 @@
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/roles + api/client + lib/errorMapping）。
 // [约束] D3：CreateRoleInput/PermissionCode 经 z.infer 派生。
-// [约束] D4：自由文本表单须 safeParse（R13 S-1）。permission_codes 多选为类型派生，整体 safeParse 覆盖（§3.2 混合表单）。
+// [约束] D4：自由文本表单须 safeParse。permission_codes 多选为类型派生，整体 safeParse 覆盖（§3.2 混合表单）。
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -63,7 +63,7 @@ export function RoleForm(props: RoleFormProps): JSX.Element {
     setFormError(null);
     const trimmedName = name.trim();
     const raw = { name: trimmedName, description, permission_codes: permissionCodes };
-    // D4：自由文本表单 safeParse（R13 S-1）。.strict() 拒绝多余字段（如 code）。
+    // D4：自由文本表单 safeParse。.strict() 拒绝多余字段（如 code）。
     const result = createRoleInputSchema.safeParse(raw);
     if (!result.success) {
       // safeParse 拦截后按字段+约束映射中文提示（AC-F2-3/4/5）

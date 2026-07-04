@@ -4,7 +4,7 @@
 //   - 首次加载 listAuditLogs({page:1,pageSize:20})（D21，AC-F7-1）
 //   - 渲染日志行（operated_at/operator_name/entity_type/action/变更摘要，AC-F7-1）
 //   - 分页（AC-F7-2）；筛选 entity_type/operator_id/date_range（AC-F7-3/4/5，无 action，B3）
-//   - 筛选+分页复合（AC-F7-6，R13 S-3 翻页保持筛选条件）
+//   - 筛选+分页复合（AC-F7-6，翻页保持筛选条件）
 //   - PII 脱敏展示（before/after pii=true 字段展示脱敏值，AC-F7-10，D10）
 //   - 只读无写入口（AC-F7-11，append-only）
 //

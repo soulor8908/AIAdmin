@@ -8,9 +8,9 @@
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部。
 // [约束] D3：Notification/CreateNotificationInput/UpdateNotificationInput 经 z.infer 派生。
-// [约束] D4：自由文本表单须 safeParse（R13 S-1）。
+// [约束] D4：自由文本表单须 safeParse。
 // [约束] D15：recipient_id 自由文本 UUID 输入 + 存在性延后至 send（N4）。
-// [约束] D21：aria-label 域特定（R14 S-10 教训）。
+// [约束] D21：aria-label 域特定。
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -66,7 +66,7 @@ export function NotificationForm(props: NotificationFormProps): JSX.Element {
     setFormError(null);
 
     if (!isEdit) {
-      // create 模式：safeParse 全字段（R13 S-1，自由文本须 safeParse）
+      // create 模式：safeParse 全字段（自由文本须 safeParse）
       const raw: CreateNotificationInput = { title, content, recipient_id: recipientId };
       const result = createNotificationInputSchema.safeParse(raw);
       if (!result.success) {

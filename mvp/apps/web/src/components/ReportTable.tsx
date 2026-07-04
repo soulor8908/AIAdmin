@@ -16,7 +16,7 @@ export type ReportTableProps = {
 };
 
 /**
- * 维度中文名映射（纯 UI 文案，PRD §数据实体草图 Q7，R13 S-2 不须同步 Spec §10）。
+ * 维度中文名映射（纯 UI 文案，PRD §数据实体草图 Q7，不须同步 Spec §10）。
  * 用于列头展示 + checkbox label（与 ReportFilter 共享语义，此处仅本组件用列头）。
  */
 const DIM_LABEL: Record<ReportGroupByDim, string> = {

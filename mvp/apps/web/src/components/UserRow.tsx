@@ -20,7 +20,7 @@
 //
 // [R16 影响核验] 新增"有效权限"按钮不破坏 R12/R14 user-list-page.test.tsx：
 //   - 既有测用 getByRole('button', { name: /禁用|角色/i }) 精确匹配，"有效权限"不匹配该正则（D18 aria-label 域特定）；
-//   - R15 S-14：跨组件唯一 label（"有效权限"不与 UserListPage 既有"启停"/"角色"冲突）。
+//   - 跨组件唯一 label（"有效权限"不与 UserListPage 既有"启停"/"角色"冲突）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts（leaf 组件，无下游依赖）。
 // [约束] D3：User 类型经 z.infer 派生。

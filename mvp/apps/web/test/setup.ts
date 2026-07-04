@@ -18,5 +18,5 @@ import { toHaveNoViolations } from 'jest-axe';
 
 // R23 D8：jest-axe matcher 注入（显式 expect.extend，绑定到 vitest expect 实例，AC-A11y-7）
 // [R23 §10.6 S-23 反向同步]：jest-axe 无 /vitest 子路径入口（PRD §2.5 假设错误），
-// 须显式 import { expect } from 'vitest' + expect.extend（参照 R20 S-5 jest-dom/vitest 模式适配）。
+// 须显式 import { expect } from 'vitest' + expect.extend（参照 jest-dom/vitest 模式适配）。
 expect.extend(toHaveNoViolations);

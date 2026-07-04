@@ -16,7 +16,7 @@
 //   - D9：409 VERSION_CONFLICT 由 client 自动重试 1 次（用 409 body current_version，由 T1 api-role-inheritance 测覆盖重试细节）。
 //         组件层验证：重试成功 → onUpdated + 关闭；重试仍冲突 → 显示"数据已被修改"提示。
 //   - T2/D20：错误码遵循 contracts SSOT，非臆造 ROLE_INHERITANCE_NOT_FOUND（roleId 不存在复用 ROLE_NOT_FOUND）。
-//   - R15 S-13：fixture 须用有效 hex UUID；R15 S-14：组件 label 跨组件唯一（"父角色" 消歧于 RoleListPage"角色名称"）。
+//   - fixture 须用有效 hex UUID；组件 label 跨组件唯一（"父角色" 消歧于 RoleListPage"角色名称"）。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -48,7 +48,7 @@ vi.mock('../src/api/roles.js', () => ({
 const setRoleParentMock = vi.mocked(apiRoleInheritance.setRoleParent);
 const listRolesMock = vi.mocked(apiRoles.listRoles);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const ROLE_ID = '00000000-0000-4000-8000-0000000000a1';
 const PARENT_ROLE_ID = '00000000-0000-4000-8000-0000000000a2';
 const BUILTIN_ADMIN_ID = '00000000-0000-4000-8000-0000000000a9';

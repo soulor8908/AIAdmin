@@ -1,7 +1,7 @@
 // apps/web/test/error-mapping-extend-3.test.ts —— ③类新增 errorMapping R16 扩展测（TECH-WEB-TRANSFER-INHERITANCE-001 §9.3 T9）
 //
 // 覆盖 AC：AC-F9-1（transfer 域码中文）、AC-F9-2（inheritance 域码中文）、
-//          AC-F9-3（SSOT 派生断言 + R14 S-11 同步注释移除"TRANSFER/ROLE_INHERITANCE 域 FALLBACK" + 全码映射收尾 + 401/网络错误沿用 R12/R14/R15）
+//          AC-F9-3（SSOT 派生断言 + 同步注释移除"TRANSFER/ROLE_INHERITANCE 域 FALLBACK" + 全码映射收尾 + 401/网络错误沿用 R12/R14/R15）
 //
 // ①类显式影响标注（AI-002 边界，test-writer 仅标注，由 impl-writer 落地核验）：
 //   - R15 既有 `apps/web/test/error-mapping-extend-2.test.ts` line 73-81 断言：
@@ -14,7 +14,7 @@
 //     impl-writer 须同步调整 R15 error-mapping-extend-2.test.ts 断言：
 //       · `TRANSFER_SAME_ROLE → FALLBACK '操作失败'` 改为 `TRANSFER_SAME_ROLE → '新角色不能与原角色相同'`
 //       · `ROLE_INHERITANCE_CYCLE → FALLBACK '操作失败'` 改为 `ROLE_INHERITANCE_CYCLE → '会形成继承环'`
-//       · 同步注释（line 73-81 "R14 S-11 同步注释：TRANSFER 域本期前端不触发"）调整为"全码映射收尾，无已知域保持 FALLBACK"
+//       · 同步注释（line 73-81 "同步注释：TRANSFER 域本期前端不触发"）调整为"全码映射收尾，无已知域保持 FALLBACK"
 //     属 ①类显式影响处理范例（对齐 R14/R15 errorMapping 扩展范例）。matcher 改动须 Reviewer 判定（AI-002 须显式列出）。
 //   - 本文件为**新增**独立文件，断言 R16 目标态（transfer/inheritance 码具体中文提示 + 全码映射收尾）。
 //     test-writer 阶段 errorMapping.ts 仍为 R15 态（TRANSFER/ROLE_INHERITANCE 域码 → FALLBACK）→ 本文件具体中文断言失败（断言级红）；
@@ -24,7 +24,7 @@
 //   - 纯单测（无 jsdom 注解，不渲染组件），直接 import mapErrorToMessage 断言返回值。
 //   - D9 [约束]：扩展 SPECIFIC_MESSAGES 新增 transfer/inheritance 域码中文提示，键仍从 [...errorCodeSchema.options] SSOT 派生（R12 D11 沿用）。
 //   - AC-F9-3 SSOT 派生断言：映射表键覆盖 errorCodeSchema 全集（transfer/inheritance 码本就在枚举内，非新增枚举键）。
-//   - AC-F9-3 同步注释核验（R14 S-11 闭合收尾）：扩展后 errorCodeSchema 全集所有码均映射具体中文提示，
+//   - AC-F9-3 同步注释核验：扩展后 errorCodeSchema 全集所有码均映射具体中文提示，
 //     FALLBACK 仅作未来新增码兜底——R15 注释"TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK"须移除。
 //     本测试间接验证：扩展后 TRANSFER_*/ROLE_SELF_INHERITANCE/ROLE_BUILTIN_PARENT_FORBIDDEN/ROLE_INHERITANCE_CYCLE/ROLE_HAS_CHILDREN
 //     均返回具体中文（非 FALLBACK "操作失败"），证明"未映射域"措辞不再适用 TRANSFER/ROLE_INHERITANCE。
@@ -91,9 +91,9 @@ describe('errorMapping R16 扩展（transfer/inheritance 域码中文提示 + �
     expect(mapErrorToMessage('ROLE_HAS_CHILDREN')).toBe('角色仍有子角色，请先解除子角色继承');
   });
 
-  // ========== AC-F9-3 同步注释核验（R14 S-11 闭合收尾）：扩展后无已知域保持 FALLBACK ==========
+  // ========== AC-F9-3 同步注释核验：扩展后无已知域保持 FALLBACK ==========
 
-  it('R16 扩展后 transfer/inheritance 域码均返回具体中文（非 FALLBACK "操作失败"），证明同步注释须移除"TRANSFER/ROLE_INHERITANCE 域 FALLBACK"措辞（AC-F9-3，R14 S-11 闭合收尾）', () => {
+  it('R16 扩展后 transfer/inheritance 域码均返回具体中文（非 FALLBACK "操作失败"），证明同步注释须移除"TRANSFER/ROLE_INHERITANCE 域 FALLBACK"措辞（AC-F9-3）', () => {
     // 扩展后 transfer/inheritance 域所有码均返回具体中文提示（不含"操作失败"兜底），
     // 间接证明 errorMapping.ts 注释"TRANSFER/ROLE_INHERITANCE 域码本期前端不触发，保持 FALLBACK"须移除
     // （注释须反映"全码映射收尾，FALLBACK 仅作未来新增码兜底"，D9 [约束]）

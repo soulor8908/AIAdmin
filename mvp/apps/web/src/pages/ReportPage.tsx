@@ -2,13 +2,13 @@
 //
 // 职责：
 //   - 渲染 ReportFilter 筛选区 + ReportTable 聚合表格区
-//   - "应用筛选"按钮触发请求（D12，R14 S-9 教训，不每键入触发）
+//   - "应用筛选"按钮触发请求（D12，不每键入触发）
 //   - 客户端 advisory 校验（group_by 非空 / from<=to，D13/D14，由 ReportFilter 内联执行）
 //   - 分页/空状态/加载态（AC-F7-9）
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部。
 // [约束] D3：ReportResult/ReportQuery 经 z.infer 派生。
-// [约束] D12：应用筛选按钮触发请求（不每键入触发，R14 S-9 教训）。
+// [约束] D12：应用筛选按钮触发请求（不每键入触发）。
 // [约束] D13：group_by 默认不勾选 + 客户端 advisory 校验非空（ReportFilter 内联校验）。
 // [约束] §5.3：useState 管理本地状态，无 Redux/Zustand。
 import { useState } from 'react';

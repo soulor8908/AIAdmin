@@ -7,7 +7,7 @@
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/departments + api/client + lib/errorMapping）。
 // [约束] D3：CreateDepartmentInput 经 z.infer 派生。
-// [约束] D4：自由文本表单须 safeParse（R13 S-1）。
+// [约束] D4：自由文本表单须 safeParse。
 // [约束] D13：parentId 可选（缺省/null=根部门），提交 body 据 parentId 含/不含 parent_id。
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -57,7 +57,7 @@ export function DeptForm(props: DeptFormProps): JSX.Element {
     if (parentId !== undefined && parentId !== null) {
       raw.parent_id = parentId;
     }
-    // D4：自由文本表单 safeParse（R13 S-1）。.strict() 拒绝多余字段。
+    // D4：自由文本表单 safeParse。.strict() 拒绝多余字段。
     const result = createDepartmentInputSchema.safeParse(raw);
     if (!result.success) {
       // safeParse 拦截后按字段+约束映射中文提示（AC-F5-4）

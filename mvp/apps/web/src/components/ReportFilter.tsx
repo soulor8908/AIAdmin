@@ -9,10 +9,10 @@
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部。
 // [约束] D5：group_by checkbox/entity_type/action select 为类型派生操作（SSOT 派生 options）。
-// [约束] D12：应用筛选按钮触发请求（R14 S-9 教训，不每键入触发）。
+// [约束] D12：应用筛选按钮触发请求（不每键入触发）。
 // [约束] D13：group_by 默认不勾选 + 客户端 advisory 校验非空。
 // [约束] D14：datetime-local + ISO 归一（沿用 R14 D15）。
-// [约束] D21：aria-label 域特定（R14 S-10 教训）。
+// [约束] D21：aria-label 域特定。
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import {

@@ -9,9 +9,9 @@
 //   - 错误：ROLE_NOT_FOUND → "角色不存在"（AC-F6-4，T2）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts（Role 类型派生）+ apps/web 内部（api/role-inheritance）+ 第三方。
-// [约束] D5：类型派生操作（roleId 从列表派生，TS 类型保证，不调 safeParse，R13 S-1）。
+// [约束] D5：类型派生操作（roleId 从列表派生，TS 类型保证，不调 safeParse）。
 // [约束] D10：链形文本（" → " 分隔，Q6 决策①，不做树形/图表，D23）。
-// [约束] D18：aria-label="继承链"；D21/R15 S-14：label 跨组件唯一。
+// [约束] D18：aria-label="继承链"；D21：label 跨组件唯一。
 import { useEffect, useRef, useState } from 'react';
 import type { ErrorCode, Role } from '@admin/contracts';
 import { getInheritanceChain } from '../api/role-inheritance.js';

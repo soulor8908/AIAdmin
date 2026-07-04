@@ -13,7 +13,7 @@
 //   - T3：GET /v1/users/:userId/effective-permissions 非 cacheable，不发 If-None-Match（由 T1 api-role-inheritance 测覆盖）。
 //   - D5 / AC-S1-2：类型派生操作（userId 从 UserListPage 行派生，TS 类型保证，不调 safeParse）。
 //   - T1/D19：错误码遵循 contracts SSOT，USER_NOT_FOUND 复用 user 域既有码（非臆造 TRANSFER_USER_NOT_FOUND）。
-//   - R15 S-13：fixture 须用有效 hex UUID；R15 S-14：组件 label 跨组件唯一（"有效权限" 消歧于 UserListPage"角色"按钮）。
+//   - fixture 须用有效 hex UUID；组件 label 跨组件唯一（"有效权限" 消歧于 UserListPage"角色"按钮）。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -36,7 +36,7 @@ const getEffectivePermissionsMock = vi.mocked(apiRoleInheritance.getEffectivePer
 // SSOT 派生：从 contracts permissionCodeSchema 取全集（AI-005，禁止硬编码 11 项）
 const ALL_PERMISSION_CODES = [...permissionCodeSchema.options] as PermissionCode[];
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 
 function renderPanel(userId: string = USER_ID) {
@@ -71,7 +71,7 @@ describe('EffectivePermissionsPanel 有效权限展示', () => {
       expect(getEffectivePermissionsMock).toHaveBeenCalledWith(USER_ID);
     });
     // 权限码中文化映射渲染（D11，每项中文化，如 user:read→"查看用户"、transfer:write→"调岗用户"）
-    // 断言至少渲染一项中文化提示（具体措辞由 impl-writer 定，须 Review 报告记录，R13 S-2）
+    // 断言至少渲染一项中文化提示（具体措辞由 impl-writer 定，须 Review 报告记录）
     await waitFor(() => {
       expect(screen.getByText(/查看用户|用户.*读|user:read/i)).toBeInTheDocument();
     });
@@ -98,7 +98,7 @@ describe('EffectivePermissionsPanel 有效权限展示', () => {
       expect(getEffectivePermissionsMock).toHaveBeenCalled();
     });
     // 验证每项权限码均渲染中文化映射（11 项全集）
-    // 注：具体中文化措辞由 impl-writer 定（R13 S-2 纯 UI 文案不须同步 §10），须 Review 报告记录
+    // 注：具体中文化措辞由 impl-writer 定（纯 UI 文案不须同步 §10），须 Review 报告记录
     // 此处断言"返回的 11 项权限码均有对应渲染项"——通过权限码原文或中文化文案匹配
     await waitFor(() => {
       // 至少渲染 transfer:write 相关项（确认含 R16 新增 transfer:write 权限码中文化）
@@ -131,7 +131,7 @@ describe('EffectivePermissionsPanel 有效权限展示', () => {
   });
 
   // ---------- AC-S1-2 类型派生 userId 不 safeParse ----------
-  it('userId 从 UserListPage 行派生（TS 类型保证），不调 safeParse（AC-S1-2，D5/R13 S-1）', async () => {
+  it('userId 从 UserListPage 行派生（TS 类型保证），不调 safeParse（AC-S1-2，D5）', async () => {
     // userId 为 uuid 字面量（从 User.id 派生），EffectivePermissionsPanel 不调 safeParse（GET 只读，类型派生操作）
     // 间接验证：传入合法 uuid → 直接调 getEffectivePermissions（无 safeParse 拦截路径）
     getEffectivePermissionsMock.mockResolvedValue(['user:read']);

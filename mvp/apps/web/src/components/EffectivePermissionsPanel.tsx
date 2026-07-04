@@ -10,9 +10,9 @@
 //   - 错误：USER_NOT_FOUND → "用户不存在"（AC-F7-4，T1）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts（PermissionCode/permissionCodeSchema 派生）+ apps/web 内部（api/）+ 第三方。
-// [约束] D5：类型派生操作（userId 从 UserListPage 行派生，TS 类型保证，不调 safeParse，R13 S-1）。
+// [约束] D5：类型派生操作（userId 从 UserListPage 行派生，TS 类型保证，不调 safeParse）。
 // [约束] D11：权限码中文化映射 SSOT 派生 [...permissionCodeSchema.options]（AI-005，禁止硬编码，AC-F7-3）。
-// [约束] D18：aria-label="有效权限"；D21/R15 S-14：label 跨组件唯一（"有效权限" 消歧于 UserListPage"角色"按钮）。
+// [约束] D18：aria-label="有效权限"；D21：label 跨组件唯一（"有效权限" 消歧于 UserListPage"角色"按钮）。
 import { useEffect, useRef, useState } from 'react';
 import {
   permissionCodeSchema,
@@ -34,7 +34,7 @@ export type EffectivePermissionsPanelProps = {
  * 权限码中文化映射表（D11，SSOT 派生）。
  * 键从 [...permissionCodeSchema.options] 派生（11 项全集，AI-005）。
  * TypeScript Record<PermissionCode, string> 保证枚举扩展时不漏（新增码编译报错）。
- * 具体中文措辞为纯 UI 文案（R13 S-2，不须同步 §10）。
+ * 具体中文措辞为纯 UI 文案（不须同步 §10）。
  */
 const PERMISSION_CODE_LABELS: Record<PermissionCode, string> = {
   'user:read': '查看用户',

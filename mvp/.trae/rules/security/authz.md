@@ -1,7 +1,8 @@
 ---
 alwaysApply: true
 ---
-# 鉴权与越权（复盘补强：SEC-001 机器化 + SEC-003 拆出到 pii.md）
+# 鉴权与越权
+> 历史演进明细见 docs/retro/lessons-learned.md。
 
 ## SEC-001 · 路由默认受保护（声明式 auth 元数据）
 - 触发条件：新增 router procedure 时。
@@ -21,4 +22,4 @@ alwaysApply: true
   - 标记格式：方法声明行上方 1~2 行或行尾注释 `// SEC-002-exempt: <reason>`（如 `// SEC-002-exempt: recipient self-service (PRD Q4b); guard via ctx.user.id === recipient_id`）。
   - 识别逻辑：SEC-002 分支在方法 requireAdmin 检查前，回溯声明行上方 1~2 行 + 行尾注释，命中 `SEC-002-exempt:` 则跳过检查并 push 一条 info（`SEC-002 豁免：<file>:<line> <name>() — <reason>`）供 Reviewer 逐条核对豁免合理性。
   - 非新增 markEnforcement 分支（落在既有 SEC-002 循环内，META-003 合规）；Reviewer 须逐条核对豁免合理性，滥用豁免记 blocker。本期豁免标记两处：markRead（自服务）+ record（旁路日志）。
-  - 扫描器方法边界盲区（RETRO-ROUND11-001 S-1 反推）：check-rules.mjs SEC-002 分支按方法声明 break 收集 body（最多 40 行），但复杂 class 结构（多方法密集排列）可能存在边界 case——同 class 内一个方法调 requireAdmin 可能让扫描器误判同文件其他方法也合规。**Reviewer 须逐个 public 方法独立核对**是否调 requireAdmin 或标 SEC-002-exempt，不依赖扫描器 exit 0 作为唯一判据。R11 首次出现 public 路由 handler（AuthService.login）不调 requireAdmin 的合法场景，须标 SEC-002-exempt + Reviewer 逐方法核对。
+  - 扫描器方法边界盲区：check-rules.mjs SEC-002 分支按方法声明 break 收集 body（最多 40 行），但复杂 class 结构（多方法密集排列）可能存在边界 case——同 class 内一个方法调 requireAdmin 可能让扫描器误判同文件其他方法也合规。**Reviewer 须逐个 public 方法独立核对**是否调 requireAdmin 或标 SEC-002-exempt，不依赖扫描器 exit 0 作为唯一判据。public 路由 handler（如 AuthService.login）不调 requireAdmin 的合法场景，须标 SEC-002-exempt + Reviewer 逐方法核对。

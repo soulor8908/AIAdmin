@@ -148,7 +148,7 @@ describe('Sidebar 导航 R15 扩展（6 入口 + 通知/报表路由守卫）', 
 });
 
 // ---------- AC-ARCH-1 lint:rules 探针验证 ARCH-003 机器化 ----------
-// 注：此 AC 由 scripts/check-rules.mjs ARCH-003 分支机器化校验（R12 §8 已落地 + R13 S-4 已扩展 walkWeb）。
+// 注：此 AC 由 scripts/check-rules.mjs ARCH-003 分支机器化校验（R12 §8 已落地 + 已扩展 walkWeb）。
 // test-writer 阶段不直接在测试中断言（避免重复实现校验逻辑），通过 `npm run lint:rules` 探针验证：
 //   - apps/web/src 扩展文件（Sidebar.tsx、App.tsx、errorMapping.ts）+ 新增模块 import 仅 @admin/contracts + 第三方 + apps/web 内部
 //   - 违规即 exit≠0

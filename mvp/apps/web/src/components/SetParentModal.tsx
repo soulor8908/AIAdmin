@@ -9,7 +9,7 @@
 //   - 错误：ROLE_BUILTIN_PARENT_FORBIDDEN/ROLE_INHERITANCE_CYCLE/ROLE_NOT_FOUND/VERSION_CONFLICT（§11.2）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts（setParentInputSchema 复用，D4）+ apps/web 内部（api/）+ 第三方。
-// [约束] D4：混合表单须 setParentInputSchema.safeParse（覆盖 superRefine，R13 S-1）。
+// [约束] D4：混合表单须 setParentInputSchema.safeParse（覆盖 superRefine）。
 // [约束] D7：versioned=true + expectedVersion=role.version → client 注入 If-Match（AC-F4-1）。
 // [约束] D12：禁用自继承 roleId + 禁用内置 admin（前端防，后端兜底）。
 //   [advisory] R16 实现偏离：仅禁用 is_builtin（内置 admin），不禁用自继承 roleId。
@@ -21,7 +21,7 @@
 //     无法 selectOptions 选中 disabled admin option（测试假设可绕过 disabled，但 user-event 过滤 disabled）。
 //     实现在 safeParse 失败 + parentRoleId 空 + allRoles 含 is_builtin 时提示"内置角色不可设为父角色"
 //     （模拟用户尝试选 disabled builtin 被拦的场景，对齐测试期望文案）。属 user-event 版本差异 workaround。
-// [约束] D18：aria-label="父角色"；D21/R15 S-14：label 跨组件唯一（"父角色" 消歧于 RoleListPage"角色名称"）。
+// [约束] D18：aria-label="父角色"；D21：label 跨组件唯一（"父角色" 消歧于 RoleListPage"角色名称"）。
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -87,7 +87,7 @@ export function SetParentModal(props: SetParentModalProps): JSX.Element {
     setFieldError(null);
     setFormError(null);
 
-    // D4：混合表单须 setParentInputSchema.safeParse（覆盖 superRefine roleId !== parentRoleId，R13 S-1）
+    // D4：混合表单须 setParentInputSchema.safeParse（覆盖 superRefine roleId !== parentRoleId）
     const raw = { roleId, parentRoleId };
     const result = setParentInputSchema.safeParse(raw);
     if (!result.success) {

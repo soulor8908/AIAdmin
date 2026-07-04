@@ -27,7 +27,7 @@
 //   - D5 / AC-S1-2：解除父角色按钮为类型派生操作（roleId/version 从 RoleListPage 列表派生，TS 类型保证，不调 safeParse）。
 //   - D12 / AC-F5-2：解除父角色按钮仅 parent_role_id !== null 时显示（根角色不显示，前端防无意义操作）。
 //   - D18：行操作按钮 aria-label 域特定（"设置父角色"/"解除父角色"/"查看继承链"，禁止通用"button"）。
-//   - R15 S-13：fixture 须用有效 hex UUID；R15 S-14：组件 label 跨组件唯一（"设置父角色"等不与 RoleListPage 既有"删除"冲突）。
+//   - fixture 须用有效 hex UUID；组件 label 跨组件唯一（"设置父角色"等不与 RoleListPage 既有"删除"冲突）。
 //   - SEC-003b：测试中不 console.log/记录 token 字符串。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -61,7 +61,7 @@ const unsetRoleParentMock = vi.mocked(apiRoleInheritance.unsetRoleParent);
 const getInheritanceChainMock = vi.mocked(apiRoleInheritance.getInheritanceChain);
 const setRoleParentMock = vi.mocked(apiRoleInheritance.setRoleParent);
 
-// 有效 hex UUID（R15 S-13：z.string().uuid() 严格校验，须全 hex 字符）
+// 有效 hex UUID（z.string().uuid() 严格校验，须全 hex 字符）
 const ROLE_ID = '00000000-0000-4000-8000-0000000000a1';
 const PARENT_ROLE_ID = '00000000-0000-4000-8000-0000000000a2';
 

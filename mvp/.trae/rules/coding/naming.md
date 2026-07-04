@@ -2,7 +2,8 @@
 alwaysApply: false
 globs: "**/*.ts"
 ---
-# 命名约定（复盘补强：CODE-004 机器化）
+# 命名约定
+> 历史演进明细见 docs/retro/lessons-learned.md。
 
 ## CODE-004 · 命名约定
 - 触发条件：新增/修改 TS 文件中的导出标识符时。

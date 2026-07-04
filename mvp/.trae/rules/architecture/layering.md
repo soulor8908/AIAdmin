@@ -2,8 +2,9 @@
 alwaysApply: true
 ---
 # 分层依赖方向（后端）
+> 历史演进明细见 docs/retro/lessons-learned.md。
 
-## ARCH-001 · 单向依赖（复盘扩面：覆盖全部四层，不限于 domain）
+## ARCH-001 · 单向依赖（覆盖全部四层）
 - 触发条件：在 apps/api/src 下新增/修改 import 时。
 - 期望行为：依赖方向 router → service → repository → domain；四层各自不得反向 import 上层：
   - domain 不得 import service/repository/router。

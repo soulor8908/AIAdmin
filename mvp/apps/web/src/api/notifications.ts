@@ -13,8 +13,8 @@
 // [约束] D7：update/send/markRead/delete 须 versioned=true + expectedVersion → client 注入 If-Match（4 versioned 端点，N3）。
 // [约束] D9：409 VERSION_CONFLICT 由 client 自动重试 1 次（用 409 body current_version，不 GET 单条）。
 // [约束] D16：listNotifications 调用方显式传 pageSize=20（抹平契约缺省 10，N1）。
-// [约束] D20（R14 S-8）：函数命名对齐本 Spec §4.2.1 声明。
-// [约束] R13 S-1：本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
+// [约束] D20：函数命名对齐本 Spec §4.2.1 声明。
+// [约束] 本文件为类型派生操作（input/output 类型经 z.infer 派生），不调 safeParse。
 //                调用方（自由文本表单）负责 safeParse 校验后再传入。
 import type {
   CreateNotificationInput,
