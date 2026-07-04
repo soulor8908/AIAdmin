@@ -31,6 +31,7 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 
 ### 2.1 编排者（Orchestrator，非 subagent）
 职责：调度五 subagent + 实跑门禁 + 闭环检查 + 复盘反推。
+- **轮次启动前**：跑 `npm run gen:delta -- --round N [--tag]` 生成 `docs/round-N-delta.md`（A1 增量上下文），供五角色 subagent 先读 delta 把握本轮范围，避免每个 subagent 重复读全量 context-snapshot（节省 60% 基线 I/O）；若需打 round-N tag 供下一轮 from 用，加 `--tag`
 - 每阶段交付后实跑三件套验证（非仅信 subagent 自检）
 - test-writer 与 impl-writer 之间实跑 vitest 确认断言级红（AI-002）
 - Reviewer verdict=block 时，blocker 修复后重跑 G5+G6（G6.1 子门禁）
@@ -52,11 +53,12 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 涉及安全域时，显式标注 PII/敏感字段清单，明确哪些不可出现在响应输出
 - 凭据/seed 值核验——PRD 写凭据/seed 值（如登录凭据、初始 admin 密码、seed 数据）前，须 grep server.ts seedDemoData 确认实际 seed 值，不可凭主观假设（如 R20 BA 写 Admin@123 但 server.ts 实际 seed 是 admin123，编排者修正 PRD + Tech-Spec 声明 advisory）。（R20 S-23 衍生，BA 凭据核验延伸）
 - PRD status 仅当无 BLOCKING 未决项时才设为 decided
-上下文文件清单（最小上下文包，R14 上下文效率优化）：
-1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+上下文文件清单（最小上下文包，R14 上下文效率优化 + A1 增量 delta）：
+0. **先读 docs/round-<N>-delta.md（A1 增量上下文，<3KB）**——若存在则先读此 delta 把握本轮范围（新增端点/契约/规则/前端文件 + 跳过建议），按需再读全量 context-snapshot.md；若不存在（首轮或未生成）跳过此步
+1. 再读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
    - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项，替代全量 retro）
-   - apps/api/src/server.ts（既有路由表，R10 S-2 核验新增端点非覆盖既有）
+   - apps/api/src/server.ts（既有路由表，R10 S-2 核验新增端点非覆盖既有；**若 delta 标注"后端冻结"可跳过全文**）
    - .trae/rules/security/pii.md（PII 标注规则，SEC-003a/003b 边界）
    - .trae/rules/architecture/layering.md（架构约束，ARCH-001/002/003）
 3. 禁止读取（减少无效 I/O，BA 不读代码）：
@@ -101,13 +103,14 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 不改 service/repo/domain/router/server.ts（impl-writer 阶段）
 - Tech-Spec §3.2 表单校验复用清单须区分"自由文本表单"（须 safeParse，因有自由输入）与"类型派生操作"（TS 类型保证，schema 校验冗余，可不调或保留 defensive safeParse）。AC 措辞须精确限定为"自由文本输入表单"。（R12 S-1）
 - Tech-Spec §10 advisory 偏离预判须明确同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 §10 但须在 Review 报告记录。（R12 S-2）
-上下文文件清单（最小上下文包，R14 上下文效率优化）：
-1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+上下文文件清单（最小上下文包，R14 上下文效率优化 + A1 增量 delta）：
+0. **先读 docs/round-<N>-delta.md（A1 增量上下文，<3KB）**——若存在则先读此 delta 把握本轮范围（新增端点/契约/规则/前端文件 + 跳过建议），按需再读全量 context-snapshot.md；若不存在（首轮或未生成）跳过此步
+1. 再读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
    - docs/prd/<domain>.md（BA 产出的 PRD，Tech Lead 的输入）
    - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
-   - apps/api/src/server.ts（既有路由表，§1 覆盖范围核验）
-   - packages/contracts/src/schemas/<相关域>.ts（既有契约，避免重名/重复定义）
+   - apps/api/src/server.ts（既有路由表，§1 覆盖范围核验；**若 delta 标注"后端冻结"可跳过全文，仅按 delta 列出的新增端点段读**）
+   - packages/contracts/src/schemas/<相关域>.ts（既有契约，避免重名/重复定义；**仅读 delta 列出"契约变更"涉及域**）
    - apps/api/src/errors.ts（错误码映射 SSOT，新增码须四处处同步）
    - .trae/rules/ai-behavior/spec-first.md（AI-001~007，含 AI-005 SSOT 派生约束）
 3. 禁止读取（减少无效 I/O，Tech Lead 不读测试/实现）：
@@ -150,12 +153,13 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 组合场景测试——当 AC 涉及多操作组合（如筛选+分页、启停双向、登出 action），须单独测组合场景，不可仅分别测单一操作后假设组合正确。（R12 S-3）
 - user-event v14.6.1 disabled option 过滤机制——selectOptions 会自动过滤 disabled option（不选中），测试"前端 disabled 防误选"场景须绕过 user-event 直接测 option.disabled 属性 + 测服务端兜底文案，而非通过 user-event selectOptions 模拟误选。须在测试注释标注"user-event v14.6.1 disabled option 过滤 workaround"。（R16 S-20）
 - 确定性 token/凭证生成时须确保唯一性——当使用确定性 token 生成（如基于 sub+iat 的 JWT，相同输入产生相同 token）时，须在 setup 阶段确保 token 唯一性（追加 nonce / 跨秒边界 setTimeout / 不同 sub），避免全局副作用（logout 黑名单/缓存写入/状态机变更）污染同 test suite 后续用例。test-writer 须在 setup 阶段预判全局副作用的跨用例污染风险，并在测试注释标注"确定性 token 唯一性 workaround"。（R18 S-22）
-上下文文件清单（最小上下文包，R14 上下文效率优化）：
-1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+上下文文件清单（最小上下文包，R14 上下文效率优化 + A1 增量 delta）：
+0. **先读 docs/round-<N>-delta.md（A1 增量上下文，<3KB）**——若存在则先读此 delta 把握本轮范围（新增端点/契约/规则/前端文件 + 跳过建议），按需再读全量 context-snapshot.md；若不存在（首轮或未生成）跳过此步
+1. 再读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
    - docs/prd/<domain>.md（AC 来源，AI-007 端到端验收依据）
    - docs/spec/<domain>.tech.md（§9 受影响清单 + 边界定义 + 错误码）
-   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，断言依据）
+   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，断言依据；**仅读 delta 列出"契约变更"涉及域**）
    - apps/api/src/errors.ts（错误码 SSOT，断言依据）
    - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
 3. 禁止读取（减少无效 I/O，test-writer 不读实现）：
@@ -197,14 +201,15 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - errorMapping 全码映射收尾的"全集"定义须明确为"前端可能触发的域码全集"而非"errorCodeSchema 枚举全集"——前端不触发的域码（如 AUDIT_LOG_NOT_FOUND 前端仅消费分页列表不消费单个查询）可 [advisory] 沿用 FALLBACK，注释须显式标注"[advisory] XXX 沿用（前端不触发）"。（R16 S-18）
 - 简单常量（如 UUID_RE 正则）跨组件复用边界——若 ≤3 处使用场景且常量简单（单行正则），可 [advisory] 沿用重复定义；若 ≥4 处使用场景或常量复杂（多行逻辑），须提取至 lib/ 共享。R15/R16 UUID_RE 各 2 处使用场景沿用重复定义属合理 [advisory]。（R16 S-19）
 - [约束] 项偏离反向同步与 advisory 偏离同标准——impl-writer 实现期发现 [约束] 项设计不足须偏离时（如 test-writer 在单测扩展 AC 范围超出 Tech-Spec 描述、impl-writer 依据 AI-002 添加更严格实现满足测试），须实际编辑 Tech-Spec 对应章节（grep 确认章节已改），交付报告列出"反向同步的 Spec 文件路径 + 修改行号 + 偏离理由 + 合规论证"。**代码注释声明 ≠ Spec 已同步（伪同步）**——仅在代码注释标注"[约束] 偏离"而未实际编辑 Spec 文件属伪同步违规，与 R12 S-1 advisory 伪同步同形。加性安全场景（更严格非更弱）须仍按 AI-003 流程闭合，不可因"加性安全"省略 Spec 反向同步。（R18 S-21）
-上下文文件清单（最小上下文包，R14 上下文效率优化）：
-1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+上下文文件清单（最小上下文包，R14 上下文效率优化 + A1 增量 delta）：
+0. **先读 docs/round-<N>-delta.md（A1 增量上下文，<3KB）**——若存在则先读此 delta 把握本轮范围（新增端点/契约/规则/前端文件 + 跳过建议），按需再读全量 context-snapshot.md；若不存在（首轮或未生成）跳过此步
+1. 再读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
    - docs/spec/<domain>.tech.md（Tech-Spec，impl-writer 的 SSOT，AI-001）
-   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，类型派生依据）
+   - packages/contracts/src/schemas/<相关域>.ts（契约 SSOT，类型派生依据；**仅读 delta 列出"契约变更"涉及域**）
    - apps/api/test/<domain>.test.ts（已就绪的测试，impl-writer 须使其转绿，禁改断言）
    - apps/api/src/errors.ts（错误码映射 SSOT）
-   - apps/api/src/server.ts（路由表，需追加新路由）
+   - apps/api/src/server.ts（路由表，需追加新路由；**若 delta 标注"后端冻结"可跳过全文，仅按 delta 列出的新增端点段读**）
    - docs/retro/lessons-learned.md（已固化教训 + 仍生效 S 级改进项）
 3. 禁止读取（减少无效 I/O，impl-writer 不读 PRD）：
    - docs/prd/*.md（PRD 是 BA 产物，impl-writer 须基于 Tech-Spec 实现，不可读 PRD 以免越界发挥，AI-003）
@@ -251,14 +256,15 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - verdict=block 时给出精确修复路径（文件:行 + 修复动作 + 影响面）
 - 须通过 `git diff HEAD --stat -- apps/web/test/`（前端轮）或 `git diff HEAD --stat -- apps/api/test/`（后端轮）实跑核对 impl-writer 自报改动范围的准确性，而非信赖自报描述——若 git diff 显示的改动文件/断言改动与 impl-writer 自报描述不符，须显式标注为 AI-002 边界**自报准确性**违规（判定是否构成 block 须看改动本身是否属合理处理）。（R16 S-17）
 - [约束] 项偏离反向同步须与 advisory 偏离同标准核实——Reviewer 须通过 `git diff -- docs/spec/*.tech.md` 实跑核对 impl-writer 声明的 [约束] 偏离是否已实际编辑 Spec 文件对应章节（非仅信代码注释声明）。加性安全场景（更严格非更弱）可降级为 Suggestion（非 blocker），但须强制本轮收尾闭合（不允许跨轮遗留）——Suggestion 须显式标注"已反向同步闭合"或"待本轮收尾补反向同步"。若 impl-writer 仅在代码注释声明 [约束] 偏离但 Spec 文件未实际编辑，记为伪同步违规（与 R12 S-1 advisory 伪同步同形，记 blocker）。（R18 S-21）
-上下文文件清单（最小上下文包，R14 上下文效率优化）：
-1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
+上下文文件清单（最小上下文包，R14 上下文效率优化 + A1 增量 delta）：
+0. **先读 docs/round-<N>-delta.md（A1 增量上下文，<3KB）**——若存在则先读此 delta 把握本轮范围（新增端点/契约/规则/前端文件 + 跳过建议），按需再读全量 context-snapshot.md；若不存在（首轮或未生成）跳过此步
+1. 再读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
    - docs/prd/<domain>.md（PRD AC，逐条核对依据，AI-007）
    - docs/spec/<domain>.tech.md（Tech-Spec，advisory/[约束] 偏离核对依据）
    - docs/retro/lessons-learned.md（已固化教训，核对是否重蹈覆辙）
-   - .trae/rules/ 全部规则文件（SEC/ARCH/CODE/AI/META 逐条核对，Reviewer 最全）
-   - git diff（本次改动范围，按需读改动文件，不读全量代码）
+   - .trae/rules/ 全部规则文件（SEC/ARCH/CODE/AI/META 逐条核对，Reviewer 最全；**若 delta 标注"规则变更：否"可信赖既有 exit 0，仅核对 delta 列出的规则变更文件**）
+   - git diff（本次改动范围，按需读改动文件，不读全量代码；**delta 已列出改动文件清单，可直接按 delta 范围读**）
 3. 禁止读取（减少无效 I/O，Reviewer 按需读 git diff 范围）：
    - 未改动的实现文件（按需读 git diff 范围，非全量代码扫描）
    - apps/web/test/（除非本轮涉及前端测试改动）
@@ -328,9 +334,10 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 1. 复制 `.trae/rules/` 全部规则文件 + `scripts/check-rules.mjs` 校验脚本
 2. 复制 `packages/contracts/` 契约层骨架（Zod SSOT 模式）
 3. 复制 `apps/api/src/` 四层骨架（domain/repository/service/router + context.ts + errors.ts + server.ts）
-4. 按 §2 提示词骨架配置五 subagent
-5. 按 §3 门禁定义配置编排者流程
-6. 首轮演练选最小业务域（如 user CRUD），跑通全链路后逐步扩展
+4. 复制 `scripts/gen-context-snapshot.mjs` + `scripts/gen-round-delta.mjs` + `scripts/gen-retro-index.mjs`（A1 增量上下文 + R14 全量快照 + retro 索引）
+5. 按 §2 提示词骨架配置五 subagent（含 A1 delta 优先读取项）
+6. 按 §3 门禁定义配置编排者流程（含 §2.1 轮次启动前 gen:delta 步骤）
+7. 首轮演练选最小业务域（如 user CRUD），跑通全链路后逐步扩展；每轮结束跑 `gen:delta -- --round N --tag` 打 tag 供下一轮 from 用
 
 ## 7 · skill 化评估结论
 
