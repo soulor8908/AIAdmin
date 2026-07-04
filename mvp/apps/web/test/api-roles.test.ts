@@ -6,7 +6,7 @@
 //   - mock global.fetch + tokenStore（沿用 R12 api-client.test.ts 模式），让真实 client.request 运行，
 //     验证 api/roles.ts 经 request 发出正确 method/path/query/body/If-Match。
 //   - 期望「断言级红」：api/roles.ts stub 全部抛 NOT_IMPLEMENTED，调用即抛 → fetch 未被调用 → 断言失败（非导入级红）。
-//   - wire 格式参考 apps/api/src/server.ts：错误响应 { error: <code>, message, current_version? }（字段名 error）。
+//   - wire 格式参考 apps/api/src/server.ts：错误响应 { code: <code>, message, current_version? }（字段名 code，对齐 contracts errorResponseSchema.code，D10 已消除）。
 //   - B1：createRole input = name+description+permission_codes（无 code 字段）。
 //   - B5：listUserRoles 返回裸 UserRole[]（无 envelope）。
 //   - D7：deleteRole versioned=true + expectedVersion → client 注入 If-Match（AC-F3-7）。
@@ -30,7 +30,7 @@ import { getToken } from '../src/auth/tokenStore.js';
 // 占位 token（SEC-003b：不输出到日志，仅用于断言 header 值）
 const TOKEN = 'stub-token-roles-xyz';
 
-/** 构造 fetch 响应 mock（wire 格式：body 含 error/message/current_version 字段名）。 */
+/** 构造 fetch 响应 mock（wire 格式：body 含 code/message/current_version 字段名，D10 已消除）。 */
 function mockResponse(status: number, body: unknown): Response {
   return {
     status,
@@ -140,7 +140,7 @@ describe('api/roles 角色域 endpoint 契约', () => {
   it('deleteRole 409 VERSION_CONFLICT → 用 current_version 重试 1 次（AC-F3-2，D9）', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
       .mockResolvedValueOnce(mockResponse(204, {}));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -155,7 +155,7 @@ describe('api/roles 角色域 endpoint 契约', () => {
   // ---------- AC-F3-3 重试仍 409 → 抛 ApiError ----------
   it('deleteRole 重试仍 409 → 抛 ApiError(VERSION_CONFLICT)（AC-F3-3）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
+      mockResponse(409, { code: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -221,7 +221,7 @@ describe('api/roles 角色域 endpoint 契约', () => {
   // ---------- AC-F9-5 401 拦截复用 R12（鉴权码清 token）----------
   it('401 TOKEN_EXPIRED → 抛 ApiError（AC-F9-5，R12 D8 沿用）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(401, { error: 'TOKEN_EXPIRED', message: 'expired' }),
+      mockResponse(401, { code: 'TOKEN_EXPIRED', message: 'expired' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -236,9 +236,9 @@ describe('api/roles 角色域 endpoint 契约', () => {
   });
 
   // ---------- wire 适配 角色域错误码（AC-ARCH-2 类型 contracts 派生）----------
-  it('wire 适配：{error:"ROLE_IN_USE"} → ApiError.code === "ROLE_IN_USE"（AC-ARCH-2）', async () => {
+  it('wire 适配：{code:"ROLE_IN_USE"} → ApiError.code === "ROLE_IN_USE"（AC-ARCH-2）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'ROLE_IN_USE', message: '角色已分配' }),
+      mockResponse(409, { code: 'ROLE_IN_USE', message: '角色已分配' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 

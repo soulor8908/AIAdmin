@@ -1,39 +1,49 @@
 # 复盘教训索引（自动生成，勿手改）
-> 由 `scripts/gen-retro-index.mjs` 扫描 docs/retro/*.md 生成 · 目标 ≤5KB · 原始 retro 不动。
+> 由 `scripts/gen-retro-index.mjs` 扫描 docs/retro/*.md 生成 · 目标 ≤6KB · 原始 retro 不动。
 > 供 subagent 替代全量 retro 阅读；如需明细循"来源"读对应 roundN-retro.md。
 
 ## 已固化规则表（已反推到规则/Spec/提示词层）
 | ID | 来源 | 教训 | 固化方式 |
 |---|---|---|---|
-| S-1 | R7 | PRD §数据实体草图与 §Q&A 决策不一致（PRD 起草不一致） | 已固化 |
+| S-1 | R7 | PRD §数据实体草图与 §Q&A 决策不一致（PRD … | 已固化 |
 | S-2 | R7 | [约束] 项偏离处理流程待固化（AI-003 张力） | 已固化 |
-| S-1 | R8 | role-inheritance 测试 permission_cod… | 已固化 |
-| S-2 | R8 | R8 流程未及时闭环（review/retro 缺失，回溯补齐的代价… | 已固化 |
-| S-1 | R9 | Spec 起草时未预判 Zod 框架限制（ZodEffects 不可… | 已固化 |
-| S-2 | R9 | AI-006 ①类契约测断言形式缺失（行为覆盖 vs 形式覆盖） | 已固化 |
+| S-1 | R8 | role-inheritance 测试 permissi… | 已固化 |
+| S-2 | R8 | R8 流程未及时闭环（review/retro 缺失，回… | 已固化 |
+| S-1 | R9 | Spec 起草时未预判 Zod 框架限制（ZodEffe… | 已固化 |
+| S-2 | R9 | AI-006 ①类契约测断言形式缺失（行为覆盖 vs 形… | 已固化 |
 | S-3 | R9 | 第八轮 retro 文件缺失（流程未闭环） | 已固化 |
 | S-1 | R10 | lint:rules 对注释中 "any" 字样的误报 | 已固化 |
 | S-2 | R10 | PRD 起草时对既有路由表的核验不足 | 已固化 |
 | S-1 | R11 | SEC-002 扫描器方法边界盲区（根因未修） | 已固化 |
 | S-2 | R11 | AI-006 ①类隐式影响未覆盖（全集断言依赖枚举值） | 已固化 |
 | S-3 | R11 | PRD 影响面估算未核验测试架构 | 已固化 |
-| S-1 | R12 | AC-ARCH-4 partial（F4 toggle 未调 sch… | 已固化 |
-| S-2 | R12 | advisory 偏离反向同步未闭环（3 项 UI 文案未同步 Sp… | 已固化 |
+| S-1 | R12 | AC-ARCH-4 partial（F4 toggle … | 已固化 |
+| S-2 | R12 | advisory 偏离反向同步未闭环（3 项 UI 文案… | 已固化 |
 | S-3 | R12 | 测试覆盖缺口（4 项 AC 边界未单测） | 已固化 |
 | S-4 | R12 | CODE 扫描器前端覆盖盲区 | 已固化 |
+| S-6 | R13 | AI-005 前端测试盲区（apps/web/test … | 已固化 |
+| S-7 | R13 | 元改进轮 Review 缺失（复盘替代 Review 作… | 规则层 |
+| S-8 | R14 | getDeptTree 命名偏离 Spec §4.2.2… | 已固化 |
+| S-9 | R14 | AuditLogPage useEffect 每键入触发… | 已固化 |
+| S-10 | R14 | RoleForm/DeptForm aria-label… | 已固化 |
+| S-11 | R14 | errorMapping.ts L62-63 注释过时（… | 已固化 |
+| S-12 | R14 | test-writer 测试文件数偏离 Spec §9（… | 规则层 |
+| S-13 | R15 | impl-writer 测试 setup 改动增多（UU… | 已固化 |
+| S-14 | R15 | ReportFilter label 消歧需实现调整（c… | 已固化 |
+| S-15 | R15 | vitest testTimeout 全局放宽（非 pe… | 已固化 |
+| S-16 | R15 | 报表动态列空值兜底（Reviewer suggestio… | 规则层 |
+| S-17 | R16 | impl-writer 自报准确性违规（自报"未改测试断… | 已固化 |
+| S-18 | R16 | errorMapping AUDIT_LOG_NOT_F… | 已固化 |
+| S-19 | R16 | SetParentModal UUID_RE 重复定义（… | 已固化 |
+| S-20 | R16 | AC-F4-3 user-event v14.6.1 d… | 规则层 |
 完整明细见对应 roundN-retro.md §5 反推优化。
 
 ## 仍在生效的 S 级改进项（不阻断，待未来轮次处理）
 | ID | 来源 | 内容 | 状态 |
 |---|---|---|---|
-| S-5 | R12 | setupFiles 全局副作用（test-writer advis… | 遗留/advisory |
-| S-6 | R13 | AI-005 前端测试盲区（apps/web/test 未覆盖） | 待固化 |
-| S-7 | R13 | 元改进轮 Review 缺失（复盘替代 Review 作为质量门禁） | 待固化 |
-| S-8 | R14 | getDeptTree 命名偏离 Spec §4.2.2（Revie… | 待固化 |
-| S-9 | R14 | AuditLogPage useEffect 每键入触发请求（Rev… | 待固化 |
-| S-10 | R14 | RoleForm/DeptForm aria-label="名称"非… | 待固化 |
-| S-11 | R14 | errorMapping.ts L62-63 注释过时（Review… | 待固化 |
-| S-12 | R14 | test-writer 测试文件数偏离 Spec §9（11 vs … | 待固化 |
+| S-5 | R12 | setupFiles 全局副作用（test-writer… | 遗留/advisory |
+| S-21 | R18 | impl-writer [约束] 偏离反向同步滞后到收尾… | 待固化 |
+| S-22 | R18 | test-writer 确定性 token setup … | 待固化 |
 完整明细见最新 retro §6 剩余改进项。
 
 ## 关键教训一句话版
@@ -51,3 +61,7 @@
 - R12: 跑通；ARCH-003 闭合；wire 适配 advisory 范例；多约束组合副作用预判首次大规模验证
 - R13: S-1~S-4 固化 + S-5 记录未来方向；元改进轮不走标准 PRD→Spec 流程；三件套绿，0 回归
 - R14: 跑通；多域适应性验证；R13 固化提示词首次大规模验证；①类显式影响处理范例
+- R15: 跑通；七域全覆盖；client.ts 扩展范例；通知状态机+versioned 组合；R14 教训反推生效
+- R16: 跑通；后端能力前端化闭合；errorMapping 全码映射收尾；事务性+继承链+聚合三形态；impl-writ
+- R17: 跑通；6 项遗留 S 级教训全部固化；S-6 探针验证（lint:rules exit 0 + AI-005 扩
+- R18: 跑通；D10/D19 两项历史 advisory 偏离消除 + D9 重分类 [约束] 闭合；24 AC 全对齐

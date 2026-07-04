@@ -89,7 +89,7 @@ afterAll(async () => {
 });
 
 interface ResponseBody {
-  error?: string;
+  code?: string;
   message?: string;
   token?: string;
   expires_at?: string;
@@ -166,8 +166,8 @@ describe('F1 · login 端到端', () => {
       body: JSON.stringify({ email: ADMIN_EMAIL, password: 'wrong-password' }),
     });
     expect(status).toBe(401);
-    expect(body.error).toBe('INVALID_CREDENTIALS');
-    expect(body.error).not.toBe('UNAUTHORIZED');
+    expect(body.code).toBe('INVALID_CREDENTIALS');
+    expect(body.code).not.toBe('UNAUTHORIZED');
   });
 
   it('AC-F1-4: login password 短于 8 位 → 400 VALIDATION_ERROR（schema 层，非 INVALID_CREDENTIALS）', async () => {
@@ -176,7 +176,7 @@ describe('F1 · login 端到端', () => {
       body: JSON.stringify({ email: ADMIN_EMAIL, password: '123' }),
     });
     expect(status).toBe(400);
-    expect(body.error).toBe('VALIDATION_ERROR');
+    expect(body.code).toBe('VALIDATION_ERROR');
   });
 });
 
@@ -187,7 +187,7 @@ describe('F2 · token 校验中间件端到端', () => {
   it('AC-F2-1: 缺失 Authorization header → GET /v1/users 401 UNAUTHORIZED', async () => {
     const { status, body } = await fetchJson('/v1/users');
     expect(status).toBe(401);
-    expect(body.error).toBe('UNAUTHORIZED');
+    expect(body.code).toBe('UNAUTHORIZED');
   });
 
   it('AC-F2-2: 非 Bearer scheme（Authorization: Basic xxx）→ 401 TOKEN_INVALID', async () => {
@@ -195,7 +195,7 @@ describe('F2 · token 校验中间件端到端', () => {
       headers: { Authorization: 'Basic abc123' },
     });
     expect(status).toBe(401);
-    expect(body.error).toBe('TOKEN_INVALID');
+    expect(body.code).toBe('TOKEN_INVALID');
   });
 
   it('AC-F2-3: 伪造 token（Bearer <随机字符串>）→ 401 TOKEN_INVALID（验签失败）', async () => {
@@ -203,7 +203,7 @@ describe('F2 · token 校验中间件端到端', () => {
       headers: { Authorization: 'Bearer totally-fake-token-string' },
     });
     expect(status).toBe(401);
-    expect(body.error).toBe('TOKEN_INVALID');
+    expect(body.code).toBe('TOKEN_INVALID');
   });
 
   it('AC-F2-4: 过期 token（1 小时前签发，签名有效）→ 401 TOKEN_EXPIRED', async () => {
@@ -212,7 +212,7 @@ describe('F2 · token 校验中间件端到端', () => {
       headers: { Authorization: `Bearer ${expiredToken}` },
     });
     expect(status).toBe(401);
-    expect(body.error).toBe('TOKEN_EXPIRED');
+    expect(body.code).toBe('TOKEN_EXPIRED');
   });
 
   it('AC-F2-5: 有效 token（刚 login）→ GET /v1/users 200', async () => {
@@ -232,7 +232,7 @@ describe('F2 · token 校验中间件端到端', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(status).toBe(200);
-    expect(body.error).toBeUndefined();
+    expect(body.code).toBeUndefined();
   });
 
   it('AC-F3-1: GET /v1/users 响应体的用户对象不含 password_hash（SEC-003a）', async () => {
@@ -258,7 +258,7 @@ describe('F4 · logout 全链路端到端', () => {
       method: 'POST',
     });
     expect(status).toBe(401);
-    expect(body.error).toBe('UNAUTHORIZED');
+    expect(body.code).toBe('UNAUTHORIZED');
   });
 
   it('AC-F4-1/F4-2: login → logout(200) → 再用该 token 访问 GET /v1/users → 401 TOKEN_REVOKED', async () => {
@@ -276,7 +276,7 @@ describe('F4 · logout 全链路端到端', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(reuseRes.status).toBe(401);
-    expect(reuseRes.body.error).toBe('TOKEN_REVOKED');
+    expect(reuseRes.body.code).toBe('TOKEN_REVOKED');
   });
 
   it('AC-F4-2: logout 后该 token 再调 logout 自身 → 401 TOKEN_REVOKED（黑名单对 logout 路由同样生效）', async () => {
@@ -290,7 +290,7 @@ describe('F4 · logout 全链路端到端', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(reuseLogout.status).toBe(401);
-    expect(reuseLogout.body.error).toBe('TOKEN_REVOKED');
+    expect(reuseLogout.body.code).toBe('TOKEN_REVOKED');
   });
 });
 

@@ -7,7 +7,9 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const RETRO_DIR = join(ROOT, 'docs/retro');
 const OUT = join(RETRO_DIR, 'lessons-learned.md');
-const MAX_BYTES = 5 * 1024;
+// R17 调整：从 5KB 提升至 6KB。原 5KB 上限设于 R13（4 轮固化），R17 累计 6 轮固化 + 17 轮一句话教训，
+// 已固化表 + 关键教训表自然增长至 5.3KB。6KB 上限为 17 轮演进后的合理调整，仍保持"压缩索引"目的。
+const MAX_BYTES = 6 * 1024;
 
 function roundOf(filename) {
   if (filename === 'mvp-retro.md') return 0;
@@ -66,7 +68,8 @@ for (const r of retros) {
     if (seen.has(key)) continue;
     seen.add(key);
     const source = r.round === 0 ? 'MVP' : `R${r.round}`;
-    const t = it.title.length > 34 ? it.title.slice(0, 34) + '…' : it.title;
+    // R17 调整：标题截断从 34 缩至 28 字符，配合 6KB 上限容纳 17 轮固化项。
+    const t = it.title.length > 28 ? it.title.slice(0, 28) + '…' : it.title;
     if (stillActive.has(key)) {
       active.push(`| ${it.id} | ${source} | ${t} | ${stillActive.get(key)} |`);
     } else {
@@ -85,7 +88,7 @@ const lessons = retros
   .join('\n');
 
 const doc = `# 复盘教训索引（自动生成，勿手改）
-> 由 \`scripts/gen-retro-index.mjs\` 扫描 docs/retro/*.md 生成 · 目标 ≤5KB · 原始 retro 不动。
+> 由 \`scripts/gen-retro-index.mjs\` 扫描 docs/retro/*.md 生成 · 目标 ≤6KB · 原始 retro 不动。
 > 供 subagent 替代全量 retro 阅读；如需明细循"来源"读对应 roundN-retro.md。
 
 ## 已固化规则表（已反推到规则/Spec/提示词层）

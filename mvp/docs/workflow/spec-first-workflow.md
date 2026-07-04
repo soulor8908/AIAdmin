@@ -90,6 +90,9 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - §1 覆盖范围须核验既有路由表（R10 S-2），确认新增端点非覆盖既有
 - §9 受影响测试清单两类标注：①类显式影响(grep符号引用) + ①类隐式影响(全集断言依赖枚举值,R11 S-2) + ②类签名变更 + ③类新增
 - §10 advisory 偏离预判须含"多[约束]组合副作用"分析（R11 token碰撞范例）
+- §10 组合副作用预判须含"全码映射收尾的全集定义明确"项——errorMapping 扩展时须明确"全集"为"前端可能触发的域码全集"而非"errorCodeSchema 枚举全集"，前端不触发的域码可 [advisory] 沿用 FALLBACK。（R16 S-18）
+- §10 组合副作用预判须含"简单常量跨组件复用边界"项——简单常量（如 UUID_RE 正则）≤3 处使用场景且常量简单可 [advisory] 沿用重复定义；≥4 处使用场景或常量复杂须提取 lib/ 共享。（R16 S-19）
+- §10 组合副作用预判须含"测试工具限制 workaround"项——如 user-event v14.6.1 selectOptions 会自动过滤 disabled option，测试"前端 disabled 防误选"场景须绕过 user-event 直接测 option.disabled + 测服务端兜底文案。（R16 S-20）
 - 实现性描述显式标 [约束](默认禁止偏离) / [advisory](允许偏离须反向同步)
 - 不改 service/repo/domain/router/server.ts（impl-writer 阶段）
 - Tech-Spec §3.2 表单校验复用清单须区分"自由文本表单"（须 safeParse，因有自由输入）与"类型派生操作"（TS 类型保证，schema 校验冗余，可不调或保留 defensive safeParse）。AC 措辞须精确限定为"自由文本输入表单"。（R12 S-1）
@@ -141,6 +144,7 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 输出 schema 用 .strict() 断言拒绝多余字段（SEC-003a）
 - AC 覆盖矩阵自检——每条 AC 须有至少 1 个测试用例直接覆盖，未覆盖的显式列出 reason（如"实现正确但缺直接测试"/"组合场景未单独测"）。交付报告附 AC↔测试用例覆盖矩阵表。（R12 S-3）
 - 组合场景测试——当 AC 涉及多操作组合（如筛选+分页、启停双向、登出 action），须单独测组合场景，不可仅分别测单一操作后假设组合正确。（R12 S-3）
+- user-event v14.6.1 disabled option 过滤机制——selectOptions 会自动过滤 disabled option（不选中），测试"前端 disabled 防误选"场景须绕过 user-event 直接测 option.disabled 属性 + 测服务端兜底文案，而非通过 user-event selectOptions 模拟误选。须在测试注释标注"user-event v14.6.1 disabled option 过滤 workaround"。（R16 S-20）
 上下文文件清单（最小上下文包，R14 上下文效率优化）：
 1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
@@ -184,6 +188,9 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 断言 matcher 改动(如 toEqual→toContain) 须特别标注，由 Reviewer 判定
 - advisory 偏离反向同步边界——行为/数据/schema 偏离（如 wire 适配、重试策略变更）须反向同步 Spec §10；纯 UI 文案偏离（按钮文案、错误提示文案、select option 文案）不须同步 Spec §10 但须在交付报告列出。（R12 S-2）
 - 对类型派生操作（如 toggle，值经 TS 类型派生非自由输入）不调 schema.safeParse 时，须显式标注 [约束] 偏离 + 反向同步 Spec §3.2（注明"类型派生操作，schema 校验冗余"），不可静默偏离。（R12 S-1）
+- 自报改动范围须准确——impl-writer 须通过 `git diff HEAD --stat -- apps/web/test/`（前端轮）或 `git diff HEAD --stat -- apps/api/test/`（后端轮）实跑核对自报描述，按文件逐条列出实际改动（含断言改动/setup 调整/matcher 调整），不可笼统描述"未改测试断言"+"未触达"。若自报与 git diff 不符属 AI-002 边界**自报准确性**违规（不构成 block，但 Reviewer 须通过 git diff 实跑核对自报准确性并显式标注）。（R16 S-17）
+- errorMapping 全码映射收尾的"全集"定义须明确为"前端可能触发的域码全集"而非"errorCodeSchema 枚举全集"——前端不触发的域码（如 AUDIT_LOG_NOT_FOUND 前端仅消费分页列表不消费单个查询）可 [advisory] 沿用 FALLBACK，注释须显式标注"[advisory] XXX 沿用（前端不触发）"。（R16 S-18）
+- 简单常量（如 UUID_RE 正则）跨组件复用边界——若 ≤3 处使用场景且常量简单（单行正则），可 [advisory] 沿用重复定义；若 ≥4 处使用场景或常量复杂（多行逻辑），须提取至 lib/ 共享。R15/R16 UUID_RE 各 2 处使用场景沿用重复定义属合理 [advisory]。（R16 S-19）
 上下文文件清单（最小上下文包，R14 上下文效率优化）：
 1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
@@ -236,6 +243,7 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - AC-ARCH-4（表单校验复用 Zod schema）partial 判定依据——须区分"自由文本表单"（须 safeParse，未调判 partial）与"类型派生操作"（TS 类型保证，safeParse 冗余，未调可判合理偏离须补同步）。partial 判定须注明根因（措辞未区分 vs 实际遗漏）。（R12 S-1）
 - CODE 扫描器前端覆盖核对——当 apps/web 存在时，确认 allTs 已含 apps/web/src + apps/web/test（R13 S-4 固化后已覆盖）；若扫描器未覆盖，须手动 grep 核对 CODE-001/002/003/AI-005 在前端的合规性。（R12 S-4）
 - verdict=block 时给出精确修复路径（文件:行 + 修复动作 + 影响面）
+- 须通过 `git diff HEAD --stat -- apps/web/test/`（前端轮）或 `git diff HEAD --stat -- apps/api/test/`（后端轮）实跑核对 impl-writer 自报改动范围的准确性，而非信赖自报描述——若 git diff 显示的改动文件/断言改动与 impl-writer 自报描述不符，须显式标注为 AI-002 边界**自报准确性**违规（判定是否构成 block 须看改动本身是否属合理处理）。（R16 S-17）
 上下文文件清单（最小上下文包，R14 上下文效率优化）：
 1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
 2. 再读以下必需文件：
@@ -279,7 +287,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 | G5 | 实现 | typecheck + lint:rules + test 全绿 | 编排者实跑 |
 | G6 | Review | PRD逐条核对 + 规则合规 + 0 blocker | Reviewer |
 | G6.1 | 修复复验 | blocker 修复后重跑 G5+G6 | 编排者 |
-| G7 | 合入 | G1+G3+G4+G5+G6 全绿 | 编排者 |
+| G6.5 | 元改进轮 Review | 元改进轮（无 PRD AC）专用 checklist：①S-x 教训全部固化（提示词层/Spec 模板层/规则层）②三件套全绿 ③改动范围合规（仅元资产，无业务代码越界）④探针验证执行（如某固化的扫描器分支命中/某提示词在样例场景可命中）⑤新发现 S-x 已记录 | 编排者 |
+| G7 | 合入 | G1+G3+G4+G5+G6 全绿（元改进轮为 G5+G6.5） | 编排者 |
 
 ## 4 · 复盘反推机制（核心）
 

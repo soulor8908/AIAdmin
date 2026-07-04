@@ -6,7 +6,7 @@
 //   - mock global.fetch + mock tokenStore（vi.mock），验证 request() 的 header 注入 / 401 拦截 / 409 重试 / wire 适配。
 //   - 期望「断言级红」：request() stub 抛 NOT_IMPLEMENTED，所有行为断言失败（非导入级红，因 client.ts 已导出 request/ApiError/RequestOptions）。
 //   - 期望「导入级红」符号：无（全部符号已导出）。
-//   - wire 格式参考 apps/api/src/server.ts L594：响应体 { error: <code>, message, current_version? }（字段名 error，非 contracts 的 code）。
+//   - wire 格式参考 apps/api/src/server.ts L594：响应体 { code: <code>, message, current_version? }（字段名 code，对齐 contracts errorResponseSchema.code，D10 已消除）。
 //   - 401 拦截 4 鉴权码（D8）：UNAUTHORIZED / TOKEN_INVALID / TOKEN_EXPIRED / TOKEN_REVOKED → clearToken + 抛错。
 //   - INVALID_CREDENTIALS 401 不拦截（Q2 决策①，login 业务错误非鉴权失败）。
 //   - 409 VERSION_CONFLICT + current_version → 重试 1 次，重试 If-Match = current_version（D9）。
@@ -27,7 +27,7 @@ import { getToken, setToken, clearToken } from '../src/auth/tokenStore.js';
 // 占位 token（SEC-003b：不输出到日志，仅用于断言 header 值）
 const TOKEN = 'stub-token-xyz';
 
-/** 构造 fetch 响应 mock（wire 格式：body 含 error/message/current_version 字段名）。 */
+/** 构造 fetch 响应 mock（wire 格式：body 含 code/message/current_version 字段名，D10 已消除）。 */
 function mockResponse(status: number, body: unknown): Response {
   return {
     status,
@@ -98,7 +98,7 @@ describe('api client request()', () => {
     '401 %s → clearToken + 抛错（AC-F7-1，D8）',
     async (code) => {
       vi.mocked(getToken).mockReturnValue({ token: TOKEN, expires_at: '2026-12-31T00:00:00.000Z' });
-      const fetchMock = vi.fn().mockResolvedValue(mockResponse(401, { error: code, message: 'auth fail' }));
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse(401, { code: code, message: 'auth fail' }));
       globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
       await expect(request('GET', '/v1/users')).rejects.toMatchObject({ code });
@@ -109,7 +109,7 @@ describe('api client request()', () => {
   // ---------- Q2 决策① INVALID_CREDENTIALS 不拦截 ----------
   it('401 INVALID_CREDENTIALS 不拦截（不调 clearToken），原样抛（Q2 决策①）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(401, { error: 'INVALID_CREDENTIALS', message: '邮箱或密码错误' }),
+      mockResponse(401, { code: 'INVALID_CREDENTIALS', message: '邮箱或密码错误' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -127,7 +127,7 @@ describe('api client request()', () => {
     vi.mocked(getToken).mockReturnValue({ token: TOKEN, expires_at: '2026-12-31T00:00:00.000Z' });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
       .mockResolvedValueOnce(mockResponse(200, { id: 'u1', status: 'disabled', version: 5 }));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -148,7 +148,7 @@ describe('api client request()', () => {
   it('409 重试仍 409 → 抛 ApiError（含 current_version，AC-F4-4）', async () => {
     vi.mocked(getToken).mockReturnValue({ token: TOKEN, expires_at: '2026-12-31T00:00:00.000Z' });
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
+      mockResponse(409, { code: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -162,10 +162,10 @@ describe('api client request()', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
   });
 
-  // ---------- D10 wire 适配 error→code ----------
-  it('wire 适配：响应 {error:"USER_NOT_FOUND"} → ApiError.code === "USER_NOT_FOUND"（D10）', async () => {
+  // ---------- D10 wire 字段对齐 error→code（已消除）----------
+  it('wire 字段对齐：响应 {code:"USER_NOT_FOUND"} → ApiError.code === "USER_NOT_FOUND"（D10 已消除）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(404, { error: 'USER_NOT_FOUND', message: '用户不存在' }),
+      mockResponse(404, { code: 'USER_NOT_FOUND', message: '用户不存在' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 

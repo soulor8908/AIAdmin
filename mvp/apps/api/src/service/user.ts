@@ -52,6 +52,24 @@ export class UserService {
   }
 
   /**
+   * GET /v1/users/:id 单条详情（TECH-USER-DETAIL-WIRE-001 D2，消除 D19 端点 gap）。
+   * 守卫顺序：B3 鉴权（SEC-002 requireAdmin）→ B5 用户存在（USER_NOT_FOUND）。
+   * [约束] SEC-002：service 入口 requireAdmin(ctx)（admin = 持 user:read，D4，与 list/create/updateStatus 同模式）。
+   * [约束] SEC-003a：经 toUserOutput 剥离 password_hash 后返回（userSchema 1:1，不含存储态敏感字段）。
+   * 读操作不埋审计（沿用 GET /v1/users / GET /v1/roles/:id 不埋点惯例）。
+   */
+  async getById(id: string, ctx: Ctx): Promise<User> {
+    this.requireAdmin(ctx);
+    // B5: 目标不存在（先于其他业务规则，与 roleService.getById L56-64 同模式）
+    const target = this.repo.findById(id);
+    if (!target) {
+      throw new AppError('USER_NOT_FOUND', `用户不存在: ${id}`);
+    }
+    // TECH-AUTH-001 D5：剥离 password_hash（SEC-003a 输出 schema 1:1）
+    return toUserOutput(target);
+  }
+
+  /**
    * 批量查用户（TECH-NOTIFICATION-001 D1/D2 落点）：调 repo.findByIds(ids) + requireAdmin。
    * [约束] 入口 requireAdmin(ctx)（SEC-002：public 方法须调 requireAdmin；findByIds 为 admin 运营侧调用的批量查询，沿用 list/create 的 admin 守卫语义）。
    * [约束] 不存在的 id 静默 omitted（repo 层语义）；调用方传唯一 id（去重由调用方负责，PRD Q10）。

@@ -10,7 +10,7 @@
 //   - 期望「断言级红」：api/reports.ts stub 抛 NOT_IMPLEMENTED，调用即抛 → fetch 未被调用 → 断言失败（非导入级红）。
 //   - D8 [约束]：group_by 为数组，经扩展后的 RequestOptions.query（支持 string[]）拼接为 repeated key（?group_by=A&group_by=B）。
 //     impl-writer 须扩展 client.ts RequestOptions.query 支持 string[] + buildUrl 对数组值多次 append。
-//   - wire 格式参考 apps/api/src/server.ts：错误响应 { error: <code>, message, current_version? }（字段名 error）。
+//   - wire 格式参考 apps/api/src/server.ts：错误响应 { code: <code>, message, current_version? }（字段名 code，对齐 contracts errorResponseSchema.code，D10 已消除）。
 //   - server.ts L341 `m.query.getAll('group_by')` 语义：repeated key 收集为数组。
 //   - SEC-003b：测试中不 console.log/记录 password 或 token 字符串。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -31,7 +31,7 @@ import { getToken } from '../src/auth/tokenStore.js';
 // 占位 token（SEC-003b：不输出到日志，仅用于断言 header 值）
 const TOKEN = 'stub-token-report-xyz';
 
-/** 构造 fetch 响应 mock（wire 格式：body 含 error/message/current_version 字段名）。 */
+/** 构造 fetch 响应 mock（wire 格式：body 含 code/message/current_version 字段名，D10 已消除）。 */
 function mockResponse(status: number, body: unknown): Response {
   return {
     status,
@@ -206,9 +206,9 @@ describe('api/reports 报表域 endpoint 契约', () => {
   });
 
   // ---------- AC-F9-2 REPORT_GROUP_BY_REQUIRED 码映射 ----------
-  it('wire 适配：{error:"REPORT_GROUP_BY_REQUIRED"} → ApiError.code（AC-F9-2，N5）', async () => {
+  it('wire 适配：{code:"REPORT_GROUP_BY_REQUIRED"} → ApiError.code（AC-F9-2，N5）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(400, { error: 'REPORT_GROUP_BY_REQUIRED', message: '请至少选择一个分组维度' }),
+      mockResponse(400, { code: 'REPORT_GROUP_BY_REQUIRED', message: '请至少选择一个分组维度' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -221,9 +221,9 @@ describe('api/reports 报表域 endpoint 契约', () => {
   });
 
   // ---------- AC-F9-2 REPORT_TIME_RANGE_INVALID 码映射 ----------
-  it('wire 适配：{error:"REPORT_TIME_RANGE_INVALID"} → ApiError.code（AC-F9-2，N5）', async () => {
+  it('wire 适配：{code:"REPORT_TIME_RANGE_INVALID"} → ApiError.code（AC-F9-2，N5）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(400, { error: 'REPORT_TIME_RANGE_INVALID', message: '时间范围非法' }),
+      mockResponse(400, { code: 'REPORT_TIME_RANGE_INVALID', message: '时间范围非法' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 

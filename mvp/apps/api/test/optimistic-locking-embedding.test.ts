@@ -102,7 +102,7 @@ afterAll(async () => {
 });
 
 interface ResponseBody {
-  error?: string;
+  code?: string;
   message?: string;
   current_version?: number;
   version?: number;
@@ -167,7 +167,7 @@ describe('F2 · If-Match 条件请求解析（server.ts D18 parseIfMatch）', ()
       // No If-Match header
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VERSION_REQUIRED');
+    expect(res.body.code).toBe('VERSION_REQUIRED');
   });
 
   it("AC-F2-2 If-Match 格式非法 ('abc') → 400 VALIDATION_ERROR", async () => {
@@ -177,7 +177,7 @@ describe('F2 · If-Match 条件请求解析（server.ts D18 parseIfMatch）', ()
       headers: { 'If-Match': 'abc' },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it("AC-F2-3 If-Match 负数 ('-1') → 400 VALIDATION_ERROR", async () => {
@@ -187,7 +187,7 @@ describe('F2 · If-Match 条件请求解析（server.ts D18 parseIfMatch）', ()
       headers: { 'If-Match': '-1' },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('VALIDATION_ERROR');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it("AC-F2-4 If-Match 合法 ('0') → 200, version=1（版本递增）", async () => {
@@ -228,7 +228,7 @@ describe('端到端 · Lost Update 防护（HTTP level）', () => {
       headers: { 'If-Match': '0' },
     });
     expect(resB.status).toBe(409);
-    expect(resB.body.error).toBe('VERSION_CONFLICT');
+    expect(resB.body.code).toBe('VERSION_CONFLICT');
     expect(resB.body.current_version).toBe(1);
     // 验证：A 的变更保留（status=disabled, version=1）
     const finalUser = await findUserById(user.id);
@@ -259,7 +259,7 @@ describe('端到端 · current_version 返回（HTTP level）', () => {
       headers: { 'If-Match': '0' },
     });
     expect(res2.status).toBe(409);
-    expect(res2.body.error).toBe('VERSION_CONFLICT');
+    expect(res2.body.code).toBe('VERSION_CONFLICT');
     expect(res2.body.current_version).toBe(1);
   });
 });
@@ -277,7 +277,7 @@ describe('端到端 · 冲突不修改实体（HTTP level）', () => {
       headers: { 'If-Match': '99' },
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe('VERSION_CONFLICT');
+    expect(res.body.code).toBe('VERSION_CONFLICT');
     // 验证：用户 status 仍 active, version 仍 0
     const finalUser = await findUserById(user.id);
     expect(finalUser).toBeDefined();
@@ -319,7 +319,7 @@ describe('端到端 · Notification send 版本校验', () => {
       headers: { 'If-Match': '99' },
     });
     expect(send2.status).toBe(409);
-    expect(send2.body.error).toBe('VERSION_CONFLICT');
+    expect(send2.body.code).toBe('VERSION_CONFLICT');
     expect(send2.body.current_version).toBe(1);
   });
 });

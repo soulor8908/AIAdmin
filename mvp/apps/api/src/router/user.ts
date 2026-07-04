@@ -38,9 +38,24 @@ export const updateUserStatusProcedureInputSchema = z.object({
   expected_version: z.number().int().min(0),
 });
 
+/**
+ * detail procedure 入参 = path id (uuid)（读操作，无 expected_version）。
+ * TECH-USER-DETAIL-WIRE-001 §4.4 D2，消除 R12 D19 端点 gap。
+ * [advisory] S-19 沿用重复定义：与 router/role.ts roleDetailProcedureInputSchema 结构相同（均 { id: uuid }），
+ *   仅 role detail + user detail = 2 处使用场景，符合 S-19 阈值（≤3 处简单常量），不强制提取共享 idPathSchema。
+ *   若未来 detail 端点增至 ≥4 处（如 notification/department/user 四域均 detail），须提取 packages/contracts/src/schemas/common.ts 共享。
+ * [约束] AC-G3：.strict() 拒绝多余字段（与 roleDetailProcedureInputSchema 非 strict 略有差异，
+ *   AC-G3 测试明确要求 safeParse({ id, extra }) 失败；行为以测试为准，AI-002 不改断言）。
+ * 单独导出以便契约测直接对该 schema 跑 safeParse。
+ */
+export const userDetailProcedureInputSchema = z.object({
+  id: z.string().uuid(),
+}).strict();
+
 export type UserRouter = {
   list: Procedure<z.infer<typeof listUserQuerySchema>, UserListResult>;
   create: Procedure<z.infer<typeof createUserInputSchema>, User>;
+  detail: Procedure<z.infer<typeof userDetailProcedureInputSchema>, User>;
   updateStatus: Procedure<z.infer<typeof updateUserStatusProcedureInputSchema>, User>;
 };
 
@@ -64,6 +79,12 @@ export function createUserRouter(service: UserService, auditService?: AuditLogSe
         audit,
         { entityType: 'user', action: 'create' },
       ),
+      auth: 'admin',
+    },
+    // detail（TECH-USER-DETAIL-WIRE-001 D2，消除 D19）：读操作不经 withAudit（沿用 GET /v1/users / GET /v1/roles/:id 不埋点惯例）。
+    detail: {
+      input: userDetailProcedureInputSchema,
+      handler: (input, ctx) => service.getById(input.id, ctx),
       auth: 'admin',
     },
     updateStatus: {

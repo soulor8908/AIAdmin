@@ -48,7 +48,7 @@ import { NotificationService } from './service/notification.js';
 import { TransferService } from './service/transfer.js';
 import { AuthService } from './service/auth.js';
 import { verifyToken, hashPassword } from './domain/auth.js';
-import { createUserRouter, updateUserStatusProcedureInputSchema } from './router/user.js';
+import { createUserRouter, updateUserStatusProcedureInputSchema, userDetailProcedureInputSchema } from './router/user.js';
 import { createAuthRouter } from './router/auth.js';
 import { createRoleRouter, roleDetailProcedureInputSchema, roleDeleteProcedureInputSchema, listUserRolesProcedureInputSchema, setParentProcedureInputSchema, unsetParentProcedureInputSchema, inheritanceChainProcedureInputSchema, effectivePermissionsProcedureInputSchema } from './router/role.js';
 import { createDeptRouter, deptDeleteProcedureInputSchema } from './router/dept.js';
@@ -239,6 +239,14 @@ const routes: Route[] = [
   // ---- user ----
   defineRoute('GET', '/v1/users', (m) => queryToObject(m.query), userRouter.list, false, true, listEtag),
   defineRoute('POST', '/v1/users', (m) => m.body, userRouter.create),
+  // ---- user detail（TECH-USER-DETAIL-WIRE-001 D2，消除 D19 端点 gap）----
+  // 注册位置：GET /v1/users（列表）之后、PATCH /v1/users/:id/status 之前（user 域读端点聚拢，AC-G11）。
+  // cacheable=true + detailEtag 基于 version（D5，对齐 GET /v1/roles/:id L266-270 模式）；versioned=false（读无 If-Match）。
+  defineRoute('GET', '/v1/users/:id', (m) => ({ id: m.path.id }), {
+    input: userDetailProcedureInputSchema,
+    handler: userRouter.detail.handler,
+    auth: userRouter.detail.auth,
+  }, false, true, detailEtag),
   defineRoute('PATCH', '/v1/users/:id/status', (m) => ({ id: m.path.id, body: m.body }), {
     input: updateUserStatusProcedureInputSchema,
     handler: userRouter.updateStatus.handler,
@@ -529,7 +537,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
 
   const matched = matchRoute(method, pathname);
   if (!matched) {
-    sendJson(res, 404, { error: 'NOT_FOUND', message: `无路由匹配: ${method} ${pathname}` });
+    // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（对齐 contracts errorResponseSchema.code）。
+    // NOT_FOUND 非 contracts 码（D7），client safeParse 失败 fallback INTERNAL_ERROR，行为不变（AC-W5/W8）。
+    sendJson(res, 404, { code: 'NOT_FOUND', message: `无路由匹配: ${method} ${pathname}` });
     return;
   }
   const { route, pathParams } = matched;
@@ -549,9 +559,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       const versionResult = parseIfMatch(ifMatch);
       if (!versionResult.ok) {
         if (versionResult.errorCode === 'VERSION_REQUIRED') {
-          sendJson(res, 400, { error: 'VERSION_REQUIRED', message: '写操作须携带 If-Match header（非负整数）' });
+          // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W3）。
+          sendJson(res, 400, { code: 'VERSION_REQUIRED', message: '写操作须携带 If-Match header（非负整数）' });
         } else {
-          sendJson(res, 400, { error: 'VALIDATION_ERROR', message: 'If-Match header 须为非负整数字符串' });
+          // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W4）。
+          sendJson(res, 400, { code: 'VALIDATION_ERROR', message: 'If-Match header 须为非负整数字符串' });
         }
         return;
       }
@@ -559,8 +571,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     }
     const parsed = route.inputSchema.safeParse(finalInput);
     if (!parsed.success) {
+      // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W2）。
+      // issues 字段保留（D21 [advisory] 本轮不消除，Q7 out of scope），client 仍手动读 raw.code + 丢弃 issues。
       sendJson(res, 400, {
-        error: 'VALIDATION_ERROR',
+        code: 'VALIDATION_ERROR',
         message: '输入校验失败',
         issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
       });
@@ -591,7 +605,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (e instanceof AppError) {
       const status = errorCodeToHttpStatus[e.code] ?? 500;
       // [约束] TECH-OPTIMISTIC-LOCKING-001 D13：合并 e.meta 到响应体（如 VERSION_CONFLICT 的 current_version）。
-      const respBody: Record<string, unknown> = { error: e.code, message: e.message };
+      // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W1）；meta 合并逻辑不变（current_version 仍填充，AC-W9）。
+      const respBody: Record<string, unknown> = { code: e.code, message: e.message };
       if (e.meta) Object.assign(respBody, e.meta);
       sendJson(res, status, respBody);
       return;
@@ -599,7 +614,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     // 非预期错误：log + 500（CODE-002：catch 须非空且非仅 console）
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[server] unhandled error', e);
-    sendJson(res, 500, { error: 'INTERNAL_ERROR', message: msg });
+    // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W6）。
+    // INTERNAL_ERROR 非 contracts 码（D7），client safeParse 失败 fallback INTERNAL_ERROR（round-trip 正确，AC-W8）。
+    sendJson(res, 500, { code: 'INTERNAL_ERROR', message: msg });
   }
 }
 
@@ -608,7 +625,8 @@ const PORT = Number(process.env.PORT ?? 3000);
 const server = createServer((req, res) => {
   handle(req, res).catch((e) => {
     console.error('[server] fatal', e);
-    if (!res.headersSent) sendJson(res, 500, { error: 'INTERNAL_ERROR', message: 'fatal' });
+    // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W6 fatal 分支）。
+    if (!res.headersSent) sendJson(res, 500, { code: 'INTERNAL_ERROR', message: 'fatal' });
   });
 });
 

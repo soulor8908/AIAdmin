@@ -42,7 +42,7 @@ let firstCreatedUserId: string | undefined;
 let firstCreatedUserEmail: string | undefined;
 
 interface ResponseBody {
-  error?: string;
+  code?: string;
   message?: string;
   current_version?: number;
   id?: string;
@@ -218,7 +218,7 @@ describe('端到端 · 首次启动（seed + DB_PATH + 约束映射 + 事务）'
       body: JSON.stringify({ name: 'dup-user-2', email }),
     });
     expect(create2.status).toBe(409);
-    expect(create2.body.error).toBe('USER_EMAIL_DUPLICATE');
+    expect(create2.body.code).toBe('USER_EMAIL_DUPLICATE');
     // 无 SQLite 内部信息（AC-F5-3）
     expect(String(create2.body.message ?? '')).not.toMatch(/SQLITE|constraint/i);
   });

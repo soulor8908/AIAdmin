@@ -237,10 +237,15 @@ for (const f of webSrc) {
 markEnforcement('AI-005');
 // 扫描测试文件中 .toEqual([字面量, 字面量, ...]) 形式，若字面量匹配跨域枚举模式则 suggestion
 // 权限码模式：xxx:xxx ；错误码模式：全大写下划线含下划线且长度≥6
+// R17 S-6 固化：continue 条件从 apps/api/test/ 扩展含 apps/web/test/，
+//   覆盖前端测试对跨域枚举集合的硬编码断言（如权限码数组、错误码数组）。
+//   正则仅匹配 .toEqual([...]) / .toStrictEqual([...]) 数组形式，
+//   前端 toEqual 常见的对象形式不受影响，故对前端测试的适用性与后端一致。
 const PERMISSION_CODE_LIT = /['"]([a-z]+:[a-z]+)['"]/g;
 const ERROR_CODE_LIT = /['"]([A-Z][A-Z_]{4,}_[A-Z]+)['"]/g;
+const AI005_TEST_DIRS = /^(apps\/api\/test\/|apps\/web\/test\/)/;
 for (const f of allTs) {
-  if (!rel(f).startsWith('apps/api/test/')) continue;
+  if (!AI005_TEST_DIRS.test(rel(f))) continue;
   const src = readFileSync(f, 'utf8');
   // 找 .toEqual([...]) 或 .toStrictEqual([...]) 块（贪婪到匹配的 ])
   const assertRe = /\.(toEqual|toStrictEqual)\(\s*\[([\s\S]*?)\]\s*\)/g;

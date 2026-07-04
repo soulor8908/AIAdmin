@@ -23,7 +23,7 @@ alwaysApply: true
   - 禁止在断言里硬编码跨域可变集合的字面量（如 `expect(codes).toEqual(['user:read','user:write','role:read','role:write'])`）——当 contracts 的枚举扩展时，硬编码断言会过期变红且不易定位。
   - 改用 SSOT 派生断言：从 contracts 的 schema 派生期望值，如 `expect(codes).toEqual([...permissionCodeSchema.options])`，使断言自动跟随 SSOT。
   - 例外：单领域内不可变的固定值（如某测试 fixture 的固定 id）可硬编码；但跨域共享的枚举/集合一律派生。
-- 校验方式：`scripts/check-rules.mjs` AI-005 分支扫描 `apps/api/test/**/*.ts` 中 `.toEqual(\[` 或 `.toStrictEqual(\[` 后紧跟多个字符串字面量（≥3 个）且字面量匹配已知跨域枚举值模式（如 `xxx:xxx` 权限码、`XXX_XXX` 大写下划线错误码）的断言，标记为 suggestion 待人工确认是否应改为派生；Reviewer subagent 复核。
+- 校验方式：`scripts/check-rules.mjs` AI-005 分支扫描 `apps/api/test/**/*.ts` 与 `apps/web/test/**/*.ts(x)` 中 `.toEqual(\[` 或 `.toStrictEqual(\[` 后紧跟多个字符串字面量（≥3 个）且字面量匹配已知跨域枚举值模式（如 `xxx:xxx` 权限码、`XXX_XXX` 大写下划线错误码）的断言，标记为 suggestion 待人工确认是否应改为派生；Reviewer subagent 复核。R17 S-6 固化：扫描目录从仅 `apps/api/test/` 扩展含 `apps/web/test/`，覆盖前端测试对跨域枚举集合的硬编码断言（正则仅匹配数组形式 toEqual/toStrictEqual，对象形式不受影响）。
 
 ## AI-003 · 禁止越界发挥（复盘细化：advisory 偏离须反向同步 + [约束] 项偏离处理流程）
 - 触发条件：AI 欲新增 Spec 未提及的字段、路由、依赖时。

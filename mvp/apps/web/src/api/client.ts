@@ -3,15 +3,16 @@
 // 职责：
 //   - 基址：import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'（D5）
 //   - Header 注入：Bearer token（D6，除 skipAuth）、If-Match（D7，versioned + expectedVersion）
-//   - 响应处理：200→json / 204→undefined / 401 拦截（D8）/ 409 重试（D9）/ wire 适配 error→code（D10）
+//   - 响应处理：200→json / 204→undefined / 401 拦截（D8）/ 409 重试（D9）/ 错误体读 raw.code（D10 已消除）
 //   - 网络错误兜底：fetch 抛 → ApiError code='NETWORK_ERROR'（AC-F7-3）
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（tokenStore），禁止 import apps/api/src/**。
 // [约束] D3：类型经 z.infer 派生自 contracts，禁止手写 TS 类型副本。
 // [约束] D5：原生 fetch + URLSearchParams，禁止引入 axios/ky。
-// [advisory] D10：wire 适配 INTERNAL_ERROR 降级码（非 contracts），ApiError.code 扩展含 INTERNAL_ERROR
-//                以保证类型安全（spec §4.6 字面 `code: ErrorCode = ... : 'INTERNAL_ERROR'` 中 INTERNAL_ERROR
-//                非 errorCodeSchema 选项，前端本地补码，对齐 spec §11 "非 contracts INTERNAL_ERROR" 行）。
+// [约束] D10 已消除（R18，TECH-USER-DETAIL-WIRE-001 D1）：wire 字段名已对齐 contracts errorResponseSchema.code，
+//          parseErrorResponse 直接读 raw.code，不再读 raw.error 适配。INTERNAL_ERROR 仍为前端本地补码（D7，
+//          非 contracts 码 fallback，与 D10 wire 适配独立，未消除）——ApiError.code 扩展含 INTERNAL_ERROR
+//          以保证类型安全（spec §11 "非 contracts INTERNAL_ERROR" 行，server 发 INTERNAL_ERROR → client 收到一致）。
 import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
 import { getToken, clearToken } from '../auth/tokenStore.js';
 
@@ -30,7 +31,7 @@ type LocalErrorCode = 'NETWORK_ERROR' | 'INTERNAL_ERROR';
 
 /**
  * API client 统一错误类型（contracts ErrorResponse 派生 + 前端本地 NETWORK_ERROR/INTERNAL_ERROR 兜底）。
- * code 经 wire 适配（§4.6）从响应体 error 字段映射而来；message/current_version 字段名 wire 与 contracts 一致。
+ * code 直接读响应体 code 字段（D10 已消除，wire 与 contracts 字段名一致）；message/current_version 字段名 wire 与 contracts 一致。
  */
 export class ApiError extends Error {
   readonly code: ErrorCode | LocalErrorCode;
@@ -58,7 +59,7 @@ const AUTH_401_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   'TOKEN_REVOKED',
 ]);
 
-/** wire 适配解析结果（§4.6）：code 可能为 INTERNAL_ERROR（解析失败降级）。 */
+/** 错误响应解析结果（§4.6，D10 已消除）：code 可能为 INTERNAL_ERROR（解析失败降级，D7 非 contracts 码 fallback）。 */
 type ParsedError = {
   code: ErrorCode | 'INTERNAL_ERROR';
   message: string;
@@ -66,14 +67,16 @@ type ParsedError = {
 };
 
 /**
- * wire 格式错误响应体适配（§4.6，D10 [advisory]）。
- * 读 wire `error` 字段 → errorCodeSchema 校验 → 映射为 contracts `code`；
- * 解析失败降级 INTERNAL_ERROR（非 contracts 码，前端本地兜底）。
+ * 错误响应体解析（§4.6，D10 已消除 R18）。
+ * 直接读 wire `code` 字段（与 contracts errorResponseSchema.code 一致）→ errorCodeSchema.safeParse 校验；
+ * 解析失败降级 INTERNAL_ERROR（非 contracts 码，前端本地兜底，D7）。
+ * 保留 safeParse + fallback（D7）：INTERNAL_ERROR/NOT_FOUND 非 contracts 码仍降级，不扩 errorCodeSchema（Q2）。
+ * 保留手动读字段（不 errorResponseSchema.parse(body) 直校）：D21 issues 仍存在（Q7 不消除），.strict() 会拒绝含 issues 的 body。
  * message/current_version 字段名 wire 与 contracts 一致，无需重命名；issues 等额外字段丢弃（D21）。
  */
 function parseErrorResponse(body: unknown): ParsedError {
   const raw = (body ?? {}) as Record<string, unknown>;
-  const wireCode = raw.error;
+  const wireCode = raw.code;   // D10 已消除（R18）：直接读 raw.code，原 raw.error wire 适配已删除
   const codeParse = errorCodeSchema.safeParse(wireCode);
   const code: ErrorCode | 'INTERNAL_ERROR' = codeParse.success ? codeParse.data : 'INTERNAL_ERROR';
   const resp: ParsedError = {
@@ -149,7 +152,7 @@ function buildHeaders(opts: RequestOptions): Record<string, string> {
 
 /**
  * 统一 fetch 封装。AC-F5-1：前端所有 HTTP 调用经此函数，不直接调 fetch（除 client 内部）。
- * 实现 §4.1~§4.6：header 注入（D6/D7）/ 401 拦截（D8）/ 409 重试（D9）/ wire 适配（D10）。
+ * 实现 §4.1~§4.6：header 注入（D6/D7）/ 401 拦截（D8）/ 409 重试（D9）/ 错误体读 raw.code（D10 已消除）。
  */
 export async function request<T>(
   method: string,
@@ -187,7 +190,7 @@ async function doRequest<T>(
     return undefined as T;
   }
 
-  // 401 拦截（D8）：先 wire 适配取 code，再按 code 分支
+  // 401 拦截（D8）：先解析错误体取 code（D10 已消除，直接读 raw.code），再按 code 分支
   // 多约束组合副作用 #1：401 分支先于 409（重试响应若 401 仍拦截终止重试链）
   if (res.status === 401) {
     const body = await safeReadJson(res);
@@ -221,7 +224,7 @@ async function doRequest<T>(
     return (await res.json()) as T;
   }
 
-  // 其余 4xx/5xx → wire 适配抛 ApiError
+  // 其余 4xx/5xx → 解析错误体抛 ApiError（D10 已消除，直接读 raw.code）
   const body = await safeReadJson(res);
   const err = parseErrorResponse(body);
   throw new ApiError(err.code, err.message, err.current_version);

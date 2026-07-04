@@ -34,13 +34,13 @@ R10 S-2 教训：Spec 须核验既有路由表，确认前端调用的端点均�
 
 核验结论：**前端调用的 5 个端点全部存在于既有路由表**，本轮不新增任何后端端点。R10 S-2 教训闭合。
 
-### 1.2 关键发现：GET /v1/users/:id 端点不存在（影响 AC-F4-3）
+### 1.2 关键发现：GET /v1/users/:id 端点（R18 已补齐，D19 已消除）
 
 PRD AC-F4-3 原文："API client 自动 **GET 最新 user** 取 version=N+1，用新 version 重试 PATCH 一次"。
 
-核验 routes 数组（L221~L374）：用户域仅 `GET /v1/users`（列表）、`POST /v1/users`（创建）、`PATCH /v1/users/:id/status`（状态更新）、`POST /v1/users/:userId/transfer`（调岗）。**无 `GET /v1/users/:id` 单条详情端点**。
+R12 核验 routes 数组（L221~L374）发现：用户域仅 `GET /v1/users`（列表）、`POST /v1/users`（创建）、`PATCH /v1/users/:id/status`（状态更新）、`POST /v1/users/:userId/transfer`（调岗），**无 `GET /v1/users/:id` 单条详情端点**，导致 PRD AC-F4-3 字面"GET 最新 user"无法落地。R12 改用 409 响应体 `current_version` 重试（D9），D19 记为 [advisory] 偏离（端点 gap）。
 
-因此 PRD AC-F4-3 字面"GET 最新 user"无法落地。但 server.ts L594-595 错误响应合并 `e.meta`，VERSION_CONFLICT 的 409 响应体已含 `current_version`（对齐 TECH-OPTIMISTIC-LOCKING-001 D13 + contracts `errorResponseSchema.current_version`）。故 API client 直接从 409 响应体读 `current_version` 重试，无需 GET。此为对 PRD AC-F4-3 措辞的 [advisory] 偏离（D19），语义不弱化（重试仍 1 次、仍用最新 version）， impl-writer 据此落地，test-writer 据此设计冲突重试用例。
+**R18 已消除（TECH-USER-DETAIL-WIRE-001 D2）**：`GET /v1/users/:id` 端点已补齐（admin + user:read + cacheable + detailEtag），D19 [advisory] 标注移除（端点 gap 闭合）。D9 重分类为 `[约束]`（D9 重分类决策详见 §10 D9，client 设计选择 409-retry，非因端点缺失的临时妥协——Q6 决策①）。前端 future 轮次可消费 `getUser(id)`（AC-G13 future-ready）。
 
 ### 1.3 本期覆盖范围（PRD F1~F7 + ARCH-003）
 
@@ -91,7 +91,7 @@ apps/web/
 |----|------|----------|----------|
 | `lib/` | 纯工具（错误码映射） | @admin/contracts | 任何 IO 层 |
 | `auth/tokenStore.ts` | localStorage 读写 token | @admin/contracts（LoginResult 类型） | api/、pages/、components/ |
-| `api/client.ts` | fetch 封装、header 注入、401 拦截、409 重试、wire 适配 | @admin/contracts、auth/tokenStore、lib/errorMapping | pages/、components/ |
+| `api/client.ts` | fetch 封装、header 注入、401 拦截、409 重试、错误体读 raw.code（D10 已消除） | @admin/contracts、auth/tokenStore、lib/errorMapping | pages/、components/ |
 | `api/auth.ts`、`api/users.ts` | endpoint 封装（拼 path/query/body 调 client） | api/client、@admin/contracts | pages/、components/ |
 | `auth/AuthContext.tsx` | 登录态管理 + login/logout action | api/auth、auth/tokenStore、@admin/contracts | pages/、components/（避免循环） |
 | `auth/RouteGuard.tsx` | 路由守卫 | auth/AuthContext、react-router-dom | api/（不直接发请求） |
@@ -178,14 +178,14 @@ function request<T>(method: string, path: string, opts: RequestOptions = {}): Pr
 | 304 | 本轮不发送 If-None-Match，不会触发（Q12 决策①，D15） | — |
 | 401 | 见 §4.4 拦截逻辑 | AC-F7-1 |
 | 409 | 见 §4.5 冲突重试 | AC-F4-3/4 |
-| 其余 4xx/5xx | 解析错误体（wire 适配，§4.6）→ 抛 `ErrorResponse` | AC-F7-2 |
+| 其余 4xx/5xx | 解析错误体（§4.6，D10 已消除，直接读 raw.code）→ 抛 `ApiError` | AC-F7-2 |
 | fetch 抛错（网络） | 抛 `{ code: 'NETWORK_ERROR', message: '网络异常，请稍后重试' }`（非 contracts 码，前端本地兜底） | AC-F7-3 |
 
 ### 4.4 401 拦截（D8 [约束]）
 
 ```
 response.status === 401:
-  解析错误体 → 取 code（经 §4.6 wire 适配）
+  解析错误体 → 取 code（§4.6，D10 已消除，直接读 raw.code）
   if code ∈ { UNAUTHORIZED, TOKEN_INVALID, TOKEN_EXPIRED, TOKEN_REVOKED }:
     tokenStore.clearToken()
     跳转 /login（window.location 或 router navigate）
@@ -195,13 +195,13 @@ response.status === 401:
     抛出 ErrorResponse，不跳转、不清 token
 ```
 
-**关键区分**（Q2 决策①）：401 须按响应体 `code` 区分"鉴权类 401"（4 码，拦截跳登录）与"登录凭据错 401"（INVALID_CREDENTIALS，原样抛登录页）。判定顺序：先 wire 适配取 code，再按 code 分支。login 请求本身 `skipAuth=true`，其 401 必为 INVALID_CREDENTIALS。
+**关键区分**（Q2 决策①）：401 须按响应体 `code` 区分"鉴权类 401"（4 码，拦截跳登录）与"登录凭据错 401"（INVALID_CREDENTIALS，原样抛登录页）。判定顺序：先解析错误体取 code（§4.6，D10 已消除，直接读 raw.code），再按 code 分支。login 请求本身 `skipAuth=true`，其 401 必为 INVALID_CREDENTIALS。
 
-### 4.5 VERSION_CONFLICT 重试（D9 [约束]）
+### 4.5 VERSION_CONFLICT 重试（D9 [约束]，R18 重分类）
 
 ```
 response.status === 409:
-  解析错误体 → 取 code + current_version（经 §4.6 wire 适配）
+  解析错误体 → 取 code + current_version（§4.6，D10 已消除，直接读 raw.code）
   if code === 'VERSION_CONFLICT' && current_version !== undefined && 本次未重试过:
     用 current_version 作为新 expectedVersion，重试原 PATCH 请求 1 次（Q3 决策②）
     重试响应再走 §4.3/4.4 分支（重试的 401 仍拦截跳登录，不重试）
@@ -209,31 +209,35 @@ response.status === 409:
     抛出 ErrorResponse（含 current_version），调用方提示"数据已被修改，请刷新后重试"
 ```
 
-**重试来源**：直接用 409 响应体的 `current_version`（D9 [约束]）。**不 GET 单条用户**——因 `GET /v1/users/:id` 端点不存在（§1.2，D19 [advisory]）。重试仅 1 次（Q3 决策②，防活锁）。重试仅对 PATCH status（幂等可接受的状态切换，Q3）。
+**重试来源**：直接用 409 响应体的 `current_version`（D9 [约束]，R18 重分类）。重试仅 1 次（Q3 决策②，防活锁）。重试仅对 PATCH status（幂等可接受的状态切换，Q3）。R18（TECH-USER-DETAIL-WIRE-001 D3）后 `GET /v1/users/:id` 端点已补齐（§1.2，D19 已消除），但 client 仍保留 409-retry 策略——D9 从原 [advisory]-adjacent 重分类为正式 `[约束]` 设计决策（client 选择 409-retry 而非 GET-retry：无额外 round trip + 已测试工作 + GET-retry 须处理 GET 也 409 的边缘场景，复杂度更高，Q6 决策①）。重试不切换为 GET-retry，但端点存在为 future 用户详情页消费 + GET-retry 可选项提供基础。
 
-### 4.6 wire 格式适配 error→code（D10 [advisory]）
+### 4.6 wire 字段名对齐 code（D10 已消除 R18）
 
-**问题**：contracts `errorResponseSchema` 字段名 `code`；server.ts L594 实际响应 `{ error: e.code, message: e.message, ...meta }`，字段名 `error`。二者不一致（后端历史遗留）。另 server.ts L562-566 VALIDATION_ERROR 响应额外带 `issues` 字段（contracts 未声明）。
+**R12 历史问题**：contracts `errorResponseSchema` 字段名 `code`，server.ts L594 实际响应 `{ error: e.code, message: e.message, ...meta }`，字段名 `error`。二者不一致（后端历史遗留，D10 [advisory]）。另 server.ts L562-566 VALIDATION_ERROR 响应额外带 `issues` 字段（contracts 未声明，D21 [advisory]）。
 
-**适配设计**（Q11 决策①）：
+**R18 已消除（TECH-USER-DETAIL-WIRE-001 D1，Q1 接受 breaking change）**：server.ts 全部 7 处错误响应 wire 字段名 `error` → `code`，与 contracts `errorResponseSchema.code` 对齐。client `parseErrorResponse` 删除 wire 适配层，直接读 `raw.code`。三层字段名（contracts `code` / server `code` / client `raw.code`）一致。
+
+**消除后设计**（D10 已消除，保留 safeParse + fallback + 手动读字段）：
 ```ts
-function parseErrorResponse(body: unknown): ErrorResponse {
-  // body 为 wire 格式：{ error: <code>, message, current_version?, issues? }
+function parseErrorResponse(body: unknown): ParsedError {
+  // body wire 格式：{ code: <ErrorCode>, message, current_version?, issues? }
   const raw = body as Record<string, unknown>;
-  const wireCode = raw.error;            // 读 wire 字段 error
+  const wireCode = raw.code;            // D10 已消除：直接读 wire 字段 code（原 raw.error 适配已删除）
   const codeParse = errorCodeSchema.safeParse(wireCode);  // 用 contracts SSOT 校验
-  const code: ErrorCode = codeParse.success ? codeParse.data : 'INTERNAL_ERROR';
+  const code: ErrorCode | 'INTERNAL_ERROR' = codeParse.success ? codeParse.data : 'INTERNAL_ERROR';
   return {
-    code,                                 // 映射为 contracts 字段 code
+    code,
     message: typeof raw.message === 'string' ? raw.message : '操作失败',
     ...(typeof raw.current_version === 'number' ? { current_version: raw.current_version } : {}),
   };
 }
 ```
 
-**对外契约**：API client 抛出的错误体类型为 `ErrorResponse`（contracts 派生），前端业务代码（pages/components）**只接触 contracts 类型，不感知 wire 字段名 `error`**（ARCH-003 类型来自 contracts）。`message` 与 `current_version` 字段名 wire 与 contracts 一致，无需重命名；仅 `error→code` 一处适配。`issues` 等额外字段被丢弃（不 strict-parse wire body，避免 `.strict()` 拒绝）。
+**保留 safeParse + fallback（D7，非 D10 残留）**：`INTERNAL_ERROR`（500）/`NOT_FOUND`（通用 404）非 contracts `errorCodeSchema` 枚举，client safeParse 失败 → fallback `INTERNAL_ERROR`（前端本地码 `LocalErrorCode`）。不扩 `errorCodeSchema`（Q2 决策②，避免跨域 ①类隐式 impact）。`INTERNAL_ERROR` round-trip 正确（server 发 → client 收到一致），`NOT_FOUND` 降级 `INTERNAL_ERROR`（边缘场景行为不变）。
 
-**[advisory] 偏离**：此适配是后端历史遗留（wire 与 contracts 字段名不一致）的临时缓解。未来后端对齐字段名（server.ts `error` → `code`）可消除此适配层，届时 API client 改为 `errorResponseSchema.parse(body)` 直校。不阻塞前端，记 §10 advisory。
+**保留手动读字段（不 `errorResponseSchema.parse(body)` 直校）**：因 D21 issues 仍存在（Q7 本轮不消除），`errorResponseSchema` 的 `.strict()` 会拒绝含 issues 的 body。故继续手动读 `raw.code` / `raw.message` / `raw.current_version`，issues 丢弃。D21 列为 future advisory（与 Q2 非 contracts 码同类，未来"contracts 完整化"轮处理）。
+
+**对外契约**：API client 抛出的错误体类型为 `ApiError`（contracts `ErrorCode` 派生 + 前端本地 `LocalErrorCode` 兜底），前端业务代码（pages/components）只接触 contracts 类型（ARCH-003 类型来自 contracts）。`message` 与 `current_version` 字段名 wire 与 contracts 一致，无需重命名。
 
 ## 5. 状态管理
 
@@ -428,7 +432,7 @@ grep 命令：`rg "apps/web|@admin/web" apps/api/test/ packages/*/test/`。判�
 | 6 | `apps/web/test/route-guard.test.tsx` | 守卫测 | AC-F6-1~F6-4、AC-F1-7 |
 
 各文件断言要点：
-- **api-client.test.ts**（mock global.fetch）：Bearer 注入（AC-F5-2）、If-Match 注入（AC-F5-3）、401 拦截 4 鉴权码跳登录（AC-F7-1）、INVALID_CREDENTIALS 不拦截原样抛（Q2）、VERSION_CONFLICT 用 current_version 重试 1 次（AC-F4-3）、重试仍 409 抛错（AC-F4-4）、wire 适配 error→code（D10）、网络错误兜底（AC-F7-3）、类型全部 contracts 派生无手写副本（AC-ARCH-2，tsc 保证）。
+- **api-client.test.ts**（mock global.fetch）：Bearer 注入（AC-F5-2）、If-Match 注入（AC-F5-3）、401 拦截 4 鉴权码跳登录（AC-F7-1）、INVALID_CREDENTIALS 不拦截原样抛（Q2）、VERSION_CONFLICT 用 current_version 重试 1 次（AC-F4-3）、重试仍 409 抛错（AC-F4-4）、错误体读 raw.code（D10 已消除 R18）、网络错误兜底（AC-F7-3）、类型全部 contracts 派生无手写副本（AC-ARCH-2，tsc 保证）。
 - **error-mapping.test.ts**：映射表键 = `[...errorCodeSchema.options]`（SSOT 派生，AI-005）；各码中文提示；未映射码通用提示（AC-F7-2）。
 - **login-page.test.tsx**：表单校验（email/密码长度/空）、提交成功跳 /users、INVALID_CREDENTIALS 提示、loading+按钮禁用、已登录跳转（AC-F1-1~8）。
 - **user-list-page.test.tsx**：列表渲染、分页、状态筛选、空状态、加载态、启停成功、禁用自身提示、重复状态提示（AC-F2-1~7、F4-1/2/5/6）。
@@ -463,13 +467,13 @@ HTTP 用原生 `fetch` + `URLSearchParams`，**禁止引入 axios/ky 等库**（
 `versioned=true` 且调用方传 `expectedVersion`（= user.version）时，client 注入 `If-Match: <expectedVersion>`（AC-F5-3/AC-F4-7）。PATCH status 须 versioned。API client 保证注入，前端不应触发 VERSION_REQUIRED。
 
 ### D8 · 401 拦截（区分鉴权类与凭据错）`[约束]`
-401 响应经 wire 适配取 code：`code ∈ {UNAUTHORIZED, TOKEN_INVALID, TOKEN_EXPIRED, TOKEN_REVOKED}` → 清 token + 跳 /login（AC-F7-1，Q2 决策①）；`code === INVALID_CREDENTIALS` → 原样抛登录页（login 业务错误，不跳转、不清 token）。判定顺序：先 wire 适配取 code，再按 code 分支。
+401 响应经解析取 code（D10 已消除，直接读 raw.code）：`code ∈ {UNAUTHORIZED, TOKEN_INVALID, TOKEN_EXPIRED, TOKEN_REVOKED}` → 清 token + 跳 /login（AC-F7-1，Q2 决策①）；`code === INVALID_CREDENTIALS` → 原样抛登录页（login 业务错误，不跳转、不清 token）。判定顺序：先解析错误体取 code，再按 code 分支。
 
-### D9 · VERSION_CONFLICT 重试（用 409 body current_version，不 GET）`[约束]`
-409 VERSION_CONFLICT 时，从响应体读 `current_version`，用新 version 重试原 PATCH 1 次（Q3 决策②，AC-F4-3）；重试仍 409 → 抛错提示"数据已被修改，请刷新后重试"（AC-F4-4）。**不 GET 单条用户**——`GET /v1/users/:id` 端点不存在（§1.2）。重试仅 1 次防活锁。重试仅对 PATCH status（幂等可接受）。
+### D9 · VERSION_CONFLICT 重试（用 409 body current_version，409-retry 设计选择）`[约束]`（R18 重分类，原 [advisory]-adjacent）
+409 VERSION_CONFLICT 时，从响应体读 `current_version`，用新 version 重试原 PATCH 1 次（Q3 决策②，AC-F4-3）；重试仍 409 → 抛错提示"数据已被修改，请刷新后重试"（AC-F4-4）。重试仅 1 次防活锁。重试仅对 PATCH status（幂等可接受）。**R18 重分类**（TECH-USER-DETAIL-WIRE-001 D3）：原 D9 因 `GET /v1/users/:id` 端点缺失而改用 409 body 重试，记为 [advisory]-adjacent；R18 端点 gap 闭合后（§1.2，D19 已消除），D9 重分类为正式 `[约束]` 设计决策——client 选择 409-retry 而非 GET-retry（Q6 决策①：409-retry 无额外 round trip + 已测试工作 + GET-retry 须处理 GET 也 409 边缘场景，复杂度更高）。重试链不切换为 GET-retry，但 `GET /v1/users/:id` 端点存在为 future 用户详情页消费 + GET-retry 可选项提供基础。
 
-### D10 · wire 格式适配 error→code `[advisory]`
-contracts `errorResponseSchema` 字段名 `code`，server.ts L594 wire 字段名 `error`。API client 解析层读 wire `error` → `errorCodeSchema` 校验 → 映射为 contracts `code`，对外暴露 `ErrorResponse` 类型（§4.6）。前端业务代码不感知差异（ARCH-003）。`message`/`current_version` 字段名一致无需重命名。**未来后端对齐字段名（server.ts `error`→`code`）可消除此适配**，届时改 `errorResponseSchema.parse(body)` 直校。不阻塞前端。
+### D10 · wire 字段名对齐 error→code `[advisory]`（R18 已消除，历史记录）
+contracts `errorResponseSchema` 字段名 `code`，server.ts L594 wire 字段名 `error`（R12 历史遗留不一致）。R12 API client 解析层读 wire `error` → `errorCodeSchema` 校验 → 映射为 contracts `code`，对外暴露 `ApiError` 类型（§4.6），前端业务代码不感知差异（ARCH-003）。`message`/`current_version` 字段名一致无需重命名。**R18 已消除**（TECH-USER-DETAIL-WIRE-001 D1，Q1 接受 breaking change）：server.ts 全部 7 处错误响应 `error` → `code`，client `parseErrorResponse` 删除 wire 适配层直接读 `raw.code`。保留 `errorCodeSchema.safeParse + fallback INTERNAL_ERROR`（D7，非 contracts 码降级，与 D10 wire 适配独立，未消除）；保留手动读字段（D21 issues 仍存在，Q7 本轮不消除，不 `errorResponseSchema.parse(body)` 直校）。
 
 ### D11 · ErrorCode→中文映射 SSOT 派生 `[约束]`
 `lib/errorMapping.ts` 维护 `Record<ErrorCode, string>` 映射表，键从 `[...errorCodeSchema.options]` SSOT 派生（AI-005，AC-F7-2）。未映射码显示通用"操作失败，请稍后重试"。禁止硬编码全集（须 SSOT 派生，枚举扩展时不漏）。
@@ -498,21 +502,21 @@ contracts `errorResponseSchema` 字段名 `code`，server.ts L594 wire 字段名
 ### D18 · ARCH-003 校验脚本落地 + layering.md 更新 `[约束]`
 impl-writer 须：(1) 在 `scripts/check-rules.mjs` 新增 ARCH-003 分支（§8.2 算法，含 walkWeb 扩展 .tsx）；(2) 更新 `.trae/rules/architecture/layering.md` ARCH-003 校验方式从 `[预留]` 为 §8.4 机器化描述（闭合 META-003/META-004 双向绑定）。落地后 ARCH-003 从人工 Review 升级为机器化 enforcement（AC-ARCH-3）。
 
-### D19 · PRD AC-F4-3 "GET 最新 user" 措辞偏离 `[advisory]`
-PRD AC-F4-3 字面"GET 最新 user 取 version"无法落地（`GET /v1/users/:id` 端点不存在，§1.2）。本 Spec 改用 409 响应体 `current_version` 重试（D9）。语义不弱化（重试仍 1 次、仍用最新 version）。impl-writer 据此落地，test-writer 据此设计冲突重试用例（断言重试请求的 If-Match = 409 body current_version，而非发 GET）。已反向同步本 Spec。
+### D19 · PRD AC-F4-3 "GET 最新 user" 措辞偏离 `[advisory]`（R18 已消除，历史记录）
+PRD AC-F4-3 字面"GET 最新 user 取 version"无法落地（R12 核验 `GET /v1/users/:id` 端点不存在，§1.2）。R12 Spec 改用 409 响应体 `current_version` 重试（D9）。语义不弱化（重试仍 1 次、仍用最新 version）。impl-writer 据此落地，test-writer 据此设计冲突重试用例（断言重试请求的 If-Match = 409 body current_version，而非发 GET）。**R18 已消除**（TECH-USER-DETAIL-WIRE-001 D2）：`GET /v1/users/:id` 端点已补齐（admin + user:read + cacheable + detailEtag），D19 [advisory] 标注移除（端点 gap 闭合）。D9 重分类为 `[约束]`（D9 重分类决策，client 选择 409-retry 而非 GET-retry，Q6 决策①）。前端 future 轮次可消费 `getUser(id)`（AC-G13 future-ready）。
 
 ### D20 · jsdom 环境配置方式 `[advisory]`
 根 vitest.config.ts `environment=node` 且 `include` 仅 `*.test.ts`（不匹配 `.tsx`）。impl-writer 须：(1) 扩展 include 为 `apps/*/test/**/*.{test,spec}.{ts,tsx}`；(2) web `.tsx` 测试用 per-file `// @vitest-environment jsdom` 注解（推荐，最小侵入）。[advisory] 替代：独立 `vitest.config.web.ts`（projects 模式分离 node/jsdom），impl-writer 可选须反向同步。jsdom 须加入 apps/web devDependencies。
 
 ### D21 · VALIDATION_ERROR 响应额外 issues 字段 `[advisory]`
-server.ts L562-566 VALIDATION_ERROR 响应带额外 `issues` 字段（contracts `errorResponseSchema` 未声明）。API client 不 `errorResponseSchema.parse(body)` 直校（会被 `.strict()` 拒绝），改为手动读 `error`/`message`/`current_version` 构造 ErrorResponse（§4.6），`issues` 丢弃。[advisory]：若未来后端对齐 wire 字段名并移除 `issues`（或 contracts 声明 issues），可改直校。
+server.ts L562-566 VALIDATION_ERROR 响应带额外 `issues` 字段（contracts `errorResponseSchema` 未声明）。API client 不 `errorResponseSchema.parse(body)` 直校（会被 `.strict()` 拒绝），改为手动读 `code`/`message`/`current_version` 构造 ErrorResponse（§4.6，D10 已消除，wire 字段名为 code），`issues` 丢弃。[advisory]：R18 已对齐 wire 字段名（D10 已消除），但 issues 仍存在（Q7 不本轮消除）。若未来移除 `issues`（或 contracts 声明 issues），可改 `errorResponseSchema.parse(body)` 直校。
 
 ### 多 [约束] 组合副作用预判
 
 > 提前标注多约束组合的潜在副作用，impl-writer 实现时须规避，偏离按 AI-003 反向同步。
 
 1. **「401 拦截（D8）+ VERSION_CONFLICT 重试（D9）」组合**：重试的 PATCH 请求可能返回 401（token 在重试间隙过期/吊销）。判定顺序须**先判 401（拦截跳登录）再判 409（重试）**——即重试响应若为 401，走 D8 拦截终止重试链，不把 401 误当冲突。否则会把鉴权失败误重试。无活锁（401 终止重试）。impl-writer 须保证响应处理顺序：status===401 分支先于 status===409 分支。
-2. **「wire 适配（D10）+ 401 拦截（D8）」组合**：401 响应体也用 wire 字段 `error`，须先 wire 适配取 code 再判是否拦截。二者一致（适配在前），无冲突。但须保证 401 响应体解析失败（非 JSON/缺 error 字段）时降级为 UNAUTHORIZED 行为（跳登录），不抛异常致白屏。
+2. **「错误体解析（D10 已消除）+ 401 拦截（D8）」组合**：401 响应体字段名为 `code`（R18 已对齐，D10 已消除），解析取 code 后判是否拦截。须保证 401 响应体解析失败（非 JSON/缺 code 字段）时降级为 INTERNAL_ERROR → 仍按 UNAUTHORIZED 行为跳登录（不抛异常致白屏）。R18 后字段名一致，无适配层冲突。
 3. **「乐观锁重试（D9）+ 列表刷新」组合**：重试成功后列表须刷新取最新 version（UserListPage 重新 list），否则下次对同一用户操作又会用旧 version 触发 409。impl-writer 须保证启停成功（含重试成功）后触发 list 刷新。
 4. **「tokenStore（D12）+ 401 拦截（D8）」组合**：401 拦截清 token 后，若有并发请求在飞（如列表+筛选同时发），另一请求也可能 401 重复跳 /login。MVP 接受重复跳转（幂等）；impl-writer 可加"已跳转"标志位防重复，[advisory] 不强制。
 

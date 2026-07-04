@@ -8,7 +8,7 @@
 //   - mock global.fetch + tokenStore（沿用 R12 api-client.test.ts / R14 api-roles.test.ts 模式），让真实 client.request 运行，
 //     验证 api/notifications.ts 经 request 发出正确 method/path/query/body/If-Match。
 //   - 期望「断言级红」：api/notifications.ts stub 全部抛 NOT_IMPLEMENTED，调用即抛 → fetch 未被调用 → 断言失败（非导入级红）。
-//   - wire 格式参考 apps/api/src/server.ts：错误响应 { error: <code>, message, current_version? }（字段名 error）。
+//   - wire 格式参考 apps/api/src/server.ts：错误响应 { code: <code>, message, current_version? }（字段名 code，对齐 contracts errorResponseSchema.code，D10 已消除）。
 //   - D7：update/send/markRead/delete 须 versioned=true + expectedVersion → client 注入 If-Match（4 versioned 端点，N3）。
 //   - D9：409 VERSION_CONFLICT 由 client 自动重试 1 次（用 409 body current_version，不 GET 单条）。
 //   - D16：listNotifications 调用方显式传 pageSize=20（抹平契约缺省 10，N1）。
@@ -38,7 +38,7 @@ import { getToken } from '../src/auth/tokenStore.js';
 // 占位 token（SEC-003b：不输出到日志，仅用于断言 header 值）
 const TOKEN = 'stub-token-notif-xyz';
 
-/** 构造 fetch 响应 mock（wire 格式：body 含 error/message/current_version 字段名）。 */
+/** 构造 fetch 响应 mock（wire 格式：body 含 code/message/current_version 字段名，D10 已消除）。 */
 function mockResponse(status: number, body: unknown): Response {
   return {
     status,
@@ -221,7 +221,7 @@ describe('api/notifications 通知域 endpoint 契约', () => {
     const updated = makeNotification({ version: 5 });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
       .mockResolvedValueOnce(mockResponse(200, updated));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -238,7 +238,7 @@ describe('api/notifications 通知域 endpoint 契约', () => {
     const sent = makeNotification({ status: 'sent', sent_at: '2026-07-03T10:00:00.000Z', version: 5 });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
       .mockResolvedValueOnce(mockResponse(200, sent));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -255,7 +255,7 @@ describe('api/notifications 通知域 endpoint 契约', () => {
     const read = makeNotification({ status: 'read', read_at: '2026-07-03T11:00:00.000Z', version: 6 });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 6 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 6 }))
       .mockResolvedValueOnce(mockResponse(200, read));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -271,7 +271,7 @@ describe('api/notifications 通知域 endpoint 契约', () => {
   it('deleteNotification 409 VERSION_CONFLICT → 用 current_version 重试 1 次（AC-F6-3，DELETE 幂等，D9）', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(mockResponse(409, { error: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
+      .mockResolvedValueOnce(mockResponse(409, { code: 'VERSION_CONFLICT', message: 'conflict', current_version: 5 }))
       .mockResolvedValueOnce(mockResponse(204, {}));
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -287,7 +287,7 @@ describe('api/notifications 通知域 endpoint 契约', () => {
   // ---------- AC-F3-4 重试仍 409 → 抛 ApiError ----------
   it('updateNotification 重试仍 409 → 抛 ApiError(VERSION_CONFLICT)（AC-F3-4）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
+      mockResponse(409, { code: 'VERSION_CONFLICT', message: 'still conflict', current_version: 6 }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -310,9 +310,9 @@ describe('api/notifications 通知域 endpoint 契约', () => {
   });
 
   // ---------- wire 适配 通知域错误码（AC-ARCH-2 类型 contracts 派生）----------
-  it('wire 适配：{error:"NOTIFICATION_NOT_FOUND"} → ApiError.code === "NOTIFICATION_NOT_FOUND"（AC-ARCH-2）', async () => {
+  it('wire 适配：{code:"NOTIFICATION_NOT_FOUND"} → ApiError.code === "NOTIFICATION_NOT_FOUND"（AC-ARCH-2）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(404, { error: 'NOTIFICATION_NOT_FOUND', message: '通知不存在' }),
+      mockResponse(404, { code: 'NOTIFICATION_NOT_FOUND', message: '通知不存在' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -325,9 +325,9 @@ describe('api/notifications 通知域 endpoint 契约', () => {
   });
 
   // ---------- wire 适配 NOTIFICATION_INVALID_TRANSITION（非 VERSION_CONFLICT，不重试）----------
-  it('wire 适配：{error:"NOTIFICATION_INVALID_TRANSITION"} 不触发 409 重试（AC-ARCH-2，D7 多约束组合副作用 #1）', async () => {
+  it('wire 适配：{code:"NOTIFICATION_INVALID_TRANSITION"} 不触发 409 重试（AC-ARCH-2，D7 多约束组合副作用 #1）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'NOTIFICATION_INVALID_TRANSITION', message: '状态不允许此操作' }),
+      mockResponse(409, { code: 'NOTIFICATION_INVALID_TRANSITION', message: '状态不允许此操作' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
@@ -339,9 +339,9 @@ describe('api/notifications 通知域 endpoint 契约', () => {
   });
 
   // ---------- wire 适配 NOTIFICATION_RECIPIENT_NOT_FOUND（N4 send 时延后校验）----------
-  it('wire 适配：{error:"NOTIFICATION_RECIPIENT_NOT_FOUND"} → ApiError.code（AC-F4-4，N4）', async () => {
+  it('wire 适配：{code:"NOTIFICATION_RECIPIENT_NOT_FOUND"} → ApiError.code（AC-F4-4，N4）', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(404, { error: 'NOTIFICATION_RECIPIENT_NOT_FOUND', message: '收件人不存在' }),
+      mockResponse(404, { code: 'NOTIFICATION_RECIPIENT_NOT_FOUND', message: '收件人不存在' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 

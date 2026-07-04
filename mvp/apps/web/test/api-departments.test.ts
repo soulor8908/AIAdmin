@@ -128,7 +128,7 @@ describe('api/departments 部门域 endpoint 契约', () => {
   it('deleteDepartment DEPT_HAS_CHILDREN(409) → 抛 ApiError 不重试（D8 非 versioned 不走 409 重试）', async () => {
     // 注：DEPT_HAS_CHILDREN 后端实际返回 409 状态，但 code 非 VERSION_CONFLICT，client 不重试
     const fetchMock = vi.fn().mockResolvedValue(
-      mockResponse(409, { error: 'DEPT_HAS_CHILDREN', message: '请先删除子部门' }),
+      mockResponse(409, { code: 'DEPT_HAS_CHILDREN', message: '请先删除子部门' }),
     );
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
