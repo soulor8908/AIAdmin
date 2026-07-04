@@ -19,7 +19,10 @@
 // [约束] D5 / AC-S1-2：有效权限按钮为类型派生操作（userId 从行派生自 User.id，不调 safeParse）。
 // [约束] D18/R16：有效权限按钮 aria-label 域特定（"有效权限"）。
 // [约束] §5.3：用 useState 管理本地状态，无 Redux/Zustand（D5）。
-import { useEffect, useState } from 'react';
+// [约束] R22 D2/D3 / AC-P2/P4/P6：useCallback 稳定回调 + useMemo 缓存 itemData + react-window FixedSizeList
+//          行数 > 50 启用虚拟列表，≤ 50 回退普通 items.map 保持既有 <table><tr><td> DOM 结构（避免破坏既有测试）。
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FixedSizeList } from 'react-window';
 import type { ErrorCode, ListUserQuery, User, UserListResult, UserStatus } from '@admin/contracts';
 import { listUsers, updateUserStatus } from '../api/users.js';
 import { ApiError } from '../api/client.js';
@@ -33,6 +36,14 @@ import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** 前端固定 pageSize=20（D14，不依赖 schema 缺省 10）。 */
 const PAGE_SIZE = 20;
+
+/** R22 D5：react-window 启用阈值（行数 > 50 启用 FixedSizeList，≤ 50 回退普通 map）。 */
+const VIRTUAL_LIST_THRESHOLD = 50;
+
+/** R22 D2：react-window FixedSizeList 配置常量（itemSize=48px / height=600 / overscanCount=5）。 */
+const VIRTUAL_ITEM_SIZE = 48;
+const VIRTUAL_LIST_HEIGHT = 600;
+const VIRTUAL_OVERSCAN_COUNT = 5;
 
 /** UserListPage 组件。 */
 export function UserListPage(): JSX.Element {
@@ -76,28 +87,8 @@ export function UserListPage(): JSX.Element {
     };
   }, [page, statusFilter]);
 
-  /**
-   * 状态切换：active→disabled / disabled→active，传 user.version 作 If-Match（AC-F4-1/2/7）。
-   * UserRow 按钮文案统一"禁用"，但 newStatus 据 user.status 双向切换（功能完整）。
-   */
-  async function handleToggleStatus(user: User): Promise<void> {
-    const newStatus: UserStatus = user.status === 'active' ? 'disabled' : 'active';
-    setError(null);
-    try {
-      await updateUserStatus(user.id, { status: newStatus }, user.version);
-      // 成功：刷新列表取最新 version（避免下次冲突，AC-F4-3 重试成功亦刷新）
-      refresh();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(resolveErrorMessage(err));
-      } else {
-        setError('操作失败，请稍后重试');
-      }
-    }
-  }
-
   /** 重新加载当前页（启停成功 / 创建成功后调用）。 */
-  function refresh(): void {
+  const refresh = useCallback((): void => {
     const query: ListUserQuery = { page, pageSize: PAGE_SIZE };
     if (statusFilter) query.status = statusFilter;
     setLoading(true);
@@ -111,7 +102,28 @@ export function UserListPage(): JSX.Element {
         setError(err instanceof ApiError ? resolveErrorMessage(err) : '操作失败，请稍后重试');
       })
       .finally(() => setLoading(false));
-  }
+  }, [page, statusFilter]);
+
+  /**
+   * 状态切换：active→disabled / disabled→active，传 user.version 作 If-Match（AC-F4-1/2/7）。
+   * UserRow 按钮文案统一"禁用"，但 newStatus 据 user.status 双向切换（功能完整）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（依赖 page + statusFilter → refresh 内部用这俩）。
+   */
+  const handleToggleStatus = useCallback(async (user: User): Promise<void> => {
+    const newStatus: UserStatus = user.status === 'active' ? 'disabled' : 'active';
+    setError(null);
+    try {
+      await updateUserStatus(user.id, { status: newStatus }, user.version);
+      // 成功：刷新列表取最新 version（避免下次冲突，AC-F4-3 重试成功亦刷新）
+      refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(resolveErrorMessage(err));
+      } else {
+        setError('操作失败，请稍后重试');
+      }
+    }
+  }, [refresh]);
 
   function handleStatusFilterChange(e: React.ChangeEvent<HTMLSelectElement>): void {
     const val = e.target.value;
@@ -138,20 +150,32 @@ export function UserListPage(): JSX.Element {
   /**
    * D24：行内"角色"按钮点击 → 弹 UserRolesPanel modal（设置目标 userId）。
    * 角色分配/移除由 UserRolesPanel 内部处理（类型派生 toggle，不调 safeParse）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（无外部依赖，空数组）。
    */
-  function handleToggleRoles(user: User): void {
+  const handleToggleRoles = useCallback((user: User): void => {
     setError(null);
     setRolesPanelUserId(user.id);
-  }
+  }, []);
 
   /**
    * R16：行内"有效权限"按钮点击 → 弹 EffectivePermissionsPanel modal（设置目标 userId，AC-F7-1）。
    * D5 / AC-S1-2：类型派生操作（userId 从行 User.id 派生，TS 类型保证，不调 safeParse）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（无外部依赖，空数组）。
    */
-  function handleViewEffectivePermissions(user: User): void {
+  const handleViewEffectivePermissions = useCallback((user: User): void => {
     setError(null);
     setEffectivePermUserId(user.id);
-  }
+  }, []);
+
+  // R22 D2 / AC-P4：行数 > 50 启用 react-window FixedSizeList（仅渲染可视区行）；
+  // 行数 ≤ 50 回退普通 items.map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试，AC-P6）。
+  const useVirtualList = items.length > VIRTUAL_LIST_THRESHOLD;
+
+  // R22 D2 / AC-P2：useMemo 缓存 itemData + 回调对象（避免父组件每次 render 重建 → 子行 memo 失效，react-window FAQ 最常见坑）。
+  const itemData = useMemo<{ items: User[]; onToggleStatus: (user: User) => void; onToggleRoles: (user: User) => void; onViewEffectivePermissions: (user: User) => void }>(
+    () => ({ items, onToggleStatus: handleToggleStatus, onToggleRoles: handleToggleRoles, onViewEffectivePermissions: handleViewEffectivePermissions }),
+    [items, handleToggleStatus, handleToggleRoles, handleViewEffectivePermissions],
+  );
 
   return (
     <div>
@@ -187,27 +211,58 @@ export function UserListPage(): JSX.Element {
       {!loading && items.length === 0 && <div>暂无用户</div>}
 
       {!loading && items.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>姓名</th>
-              <th>邮箱</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((u) => (
-              <UserRow
-                key={u.id}
-                user={u}
-                onToggleStatus={handleToggleStatus}
-                onToggleRoles={handleToggleRoles}
-                onViewEffectivePermissions={handleViewEffectivePermissions}
-              />
-            ))}
-          </tbody>
-        </table>
+        useVirtualList ? (
+          // R22 D2 / AC-P4：react-window FixedSizeList 虚拟列表（行数 > 50）。
+          // [约束] children render prop 须透传 style 到根 DOM（react-window 通过绝对定位实现虚拟化）。
+          <FixedSizeList
+            height={VIRTUAL_LIST_HEIGHT}
+            itemCount={items.length}
+            itemSize={VIRTUAL_ITEM_SIZE}
+            width="100%"
+            itemData={itemData}
+            overscanCount={VIRTUAL_OVERSCAN_COUNT}
+          >
+            {({ index, style, data }) => {
+              // noUncheckedIndexedAccess：数组下标访问返回 T | undefined，须守卫。
+              // react-window 保证 0 ≤ index < itemCount，分支为死代码但满足类型安全。
+              const user = data.items[index];
+              if (!user) return null;
+              return (
+                <div style={style}>
+                  <UserRow
+                    user={user}
+                    onToggleStatus={data.onToggleStatus}
+                    onToggleRoles={data.onToggleRoles}
+                    onViewEffectivePermissions={data.onViewEffectivePermissions}
+                  />
+                </div>
+              );
+            }}
+          </FixedSizeList>
+        ) : (
+          // R22 D5 / AC-P6：行数 ≤ 50 回退普通 map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试）。
+          <table>
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>邮箱</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((u) => (
+                <UserRow
+                  key={u.id}
+                  user={u}
+                  onToggleStatus={handleToggleStatus}
+                  onToggleRoles={handleToggleRoles}
+                  onViewEffectivePermissions={handleViewEffectivePermissions}
+                />
+              ))}
+            </tbody>
+          </table>
+        )
       )}
 
       {!loading && items.length > 0 && (

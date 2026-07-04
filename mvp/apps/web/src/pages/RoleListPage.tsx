@@ -18,12 +18,16 @@
 // [约束] D12：解除父角色按钮仅 parent_role_id !== null 时显示（根角色不显示，AC-F5-2）。
 // [约束] D18：行操作按钮 aria-label 域特定（"设置父角色"/"解除父角色"/"查看继承链"，禁止通用"button"）。
 // [约束] §5.3：useState 管理本地状态，无 Redux/Zustand。
-import { useEffect, useState } from 'react';
+// [约束] R22 D2/D3/D4 / AC-P1/P2/P3/P5/P6：RoleRow 提取 + memo + useCallback 稳定回调 + useMemo 缓存
+//          filteredItems + react-window FixedSizeList 行数 > 50 启用虚拟列表，≤ 50 回退普通 map。
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FixedSizeList } from 'react-window';
 import type { ErrorCode, ListRoleQuery, Role, RoleListResult } from '@admin/contracts';
 import { deleteRole, listRoles } from '../api/roles.js';
 import { unsetRoleParent } from '../api/role-inheritance.js';
 import { ApiError } from '../api/client.js';
 import { ErrorBanner } from '../components/ErrorBanner.js';
+import { RoleRow } from '../components/RoleRow.js';
 import { RoleForm } from '../components/RoleForm.js';
 import { SetParentModal } from '../components/SetParentModal.js';
 import { InheritanceChainPanel } from '../components/InheritanceChainPanel.js';
@@ -31,6 +35,14 @@ import { mapErrorToMessage } from '../lib/errorMapping.js';
 
 /** 前端固定 pageSize=20（D21，不依赖 schema 缺省 10）。 */
 const PAGE_SIZE = 20;
+
+/** R22 D5：react-window 启用阈值（行数 > 50 启用 FixedSizeList，≤ 50 回退普通 map）。 */
+const VIRTUAL_LIST_THRESHOLD = 50;
+
+/** R22 D2：react-window FixedSizeList 配置常量（itemSize=48px / height=600 / overscanCount=5）。 */
+const VIRTUAL_ITEM_SIZE = 48;
+const VIRTUAL_LIST_HEIGHT = 600;
+const VIRTUAL_OVERSCAN_COUNT = 5;
 
 /** ApiError → 中文提示。contracts 码走 mapErrorToMessage，LocalErrorCode 兜底通用提示。 */
 function resolveErrorMessage(err: ApiError): string {
@@ -79,7 +91,7 @@ export function RoleListPage(): JSX.Element {
   }, [page]);
 
   /** 重新加载当前页（删除成功/ROLE_NOT_FOUND 后调用）。 */
-  function refresh(): void {
+  const refresh = useCallback((): void => {
     const query: ListRoleQuery = { page, pageSize: PAGE_SIZE };
     setLoading(true);
     listRoles(query)
@@ -92,14 +104,15 @@ export function RoleListPage(): JSX.Element {
         setError(err instanceof ApiError ? resolveErrorMessage(err) : '操作失败，请稍后重试');
       })
       .finally(() => setLoading(false));
-  }
+  }, [page]);
 
   /**
    * 删除角色（versioned，传 role.version 作 If-Match，AC-F3-1/7）。
    * 成功 → 刷新列表；ROLE_NOT_FOUND → 提示 + 刷新（角色已不存在，AC-F3-6）；
    * 其他错误 → 提示（VERSION_CONFLICT/ROLE_BUILTIN_FORBIDDEN/ROLE_IN_USE，AC-F3-3/4/5）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（依赖 refresh → refresh 内部用 page）。
    */
-  async function handleDelete(role: Role): Promise<void> {
+  const handleDelete = useCallback(async (role: Role): Promise<void> => {
     setError(null);
     try {
       await deleteRole(role.id, role.version);
@@ -115,15 +128,16 @@ export function RoleListPage(): JSX.Element {
         setError('操作失败，请稍后重试');
       }
     }
-  }
+  }, [refresh]);
 
   /**
    * 解除父角色（R16，versioned DELETE，AC-F5-1~4）。
    * D5 / AC-S1-2：类型派生操作（roleId/version 从 RoleListPage 列表项派生，TS 类型保证，不调 safeParse）。
    * 成功 → 刷新列表；ROLE_NOT_FOUND → 提示 + 刷新（角色已不存在，AC-F5-4）；
    * 其他错误 → 提示（VERSION_CONFLICT 由 client 自动重试，仍失败抛出 → "数据已被修改"，AC-F5-3）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（依赖 refresh）。
    */
-  async function handleUnsetParent(role: Role): Promise<void> {
+  const handleUnsetParent = useCallback(async (role: Role): Promise<void> => {
     setError(null);
     try {
       await unsetRoleParent(role.id, role.version);
@@ -139,13 +153,30 @@ export function RoleListPage(): JSX.Element {
         setError('操作失败，请稍后重试');
       }
     }
-  }
+  }, [refresh]);
 
   /** SetParentModal 设置成功回调 → 关闭弹窗 + 刷新列表（AC-F4-1，D7 versioned）。 */
-  function handleSetParentUpdated(): void {
+  const handleSetParentUpdated = useCallback((): void => {
     setSetParentTarget(null);
     refresh();
-  }
+  }, [refresh]);
+
+  /**
+   * R16：行内"设置父角色"按钮点击 → 弹 SetParentModal（设置目标 role）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（无外部依赖，空数组）。
+   */
+  const handleSetParent = useCallback((role: Role): void => {
+    setSetParentTarget(role);
+  }, []);
+
+  /**
+   * R16：行内"查看继承链"按钮点击 → 弹 InheritanceChainPanel（设置目标 roleId，AC-F6-1）。
+   * D5 / AC-S1-2：类型派生操作（roleId 从 Role.id 派生，TS 类型保证，不调 safeParse）。
+   * R22 D3 / AC-P2：useCallback 稳定引用（无外部依赖，空数组）。
+   */
+  const handleViewChain = useCallback((roleId: string): void => {
+    setChainViewRoleId(roleId);
+  }, []);
 
   function handleNextPage(): void {
     if (page < totalPages) setPage(page + 1);
@@ -162,10 +193,21 @@ export function RoleListPage(): JSX.Element {
   }
 
   // D11 [advisory] 客户端名称搜索：仅过滤当前页 items（非服务端筛选，不发新请求）
-  const keyword = searchKeyword.trim().toLowerCase();
-  const filteredItems = keyword
-    ? items.filter((r) => r.name.toLowerCase().includes(keyword))
-    : items;
+  // R22 D4 / AC-P3：useMemo 缓存 filteredItems（依赖 [items, searchKeyword]，避免每次 render 重算）。
+  const filteredItems = useMemo(() => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    return keyword ? items.filter((r) => r.name.toLowerCase().includes(keyword)) : items;
+  }, [items, searchKeyword]);
+
+  // R22 D2 / AC-P5：行数 > 50 启用 react-window FixedSizeList（仅渲染可视区行）；
+  // 行数 ≤ 50 回退普通 items.map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试，AC-P6）。
+  const useVirtualList = filteredItems.length > VIRTUAL_LIST_THRESHOLD;
+
+  // R22 D2 / AC-P2：useMemo 缓存 itemData + 回调对象（避免父组件每次 render 重建 → 子行 memo 失效，react-window FAQ 最常见坑）。
+  const itemData = useMemo<{ items: Role[]; onDelete: (role: Role) => void; onSetParent: (role: Role) => void; onUnsetParent: (role: Role) => void; onViewChain: (roleId: string) => void }>(
+    () => ({ items: filteredItems, onDelete: handleDelete, onSetParent: handleSetParent, onUnsetParent: handleUnsetParent, onViewChain: handleViewChain }),
+    [filteredItems, handleDelete, handleSetParent, handleUnsetParent, handleViewChain],
+  );
 
   return (
     <div>
@@ -192,59 +234,60 @@ export function RoleListPage(): JSX.Element {
       {!loading && filteredItems.length === 0 && <div>暂无角色</div>}
 
       {!loading && filteredItems.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>描述</th>
-              <th>类型</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((role) => (
-              <tr key={role.id}>
-                <td>{role.name}</td>
-                <td>{role.description}</td>
-                <td>{role.is_builtin ? '内置' : '自定义'}</td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(role)}
-                    disabled={role.is_builtin}
-                  >
-                    删除
-                  </button>
-                  {/* R16 行操作扩展（D18 域特定：按钮文本即域特定 accessible name，无需 aria-label 冗余）。
-                      [advisory] 移除 aria-label：原 aria-label="设置父角色" 与 SetParentModal select aria-label="父角色"
-                      同含"父角色"导致 findByLabelText(/父角色/i) 多匹配（RoleListPage 行按钮 + SetParentModal select）。
-                      按钮文本"设置父角色"/"解除父角色"/"查看继承链"提供等价 accessible name，getByRole('button',{name:...}) 不受影响。 */}
-                  <button
-                    type="button"
-                    onClick={() => setSetParentTarget(role)}
-                  >
-                    设置父角色
-                  </button>
-                  {/* D12：解除父角色按钮仅 parent_role_id !== null 时显示（根角色不显示，AC-F5-2） */}
-                  {role.parent_role_id !== null && (
-                    <button
-                      type="button"
-                      onClick={() => handleUnsetParent(role)}
-                    >
-                      解除父角色
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setChainViewRoleId(role.id)}
-                  >
-                    查看继承链
-                  </button>
-                </td>
+        useVirtualList ? (
+          // R22 D2 / AC-P5：react-window FixedSizeList 虚拟列表（行数 > 50）。
+          // [约束] children render prop 须透传 style 到根 DOM（react-window 通过绝对定位实现虚拟化）。
+          <FixedSizeList
+            height={VIRTUAL_LIST_HEIGHT}
+            itemCount={filteredItems.length}
+            itemSize={VIRTUAL_ITEM_SIZE}
+            width="100%"
+            itemData={itemData}
+            overscanCount={VIRTUAL_OVERSCAN_COUNT}
+          >
+            {({ index, style, data }) => {
+              // noUncheckedIndexedAccess：数组下标访问返回 T | undefined，须守卫。
+              // react-window 保证 0 ≤ index < itemCount，分支为死代码但满足类型安全。
+              const role = data.items[index];
+              if (!role) return null;
+              return (
+                <div style={style}>
+                  <RoleRow
+                    role={role}
+                    onDelete={data.onDelete}
+                    onSetParent={data.onSetParent}
+                    onUnsetParent={data.onUnsetParent}
+                    onViewChain={data.onViewChain}
+                  />
+                </div>
+              );
+            }}
+          </FixedSizeList>
+        ) : (
+          // R22 D5 / AC-P6：行数 ≤ 50 回退普通 map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试）。
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>描述</th>
+                <th>类型</th>
+                <th>操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredItems.map((role) => (
+                <RoleRow
+                  key={role.id}
+                  role={role}
+                  onDelete={handleDelete}
+                  onSetParent={handleSetParent}
+                  onUnsetParent={handleUnsetParent}
+                  onViewChain={handleViewChain}
+                />
+              ))}
+            </tbody>
+          </table>
+        )
       )}
 
       {!loading && filteredItems.length > 0 && (

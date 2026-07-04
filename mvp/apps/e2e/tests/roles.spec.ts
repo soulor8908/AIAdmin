@@ -12,6 +12,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import {
   ADMIN_EMAIL,
   apiCreateRole,
+  apiGetRole,
   loginAsAdmin,
   uniqueSuffix,
 } from './_helpers.js';
@@ -98,6 +99,11 @@ test.describe('角色操作流', () => {
 
     // 父子关系建立：modal 关闭（设置成功）。
     await expect(parentSelect).not.toBeVisible({ timeout: 15000 });
+
+    // AC-S20-1 强断言增强（参照 AC-E11 模式）：API GET /v1/roles/:id 复核 parent_role_id 已更新为 roleA.id。
+    // 弱断言（modal 关闭）已被强断言（DB 中 parent_id 持久化）替代，闭合 R20 Review Suggestion #1。
+    const updated = await apiGetRole(request, token, roleB.id);
+    expect(updated.parent_role_id).toBe(roleA.id);
   });
 
   test('AC-E8 · 删除角色 → 列表中消失', async ({

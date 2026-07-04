@@ -85,7 +85,7 @@ export default defineConfig({
 
 `/workspace/mvp/package.json`（根）scripts：`typecheck` / `test=vitest run` / `test:watch` / `lint:rules` / `gen:snapshot` / `gen:retro-index` / `start=tsx apps/api/src/server.ts` / `dev=tsx watch apps/api/src/server.ts`。
 
-devDependencies 已含 `@playwright/test: ^1.61.1`（PRD §1.2 确认，本轮无需新增依赖）。
+devDependencies 本轮新增 `@playwright/test: ^1.61.1`（R22 AC-S20-3 修正：原文称"已在 devDependencies"为误差，实际 R20 才加入 devDeps）。
 
 **改动点**：scripts 追加 `"test:e2e": "playwright test"`（D5 / §3.6）。`npm test` 不变（仍 `vitest run`，AC-S5-4 全绿验证）。
 
@@ -107,9 +107,9 @@ function seedDemoData() {
 // ... PORT = Number(process.env.PORT ?? 3000); server.listen(PORT, ...) ...
 ```
 
-**关键发现（load-bearing，须 impl-writer 关注）**：PRD AC-E1 字面写凭据 `admin@example.com / Admin@123`（大写 A、含 `@`），但 server.ts `seedDemoData()` 实际 seed 凭据为 `admin@example.com / admin123`（小写 a、无 `@`，L133 注释明示"seed admin 凭据 admin@example.com/admin123"）。
+**关键发现（load-bearing，须 impl-writer 关注）**：PRD AC-E1 已修正为凭据 `admin@example.com / admin123`（R22 AC-S20-4 消除 stale Admin@123：原 PRD 字面 `Admin@123` 是 BA 文档笔误，PRD 已被 R20 编排者修正为 `admin123`）。server.ts `seedDemoData()` 实际 seed 凭据为 `admin@example.com / admin123`（小写 a、无 `@`，L133 注释明示"seed admin 凭据 admin@example.com/admin123"），与 PRD 已对齐。
 
-**E2E 登录凭据采用实际 seed 值 `admin@example.com / admin123`**（与 server.ts 一致，否则 AC-E1 登录必失败）。PRD AC-E1 的 `Admin@123` 视为 BA 文档笔误，按 AI-003 advisory 偏离反向同步——本 Spec §7.2 声明此差异并标注"PRD 凭据字面待 BA 反向同步修正为 admin123"，impl-writer / test-writer 据本 Spec 用 `admin123` 落地 E2E 登录步骤。
+**E2E 登录凭据采用实际 seed 值 `admin@example.com / admin123`**（与 server.ts 一致，否则 AC-E1 登录必失败）。PRD AC-E1 已修正为 `admin123`（R22 AC-S20-4 消除 stale Admin@123：原 BA 文档笔误 `Admin@123` 已由 R20 编排者修正）。
 
 `createDb`（apps/api/src/db/connection.ts L26-38）读 `process.env.DB_PATH ?? './data/admin.db'`，故 webServer env 注入 `DB_PATH=<os.tmpdir()>/e2e-<pid>-<ts>.db` 即可使 server 启动时建临时库 + seed（D3 / §3.3）。
 
@@ -427,17 +427,32 @@ E2E 登录用凭据 `admin@example.com / admin123`（server.ts L133 seedDemoData
 
 ### 7.2 `[advisory]` PRD AC-E1 凭据字面差异（Admin@123 → admin123）反向同步
 
-**差异**：PRD AC-E1 字面写凭据 `admin@example.com / Admin@123`（大写 A、含 `@`），但 server.ts seedDemoData 实际 seed 凭据为 `admin@example.com / admin123`（小写 a、无 `@`，L133 注释明示）。
+**差异（R22 AC-S20-4 消除 stale Admin@123）**：原 PRD AC-E1 字面写凭据 `admin@example.com / Admin@123`（大写 A、含 `@`），与 server.ts seedDemoData 实际 seed 凭据 `admin@example.com / admin123`（小写 a、无 `@`，L133 注释明示）不符。**PRD 已被 R20 编排者修正为 `admin123`**，本 Spec §2.4 stale 描述已在 R22 同步消除。
 
-**本 Spec 处置**：E2E 登录采用实际 seed 凭据 `admin@example.com / admin123`（与 server.ts 一致，否则 AC-E1 登录必失败）。PRD AC-E1 的 `Admin@123` 视为 BA 文档笔误。
+**本 Spec 处置**：E2E 登录采用实际 seed 凭据 `admin@example.com / admin123`（与 server.ts 一致，否则 AC-E1 登录必失败）。原 PRD AC-E1 的 `Admin@123` 视为 BA 文档笔误，已由 R20 编排者修正。
 
-**反向同步目标**：PRD AC-E1 凭据字面待 BA 反向同步修正为 `admin@example.com / admin123`（与 server.ts seed 一致）。本 Spec 不直接改 PRD（Tech Lead 边界），仅声明差异 + impl-writer / test-writer 据本 Spec 用 `admin123` 落地。
+**反向同步目标（已闭合）**：PRD AC-E1 凭据字面已由 R20 编排者反向同步修正为 `admin@example.com / admin123`（与 server.ts seed 一致）。R22 AC-S20-4 同步消除本 Spec §2.4 / §7.2 中残留的 stale Admin@123 描述。
 
-**`[advisory]` 理由**：E2E 测试须用真实 seed 凭据才能登录成功，PRD 字面凭据是笔误非设计意图。允许偏离 PRD 字面（用 admin123），须 BA 反向同步修正 PRD。
+**`[advisory]` 理由**：E2E 测试须用真实 seed 凭据才能登录成功，原 PRD 字面凭据是笔误非设计意图。允许偏离原 PRD 字面（用 admin123），BA 已反向同步修正 PRD（R20 闭合）。
 
 ### 7.3 `[advisory]` .gitignore /data/ 追加（D8 同源）
 
 **反向同步目标**：本 Spec §3.8 / D8 决定 .gitignore 追加 `/data/`（闭合 dev DB 未忽略隐患），属工程基础设施收尾，非 PRD AC 验收范围。impl-writer 据 §3.8 落地，若实际产物路径不同（如 storageState 路径）可调整，须在本 Spec §3.8 反向同步。
+
+### 7.4 `[advisory]` retries=0 偏离 spec §3.2 字面 `retries: CI ? 2 : 0`（R22 AC-S20-2 反向同步）
+
+**差异**：本 Spec §3.2 / D6 设计写 `retries: CI ? 2 : 0`（CI 重试 2 次容错 flaky，本地 0 次快速反馈），但 R20 impl-writer 实际落地 `playwright.config.ts` 取 `retries: 0`（本地与 CI 一致，均不重试，task spec 要求简化）。R22 闭合 R20 Review Suggestion #2：本节正式反向同步声明此偏离。
+
+**偏离理由**：
+1. **task spec 要求简化**：R20 task spec 明确要求 `retries: 0`（非 `CI ? 2 : 0`），impl-writer 据此落地。
+2. **加性安全场景（更严格非更弱）**：retries=0 比 retries=2 更严格——失败立即暴露，不靠重试掩盖 flaky 测试。CI 重试 2 次可能掩盖真实问题（如时序竞争 / 状态污染），retries=0 强制开发者直面 flaky 根因。
+3. **E2E 14 passed 证明可行**：R20 14 E2E 全部 passed（无重试），证明当前测试稳定性足够支持 retries=0，无 flaky 风险。
+4. **CI 时间优化**：retries=2 最坏情况 CI 时间翻 3 倍（首次 + 2 次重试），retries=0 控制 CI 时间，加快反馈。
+5. **future 升级路径**：若未来出现 flaky 测试无法立即修复，可临时升级为 `retries: CI ? 1 : 0`（CI 容错 1 次），但本轮不取。
+
+**`[advisory]` 范围**：retries 数字属实现细节（spec §3.2 字面 `CI ? 2 : 0` 非 PRD AC 验收范围，PRD 未定 retries 具体值）。允许偏离 spec 字面（取 retries=0），须在本节反向同步声明理由 + 合规论证。
+
+**合规论证**：retries=0 是加性安全场景（更严格非更弱），E2E 14 passed 证明可行，task spec 明确要求简化。R22 AC-S20-2 闭合 R20 Review Suggestion #2，本节同步声明 retries=0 偏离 spec §3.2 字面的理由。
 
 ## 8. Out of scope
 

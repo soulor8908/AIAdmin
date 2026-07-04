@@ -26,6 +26,8 @@
 // [约束] D3：User 类型经 z.infer 派生。
 // [约束] D24：UserListPage 行操作扩展（新增"角色"按钮触发 UserRolesPanel）。
 // [约束] D18/R16：有效权限按钮 aria-label 域特定（"有效权限"，禁止通用"button"）。
+// [约束] R22 D1 / AC-P1：UserRow 包裹 React.memo（浅比较 props 跳过 re-render，须配合父组件 useCallback 稳定回调引用）。
+import { memo } from 'react';
 import type { User } from '@admin/contracts';
 
 /** UserRow 组件 props。
@@ -45,8 +47,9 @@ function statusLabel(status: User['status']): string {
   return status === 'active' ? '启用' : '禁用';
 }
 
-/** UserRow 组件。状态切换按钮文案统一"禁用"，另含"角色"按钮触发 onToggleRoles（D24）+ "有效权限"按钮（R16）。 */
-export function UserRow(props: UserRowProps): JSX.Element {
+/** UserRow 组件。状态切换按钮文案统一"禁用"，另含"角色"按钮触发 onToggleRoles（D24）+ "有效权限"按钮（R16）。
+ * R22 D1 / AC-P1：包裹 React.memo（浅比较 props 跳过 re-render，须配合父组件 useCallback 稳定回调引用 + useMemo 缓存 itemData）。 */
+export const UserRow = memo(function UserRow(props: UserRowProps): JSX.Element {
   const { user, onToggleStatus, onToggleRoles, onViewEffectivePermissions } = props;
   return (
     <tr>
@@ -70,4 +73,4 @@ export function UserRow(props: UserRowProps): JSX.Element {
       </td>
     </tr>
   );
-}
+});

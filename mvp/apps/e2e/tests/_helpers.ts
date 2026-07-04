@@ -89,6 +89,29 @@ export async function apiCreateRole(
 }
 
 /**
+ * 用 API GET 单个角色（强断言复核用，AC-S20-1 / AC-E7 复核 parent_role_id 已更新）。
+ * 参照 AC-E11 模式：调岗成功后用 API GET 复核 department_id 已更新，本函数对齐模式复核 parent_role_id。
+ * 签名设计对齐 apiCreateRole/apiCreateUser/apiCreateDepartment（request + token + 业务参数）。
+ * @param request Playwright APIRequestContext
+ * @param token admin token（Authorization: Bearer）
+ * @param roleId 角色 id
+ * @returns Role 详情（含 parent_role_id, version 等）
+ */
+export async function apiGetRole(
+  request: APIRequestContext,
+  token: string,
+  roleId: string,
+): Promise<{ id: string; name: string; parent_role_id: string | null; version: number }> {
+  const res = await request.get(`${API_BASE}/v1/roles/${roleId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok()) {
+    throw new Error(`apiGetRole failed: ${res.status()} ${await res.text()}`);
+  }
+  return (await res.json()) as { id: string; name: string; parent_role_id: string | null; version: number };
+}
+
+/**
  * 用 API 创建部门（setup 用）。
  * @param request Playwright APIRequestContext
  * @param token admin token
