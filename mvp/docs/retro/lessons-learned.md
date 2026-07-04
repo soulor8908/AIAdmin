@@ -36,14 +36,14 @@
 | S-18 | R16 | errorMapping AUDIT_LOG_NOT_F… | 已固化 |
 | S-19 | R16 | SetParentModal UUID_RE 重复定义（… | 已固化 |
 | S-20 | R16 | AC-F4-3 user-event v14.6.1 d… | 规则层 |
+| S-21 | R18 | impl-writer [约束] 偏离反向同步滞后到收尾… | Spec 模板层 |
+| S-22 | R18 | test-writer 确定性 token setup … | 提示词层 |
 完整明细见对应 roundN-retro.md §5 反推优化。
 
 ## 仍在生效的 S 级改进项（不阻断，待未来轮次处理）
 | ID | 来源 | 内容 | 状态 |
 |---|---|---|---|
 | S-5 | R12 | setupFiles 全局副作用（test-writer… | 遗留/advisory |
-| S-21 | R18 | impl-writer [约束] 偏离反向同步滞后到收尾… | 待固化 |
-| S-22 | R18 | test-writer 确定性 token setup … | 待固化 |
 完整明细见最新 retro §6 剩余改进项。
 
 ## 关键教训一句话版
@@ -65,3 +65,4 @@
 - R16: 跑通；后端能力前端化闭合；errorMapping 全码映射收尾；事务性+继承链+聚合三形态；impl-writ
 - R17: 跑通；6 项遗留 S 级教训全部固化；S-6 探针验证（lint:rules exit 0 + AI-005 扩
 - R18: 跑通；D10/D19 两项历史 advisory 偏离消除 + D9 重分类 [约束] 闭合；24 AC 全对齐
+- R19: 跑通；R18 S-21/S-22 两项教训全部固化至提示词层（impl-writer + Reviewer 双向

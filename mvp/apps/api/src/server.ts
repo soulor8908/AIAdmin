@@ -620,9 +620,35 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
 }
 
+// ============ CORS（跨域，前后端分离架构）============
+// [advisory] 跨域：前后端分离，前端 dev server（默认 5173）跨域调用后端 API（默认 3000）。
+//   开发环境允许所有来源（*），生产须通过 CORS_ORIGIN 环境变量收紧为前端实际域名。
+//   本文件为运行时入口（工程脚手架），按 AI-003 advisory 偏离机制显式声明。
+//   Allow-Headers 含 If-Match/If-None-Match（D7 versioned + cacheable 协商缓存），
+//   Expose-Headers 含 ETag（cacheable 端点返回 ETag 响应头，前端未来读 ETag 协商缓存需要）。
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? '*';
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': CORS_ORIGIN,
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,If-Match,If-None-Match',
+  'Access-Control-Expose-Headers': 'ETag',
+  'Access-Control-Max-Age': '86400',
+  Vary: 'Origin',
+};
+
 // ============ 启动 ============
 const PORT = Number(process.env.PORT ?? 3000);
 const server = createServer((req, res) => {
+  // CORS：所有响应注入 CORS 头（含错误响应，preflight 与实际请求同源同策略）
+  for (const [k, v] of Object.entries(CORS_HEADERS)) {
+    res.setHeader(k, v);
+  }
+  // CORS preflight：OPTIONS 直接返回 204（不进入 handle 路由匹配）
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'Content-Length': 0 });
+    res.end();
+    return;
+  }
   handle(req, res).catch((e) => {
     console.error('[server] fatal', e);
     // TECH-USER-DETAIL-WIRE-001 D1：wire 字段名 error→code（AC-W6 fatal 分支）。
