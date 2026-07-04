@@ -50,6 +50,7 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - 识别不确定项时，对影响数据实体/验收/边界的标记 [BLOCKING]，说明阻塞哪个下游阶段
 - 估算测试影响面时，区分 spawn-based vs in-process 两种 embedding 模式（R11 S-3）
 - 涉及安全域时，显式标注 PII/敏感字段清单，明确哪些不可出现在响应输出
+- 凭据/seed 值核验——PRD 写凭据/seed 值（如登录凭据、初始 admin 密码、seed 数据）前，须 grep server.ts seedDemoData 确认实际 seed 值，不可凭主观假设（如 R20 BA 写 Admin@123 但 server.ts 实际 seed 是 admin123，编排者修正 PRD + Tech-Spec 声明 advisory）。（R20 S-23 衍生，BA 凭据核验延伸）
 - PRD status 仅当无 BLOCKING 未决项时才设为 decided
 上下文文件清单（最小上下文包，R14 上下文效率优化）：
 1. 先读 docs/context-snapshot.md（架构概览 + 规则速查 + 路由表 + Contracts 速查 + 关键约定速查）
@@ -94,6 +95,8 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 - §10 组合副作用预判须含"简单常量跨组件复用边界"项——简单常量（如 UUID_RE 正则）≤3 处使用场景且常量简单可 [advisory] 沿用重复定义；≥4 处使用场景或常量复杂须提取 lib/ 共享。（R16 S-19）
 - §10 组合副作用预判须含"测试工具限制 workaround"项——如 user-event v14.6.1 selectOptions 会自动过滤 disabled option，测试"前端 disabled 防误选"场景须绕过 user-event 直接测 option.disabled + 测服务端兜底文案。（R16 S-20）
 - §10 组合副作用预判须含"[约束] 偏离反向同步闭环性"项——Tech Lead 须预判本轮可能触发的 [约束] 项偏离（如 test-writer 在单测扩展 AC 范围超出 Tech-Spec 描述、impl-writer 依据 AI-002 添加更严格实现），在 §10 显式提示 impl-writer 须在交付阶段同步反向编辑 Tech-Spec 对应章节（非仅代码注释声明），加性安全场景（更严格非更弱）可降级为 Suggestion 但仍须本轮收尾闭合。（R18 S-21）
+- §10 组合副作用预判须含"第三方库版本 API 差异"项——Tech Lead 须预判本轮可能触发的第三方库版本 API 差异（如 vitest 1.6.1 vs 2.x test.projects 不支持须改 workspace 文件模式 / react-window 不同版本 API 签名差异），在 §10 显式标注"已核验 package.json 固定版本 + 该版本 API 可用"或"版本差异须 impl-writer 注意（含替代方案）"。（R20 S-23）
+- 第三方库版本 API 核验——Tech-Spec 写涉及第三方库 API 字段（如 vitest test.projects、playwright webServer、react-window FixedSizeList）时，须先核验 package.json 固定版本 + 该版本 API 文档（不可凭高版本文档假设 API 可用）。impl 阶段发现 spec 写了不存在 API 字段（被静默忽略）属 Tech Lead 版本核验缺口，须按 §10.6 "impl-writer 须修复（非静默跳过）"落地并反向同步 Spec。（R20 S-23）
 - 实现性描述显式标 [约束](默认禁止偏离) / [advisory](允许偏离须反向同步)
 - 不改 service/repo/domain/router/server.ts（impl-writer 阶段）
 - Tech-Spec §3.2 表单校验复用清单须区分"自由文本表单"（须 safeParse，因有自由输入）与"类型派生操作"（TS 类型保证，schema 校验冗余，可不调或保留 defensive safeParse）。AC 措辞须精确限定为"自由文本输入表单"。（R12 S-1）

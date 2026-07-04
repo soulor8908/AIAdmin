@@ -39,6 +39,7 @@
 | S-20 | R16 | AC-F4-3 user-event v14.6.1 d… | 规则层 |
 | S-21 | R18 | impl-writer [约束] 偏离反向同步滞后到收尾… | Spec 模板层 |
 | S-22 | R18 | test-writer 确定性 token setup … | 提示词层 |
+| S-23 | R21 | 第三方库版本 API 核验缺口（R20 来源 / R21… | Spec 模板层 |
 完整明细见对应 roundN-retro.md §5 反推优化。
 
 ## 仍在生效的 S 级改进项（不阻断，待未来轮次处理）
@@ -68,3 +69,4 @@ _（无）_
 - R18: 跑通；D10/D19 两项历史 advisory 偏离消除 + D9 重分类 [约束] 闭合；24 AC 全对齐
 - R19: 跑通；R18 S-21/S-22 两项教训全部固化至提示词层（impl-writer + Reviewer 双向
 - R20: 跑通；19 AC 全对齐（AC-E1~E14 共 14 条 E2E + AC-S5-1~S5-5 共 5 条 S
+- R21: 跑通；R20 S-23 一项教训全部固化至提示词层（Tech Lead + BA）+ Spec 模板层（§10 
