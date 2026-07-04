@@ -3,6 +3,7 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App.js';
+import './index.css'; // R23 D7：全局 :focus-visible 焦点可见规则（AC-A11y-6）
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

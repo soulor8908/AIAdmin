@@ -12,11 +12,12 @@
 // [约束] D5：类型派生操作（roleId 从列表派生，TS 类型保证，不调 safeParse，R13 S-1）。
 // [约束] D10：链形文本（" → " 分隔，Q6 决策①，不做树形/图表，D23）。
 // [约束] D18：aria-label="继承链"；D21/R15 S-14：label 跨组件唯一。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ErrorCode, Role } from '@admin/contracts';
 import { getInheritanceChain } from '../api/role-inheritance.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** InheritanceChainPanel 组件 props（roleId 从 RoleListPage 行派生，onClose 可选）。 */
 export type InheritanceChainPanelProps = {
@@ -38,6 +39,10 @@ export function InheritanceChainPanel(props: InheritanceChainPanelProps): JSX.El
   const [chain, setChain] = useState<Role[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  // InheritanceChainPanel 无 form submit，submitting=false；onClose optional，hook 内 if (!onClose) return 守卫
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +66,7 @@ export function InheritanceChainPanel(props: InheritanceChainPanelProps): JSX.El
   }, [roleId]);
 
   return (
-    <div>
+    <div role="dialog" aria-modal="true" aria-label="继承链" ref={rootRef}>
       <h2>继承链</h2>
       {onClose && (
         <button type="button" onClick={onClose}>

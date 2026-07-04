@@ -13,7 +13,7 @@
 // [约束] D5：类型派生操作（userId 从 UserListPage 行派生，TS 类型保证，不调 safeParse，R13 S-1）。
 // [约束] D11：权限码中文化映射 SSOT 派生 [...permissionCodeSchema.options]（AI-005，禁止硬编码，AC-F7-3）。
 // [约束] D18：aria-label="有效权限"；D21/R15 S-14：label 跨组件唯一（"有效权限" 消歧于 UserListPage"角色"按钮）。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   permissionCodeSchema,
   type ErrorCode,
@@ -22,6 +22,7 @@ import {
 import { getEffectivePermissions } from '../api/role-inheritance.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** EffectivePermissionsPanel 组件 props（userId 从 UserListPage 行派生，onClose 可选）。 */
 export type EffectivePermissionsPanelProps = {
@@ -66,6 +67,10 @@ export function EffectivePermissionsPanel(props: EffectivePermissionsPanelProps)
   const [permissions, setPermissions] = useState<PermissionCode[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  // EffectivePermissionsPanel 无 form submit，submitting=false；onClose optional，hook 内 if (!onClose) return 守卫
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +94,7 @@ export function EffectivePermissionsPanel(props: EffectivePermissionsPanelProps)
   }, [userId]);
 
   return (
-    <div>
+    <div role="dialog" aria-modal="true" aria-label="有效权限" ref={rootRef}>
       <h2>权限列表</h2>
       {onClose && (
         <button type="button" onClick={onClose}>

@@ -1,0 +1,11 @@
+/* apps/web/src/index.css —— 全局样式（TECH-ACCESSIBILITY-DEEPENING-001 D7） */
+/*
+ * R23 AC-A11y-6：焦点可见（WCAG 2.4.7 Focus Visible 强制要求）。
+ * :focus-visible 比 :focus 更精确（鼠标点击不显示 outline 仅键盘 Tab 显示，UX 更好，现代浏览器支持）。
+ * 焦点指示器颜色 #2563eb（蓝色），对比度 ≥ 3:1（满足 WCAG 2.4.7 焦点指示器对比度 + 1.4.11 非文本 UI 组件）。
+ * 既有零 CSS（§2.3 核验）→ 浏览器默认 :focus outline 保留作基线，本规则强化焦点指示器可见性。
+ */
+:focus-visible {
+  outline: 2px solid #2563eb; /* 蓝色焦点指示器，对比度 ≥ 3:1 */
+  outline-offset: 2px;
+}

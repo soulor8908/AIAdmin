@@ -9,7 +9,7 @@
 // [约束] D3：CreateDepartmentInput 经 z.infer 派生。
 // [约束] D4：自由文本表单须 safeParse（R13 S-1）。
 // [约束] D13：parentId 可选（缺省/null=根部门），提交 body 据 parentId 含/不含 parent_id。
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   createDepartmentInputSchema,
@@ -19,6 +19,7 @@ import {
 import { createDepartment } from '../api/departments.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** DeptForm 组件 props。parentId 缺省/null=根部门；提供=子部门。 */
 export type DeptFormProps = {
@@ -42,6 +43,9 @@ export function DeptForm(props: DeptFormProps): JSX.Element {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting });
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -80,7 +84,8 @@ export function DeptForm(props: DeptFormProps): JSX.Element {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div role="dialog" aria-modal="true" aria-label="创建部门" ref={rootRef}>
+      <form onSubmit={handleSubmit}>
       <h2>创建部门</h2>
       <label>
         名称
@@ -99,7 +104,8 @@ export function DeptForm(props: DeptFormProps): JSX.Element {
       <button type="button" onClick={onClose} disabled={submitting}>
         取消
       </button>
-    </form>
+      </form>
+    </div>
   );
 }
 

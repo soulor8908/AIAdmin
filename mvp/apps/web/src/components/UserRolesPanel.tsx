@@ -11,11 +11,12 @@
 // [约束] D3：UserRole/Role 经 z.infer 派生。
 // [约束] D5 [R13 S-1]：类型派生操作（roleId 从全量角色列表派生，TS 类型保证 uuid），不调 safeParse（AC-ARCH-4）。
 //            toggle 直接派发 assignRole/removeRole，无中间 schema 校验层。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ErrorCode, Role, UserRole } from '@admin/contracts';
 import { assignRole, listRoles, listUserRoles, removeRole } from '../api/roles.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** UserRolesPanel 组件 props。userId：目标用户；onClose：关闭面板。 */
 export type UserRolesPanelProps = {
@@ -38,6 +39,10 @@ export function UserRolesPanel(props: UserRolesPanelProps): JSX.Element {
   const [assignedRoleIds, setAssignedRoleIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  // UserRolesPanel 无 form submit，submitting=false（ESC 不阻止）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +91,7 @@ export function UserRolesPanel(props: UserRolesPanelProps): JSX.Element {
   }
 
   return (
-    <div>
+    <div role="dialog" aria-modal="true" aria-label="用户角色分配" ref={rootRef}>
       <h2>用户角色分配</h2>
       <button type="button" onClick={onClose}>
         关闭

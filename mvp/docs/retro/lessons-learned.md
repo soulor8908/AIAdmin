@@ -71,3 +71,4 @@ _（无）_
 - R20: 跑通；19 AC 全对齐（AC-E1~E14 共 14 条 E2E + AC-S5-1~S5-5 共 5 条 S
 - R21: 跑通；R20 S-23 一项教训全部固化至提示词层（Tech Lead + BA）+ Spec 模板层（§10 
 - R22: 跑通；15 AC 全对齐（AC-P1~P10 性能 10 条 + AC-S20-1~S20-5 R20 Sugg
+- R23: 跑通；11 AC 全对齐（AC-A11y-1~11）；三件套全绿（typecheck exit 0 / lint

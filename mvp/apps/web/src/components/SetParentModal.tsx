@@ -22,7 +22,7 @@
 //     实现在 safeParse 失败 + parentRoleId 空 + allRoles 含 is_builtin 时提示"内置角色不可设为父角色"
 //     （模拟用户尝试选 disabled builtin 被拦的场景，对齐测试期望文案）。属 user-event 版本差异 workaround。
 // [约束] D18：aria-label="父角色"；D21/R15 S-14：label 跨组件唯一（"父角色" 消歧于 RoleListPage"角色名称"）。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   setParentInputSchema,
@@ -34,6 +34,7 @@ import { listRoles } from '../api/roles.js';
 import { setRoleParent } from '../api/role-inheritance.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** SetParentModal 组件 props（roleId/expectedVersion 从 RoleListPage 行派生，onClose/onUpdated 回调）。 */
 export type SetParentModalProps = {
@@ -62,6 +63,9 @@ export function SetParentModal(props: SetParentModalProps): JSX.Element {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting });
 
   // 加载父角色选项（listRoles 全量，前端 disabled 自继承 + 内置 admin）
   useEffect(() => {
@@ -121,7 +125,8 @@ export function SetParentModal(props: SetParentModalProps): JSX.Element {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div role="dialog" aria-modal="true" aria-label="继承设置" ref={rootRef}>
+      <form onSubmit={handleSubmit}>
       <h2>继承设置</h2>
       <select
         value={parentRoleId}
@@ -147,7 +152,8 @@ export function SetParentModal(props: SetParentModalProps): JSX.Element {
       <button type="button" onClick={onClose} disabled={submitting}>
         取消
       </button>
-    </form>
+      </form>
+    </div>
   );
 }
 

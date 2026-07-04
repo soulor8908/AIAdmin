@@ -12,11 +12,12 @@
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/users + components/ErrorBanner）。
 // [约束] D4：表单校验复用 createUserInputSchema.safeParse（禁止手写正则副本）。
 // [约束] D12：password 提交后从 state 清除（PII 安全）。
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createUserInputSchema, type CreateUserInput } from '@admin/contracts';
 import { createUser } from '../api/users.js';
 import { ApiError } from '../api/client.js';
 import { ErrorBanner } from './ErrorBanner.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** CreateUserModal 组件 props。onCreated：创建成功后回调（刷新列表）；onClose：关闭弹窗。 */
 export type CreateUserModalProps = {
@@ -65,6 +66,9 @@ export function CreateUserModal(props: CreateUserModalProps): JSX.Element {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting });
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -100,7 +104,7 @@ export function CreateUserModal(props: CreateUserModalProps): JSX.Element {
   }
 
   return (
-    <div role="dialog" aria-label="创建用户">
+    <div role="dialog" aria-modal="true" aria-label="创建用户" ref={rootRef}>
       {/* noValidate：禁用 HTML5 原生校验，全部经 createUserInputSchema.safeParse（D4，禁止手写正则副本） */}
       <form onSubmit={handleSubmit} noValidate>
         <label>

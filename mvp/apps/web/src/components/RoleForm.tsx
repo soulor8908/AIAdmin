@@ -8,7 +8,7 @@
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（api/roles + api/client + lib/errorMapping）。
 // [约束] D3：CreateRoleInput/PermissionCode 经 z.infer 派生。
 // [约束] D4：自由文本表单须 safeParse（R13 S-1）。permission_codes 多选为类型派生，整体 safeParse 覆盖（§3.2 混合表单）。
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   createRoleInputSchema,
@@ -20,6 +20,7 @@ import {
 import { createRole } from '../api/roles.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** RoleForm 组件 props。onClose：关闭弹窗；onCreated：创建成功后刷新列表。 */
 export type RoleFormProps = {
@@ -47,6 +48,9 @@ export function RoleForm(props: RoleFormProps): JSX.Element {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting });
 
   function handlePermChange(e: React.ChangeEvent<HTMLSelectElement>): void {
     const selected = Array.from(e.target.selectedOptions).map((o) => o.value as PermissionCode);
@@ -87,7 +91,8 @@ export function RoleForm(props: RoleFormProps): JSX.Element {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div role="dialog" aria-modal="true" aria-label="创建角色" ref={rootRef}>
+      <form onSubmit={handleSubmit}>
       <h2>创建角色</h2>
       <label>
         名称
@@ -131,7 +136,8 @@ export function RoleForm(props: RoleFormProps): JSX.Element {
       <button type="button" onClick={onClose} disabled={submitting}>
         取消
       </button>
-    </form>
+      </form>
+    </div>
   );
 }
 

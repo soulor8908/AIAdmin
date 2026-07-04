@@ -11,7 +11,7 @@
 // [约束] D4：自由文本表单须 safeParse（R13 S-1）。
 // [约束] D15：recipient_id 自由文本 UUID 输入 + 存在性延后至 send（N4）。
 // [约束] D21：aria-label 域特定（R14 S-10 教训）。
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   createNotificationInputSchema,
@@ -24,6 +24,7 @@ import {
 import { createNotification, updateNotification } from '../api/notifications.js';
 import { ApiError } from '../api/client.js';
 import { mapErrorToMessage } from '../lib/errorMapping.js';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /** NotificationForm 组件 props。 */
 export type NotificationFormProps = {
@@ -55,6 +56,9 @@ export function NotificationForm(props: NotificationFormProps): JSX.Element {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // R23：modal 焦点陷阱 + ESC 关闭 + focus restore（D1/D5/D6，AC-A11y-2/3/4）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef, { onClose, enabled: true, submitting });
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -131,7 +135,8 @@ export function NotificationForm(props: NotificationFormProps): JSX.Element {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div role="dialog" aria-modal="true" aria-label={isEdit ? '编辑通知' : '创建通知'} ref={rootRef}>
+      <form onSubmit={handleSubmit}>
       <h2>{isEdit ? '编辑通知' : '创建通知'}</h2>
       <label>
         通知标题
@@ -167,7 +172,8 @@ export function NotificationForm(props: NotificationFormProps): JSX.Element {
       <button type="button" onClick={onClose} disabled={submitting}>
         取消
       </button>
-    </form>
+      </form>
+    </div>
   );
 }
 
