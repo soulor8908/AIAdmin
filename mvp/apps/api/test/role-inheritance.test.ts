@@ -80,6 +80,7 @@ function setup(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new RoleService(repo, userRepo);
   const router = createRoleRouter(service);
@@ -442,7 +443,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     const A = makeRole(1, { permission_codes: ['role:read', 'user:read'] });
     repo.insert(A);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({
       id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS,
@@ -459,7 +460,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(B);
     await service.setParent(B.id, A.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: B.id, assigned_at: SEED_TS });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
@@ -477,7 +478,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     await service.setParent(B.id, A.id, 0, adminCtx);
     await service.setParent(C.id, B.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: C.id, assigned_at: SEED_TS });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
@@ -494,7 +495,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(E);
     await service.setParent(D.id, E.id, 0, adminCtx);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS });
     repo.insertUserRole({ id: 'ur2', user_id: 'u2', role_id: D.id, assigned_at: SEED_TS });
@@ -509,7 +510,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
     repo.insert(A);
     repo.insert(B);
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: B.id, assigned_at: SEED_TS });
     // 变更前：B 无父角色，有效权限=[role:write]
@@ -530,7 +531,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
   it('AC-F3-7 用户无角色 → 返回空数组', async () => {
     const { userRepo, service } = setup();
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     const perms = await service.getEffectivePermissions('u2', adminCtx);
     expect(perms).toEqual([]);
@@ -539,7 +540,7 @@ describe('F3 · getEffectivePermissions（读时聚合）', () => {
   it('非 admin 调用 → FORBIDDEN', async () => {
     const { userRepo, service } = setup();
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     await expect(service.getEffectivePermissions('u2', userCtx)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -604,7 +605,7 @@ describe('F4 · delete 守卫 B8 ROLE_HAS_CHILDREN', () => {
     await service.setParent(B.id, A.id, 0, adminCtx);
     // 给 A 分配用户（触发 B7 条件），但 B8 应先拦截
     userRepo.insert({
-      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: 'u2', name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     repo.insertUserRole({ id: 'ur1', user_id: 'u2', role_id: A.id, assigned_at: SEED_TS });
     await expect(service.delete(A.id, 0, adminCtx)).rejects.toMatchObject({ code: 'ROLE_HAS_CHILDREN' });

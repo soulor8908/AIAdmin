@@ -22,27 +22,37 @@ import type {
   RoleListResult,
   UserRole,
 } from '@admin/contracts';
-import { request } from './client.js';
+import { invalidateEtagCache, request } from './client.js';
 
-/** GET /v1/roles —— 角色列表（分页，无服务端筛选，B2）。调用方传 pageSize=20（D21）。 */
+/**
+ * GET /v1/roles —— 角色列表（分页，无服务端筛选，B2）。调用方传 pageSize=20（D21）。
+ * TECH-ETAG-CACHING-001 D7：cacheable=true，200 响应 ETag 被缓存，下次同路径注入 If-None-Match 协商缓存。
+ */
 export function listRoles(query: ListRoleQuery): Promise<RoleListResult> {
-  return request<RoleListResult>('GET', '/v1/roles', { query });
+  return request<RoleListResult>('GET', '/v1/roles', { query, cacheable: true });
 }
 
-/** POST /v1/roles —— 创建角色（body={name, description, permission_codes}，B1 无 code 字段）。 */
+/** POST /v1/roles —— 创建角色（body={name, description, permission_codes}，B1 无 code 字段）。成功后失效列表 ETag 缓存。 */
 export function createRole(input: CreateRoleInput): Promise<Role> {
-  return request<Role>('POST', '/v1/roles', { body: input });
+  return request<Role>('POST', '/v1/roles', { body: input }).then((r) => {
+    invalidateEtagCache('GET', '/v1/roles');
+    return r;
+  });
 }
 
 /**
  * DELETE /v1/roles/:id —— 删除角色（versioned=true，If-Match=expectedVersion，AC-F3-7）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9，用 409 body current_version，不 GET 单条）。
  * 409 ROLE_IN_USE 不重试（非 VERSION_CONFLICT），抛 ApiError 由调用方处理。
+ * 成功后失效列表 ETag 缓存（TECH-ETAG-CACHING-001 D7）。
  */
 export function deleteRole(id: string, expectedVersion: number): Promise<void> {
   return request<void>('DELETE', `/v1/roles/${id}`, {
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/roles');
+    return r;
   });
 }
 
@@ -51,12 +61,18 @@ export function listUserRoles(userId: string): Promise<UserRole[]> {
   return request<UserRole[]>('GET', `/v1/users/${userId}/roles`);
 }
 
-/** POST /v1/users/:userId/roles/:roleId —— 分配角色（path 参数，body 空）。 */
+/** POST /v1/users/:userId/roles/:roleId —— 分配角色（path 参数，body 空）。成功后失效角色列表 ETag 缓存。 */
 export function assignRole(userId: string, roleId: string): Promise<void> {
-  return request<void>('POST', `/v1/users/${userId}/roles/${roleId}`);
+  return request<void>('POST', `/v1/users/${userId}/roles/${roleId}`).then((r) => {
+    invalidateEtagCache('GET', '/v1/roles');
+    return r;
+  });
 }
 
-/** DELETE /v1/users/:userId/roles/:roleId —— 移除角色（path 参数，body 空）。 */
+/** DELETE /v1/users/:userId/roles/:roleId —— 移除角色（path 参数，body 空）。成功后失效角色列表 ETag 缓存。 */
 export function removeRole(userId: string, roleId: string): Promise<void> {
-  return request<void>('DELETE', `/v1/users/${userId}/roles/${roleId}`);
+  return request<void>('DELETE', `/v1/users/${userId}/roles/${roleId}`).then((r) => {
+    invalidateEtagCache('GET', '/v1/roles');
+    return r;
+  });
 }

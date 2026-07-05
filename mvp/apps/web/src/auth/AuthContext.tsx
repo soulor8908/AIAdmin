@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LoginInput } from '@admin/contracts';
 import { login as apiLogin, logout as apiLogout } from '../api/auth.js';
+import { clearEtagCache } from '../api/client.js';
 import { clearToken, getToken, setToken } from './tokenStore.js';
 
 /** AuthContext 值类型。测试通过 AuthContext.Provider 注入此值（见 route-guard / login-page / user-list-page 测）。 */
@@ -52,7 +53,9 @@ export function AuthProvider(props: { children: ReactNode }): JSX.Element {
       await apiLogout();
     } finally {
       // 即便后端 logout 失败（如网络错），仍清本地态并跳登录，避免卡在已失效登录态
+      // TECH-ETAG-CACHING-001 D7：清 ETag 缓存避免跨账号缓存污染（账号 A 缓存的列表 ETag 被账号 B 复用）
       clearToken();
+      clearEtagCache();
       setState({ isAuthenticated: false, token: null });
       navigate('/login', { replace: true });
     }

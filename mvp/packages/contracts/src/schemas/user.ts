@@ -151,16 +151,11 @@ export const errorCodeSchema = z.enum([
   'DEPT_NAME_DUPLICATE',
   // 待删部门仍有子部门（F3 删除：Q2 禁止级联，须先清空子部门）
   'DEPT_HAS_CHILDREN',
-  // [advisory] 预留码——删除部门时其下仍有归属用户。本期 Q1 决策为「解除归属」（置空而非阻断），
-  //            故删除路径不抛此码；保留以备未来「严格删除模式」或显式阻断场景，service 层本期不抛出。
-  'DEPT_HAS_USERS',
   // 创建子部门将超过最大层级 3（F1：Q4 层级上限，按父部门链路推导）
   'DEPT_DEPTH_EXCEEDED',
   // ===== 操作日志域（TECH-AUDIT-001）=====
-  // [advisory] 预留码——单条日志详情查询（GET /v1/audit-logs/{id}）时 id 合法但无记录。
-  //            本期仅提供列表查询 GET /v1/audit-logs（F2），列表空结果返回 items=[] 而非 404，故本期 service 层不抛此码；
-  //            保留以备未来单条详情端点，append-only 无 update/delete 错误码（日志不可修改/删除，F4）。
-  'AUDIT_LOG_NOT_FOUND',
+  // 注：本期仅提供列表查询 GET /v1/audit-logs（F2），列表空结果返回 items=[] 而非 404，
+  //     故无 AUDIT_LOG_NOT_FOUND 错误码（YAGNI：本期不抛的码不声明，未来加单条详情端点时再加）。
   // ===== 报表域（TECH-AUDIT-ENHANCEMENT-001）=====
   // group_by 缺失或空数组（D10：schema 层 optional/max(4) 不拒绝空，service 层语义判定 → 400）
   'REPORT_GROUP_BY_REQUIRED',

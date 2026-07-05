@@ -64,6 +64,7 @@ function setupUser(): { repo: UserRepository; service: UserService } {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   repo.insert({
     id: TARGET_ID,
@@ -73,6 +74,7 @@ function setupUser(): { repo: UserRepository; service: UserService } {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new UserService(repo);
   return { repo, service };
@@ -95,6 +97,7 @@ function setupRole(): { repo: RoleRepository; userRepo: UserRepository; service:
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new RoleService(repo, userRepo);
   return { repo, userRepo, service };
@@ -121,6 +124,7 @@ function setupNotification(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: RECIPIENT_ID,
@@ -130,6 +134,7 @@ function setupNotification(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const userService = new UserService(userRepo);
   const repo = new NotificationRepository(db);

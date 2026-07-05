@@ -23,22 +23,32 @@ import type {
   NotificationListResult,
   UpdateNotificationInput,
 } from '@admin/contracts';
-import { request } from './client.js';
+import { invalidateEtagCache, request } from './client.js';
 
-/** GET /v1/notifications —— 通知列表（分页 + status 筛选）。调用方显式传 pageSize=20（D16，抹平契约缺省 10，N1）。 */
+/**
+ * GET /v1/notifications —— 通知列表（分页 + status 筛选）。调用方显式传 pageSize=20（D16，抹平契约缺省 10，N1）。
+ * TECH-ETAG-CACHING-001 D7：cacheable=true，200 响应 ETag 被缓存，下次同路径注入 If-None-Match 协商缓存。
+ */
 export function listNotifications(query: ListNotificationQuery): Promise<NotificationListResult> {
-  return request<NotificationListResult>('GET', '/v1/notifications', { query });
+  return request<NotificationListResult>('GET', '/v1/notifications', {
+    query,
+    cacheable: true,
+  });
 }
 
-/** POST /v1/notifications —— 创建通知（body={title, content, recipient_id}）。 */
+/** POST /v1/notifications —— 创建通知（body={title, content, recipient_id}）。成功后失效列表 ETag 缓存。 */
 export function createNotification(input: CreateNotificationInput): Promise<Notification> {
-  return request<Notification>('POST', '/v1/notifications', { body: input });
+  return request<Notification>('POST', '/v1/notifications', { body: input }).then((r) => {
+    invalidateEtagCache('GET', '/v1/notifications');
+    return r;
+  });
 }
 
 /**
  * PATCH /v1/notifications/:id —— 编辑通知（仅 draft 态，versioned=true，If-Match=expectedVersion，N3）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9，用 409 body current_version，不 GET 单条）。
  * sent/read 态编辑由后端状态守卫拒绝抛 NOTIFICATION_INVALID_TRANSITION（N2，不重试，仅 VERSION_CONFLICT 重试）。
+ * 成功后失效列表 ETag 缓存（TECH-ETAG-CACHING-001 D7）。
  */
 export function updateNotification(
   id: string,
@@ -49,6 +59,9 @@ export function updateNotification(
     body: input,
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/notifications');
+    return r;
   });
 }
 
@@ -56,11 +69,15 @@ export function updateNotification(
  * POST /v1/notifications/:id/send —— 发送通知（draft→sent，versioned=true，If-Match，N3）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9）。
  * send 时收件人不存在抛 NOTIFICATION_RECIPIENT_NOT_FOUND、收件人 disabled 抛 NOTIFICATION_RECIPIENT_DISABLED（N4 延后校验）。
+ * 成功后失效列表 ETag 缓存（status 变更影响列表查询，TECH-ETAG-CACHING-001 D7）。
  */
 export function sendNotification(id: string, expectedVersion: number): Promise<Notification> {
   return request<Notification>('POST', `/v1/notifications/${id}/send`, {
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/notifications');
+    return r;
   });
 }
 
@@ -68,11 +85,15 @@ export function sendNotification(id: string, expectedVersion: number): Promise<N
  * POST /v1/notifications/:id/read —— 标记已读（sent→read，versioned=true，If-Match，N3）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9）。
  * draft 态拒绝 / read 态拒绝重复标记抛 NOTIFICATION_INVALID_TRANSITION（N3，不重试）。
+ * 成功后失效列表 ETag 缓存（status 变更影响列表查询，TECH-ETAG-CACHING-001 D7）。
  */
 export function markNotificationRead(id: string, expectedVersion: number): Promise<Notification> {
   return request<Notification>('POST', `/v1/notifications/${id}/read`, {
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/notifications');
+    return r;
   });
 }
 
@@ -80,10 +101,14 @@ export function markNotificationRead(id: string, expectedVersion: number): Promi
  * DELETE /v1/notifications/:id —— 删除通知（仅 draft，versioned=true，If-Match，N3）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9，DELETE 重试幂等——409 表示未删除，重试语义安全）。
  * sent/read 态拒绝抛 NOTIFICATION_INVALID_TRANSITION（N3，append-only 不可删，不重试）。
+ * 成功后失效列表 ETag 缓存（TECH-ETAG-CACHING-001 D7）。
  */
 export function deleteNotification(id: string, expectedVersion: number): Promise<void> {
   return request<void>('DELETE', `/v1/notifications/${id}`, {
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/notifications');
+    return r;
   });
 }

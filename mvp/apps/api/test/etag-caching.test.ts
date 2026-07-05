@@ -97,6 +97,7 @@ function setupUser(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   repo.insert({
     id: TARGET_ID,
@@ -106,6 +107,7 @@ function setupUser(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new UserService(repo);
   const router = createUserRouter(service);
@@ -131,6 +133,7 @@ function setupUserWithVersions(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   repo.insert({
     id: TARGET_ID,
@@ -140,6 +143,7 @@ function setupUserWithVersions(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 5,
+    password_hash: 'test-hash-placeholder',
   });
   repo.insert({
     id: RECIPIENT_ID,
@@ -149,6 +153,7 @@ function setupUserWithVersions(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 2,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new UserService(repo);
   const router = createUserRouter(service);
@@ -174,6 +179,7 @@ function setupRole(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new RoleService(repo, userRepo);
   const router = createRoleRouter(service);
@@ -199,6 +205,7 @@ function setupNotification(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: RECIPIENT_ID,
@@ -208,6 +215,7 @@ function setupNotification(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const userService = new UserService(userRepo);
   const repo = new NotificationRepository(db);
@@ -236,6 +244,7 @@ function setupNotificationWithVersions(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: RECIPIENT_ID,
@@ -245,6 +254,7 @@ function setupNotificationWithVersions(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const userService = new UserService(userRepo);
   const repo = new NotificationRepository(db);

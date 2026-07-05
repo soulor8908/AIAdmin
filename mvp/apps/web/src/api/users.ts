@@ -17,22 +17,30 @@ import type {
   User,
   UserListResult,
 } from '@admin/contracts';
-import { request } from './client.js';
+import { invalidateEtagCache, request } from './client.js';
 
-/** GET /v1/users —— 列表查询（分页 + 状态筛选）。调用方传 pageSize=20（D14）。 */
+/**
+ * GET /v1/users —— 列表查询（分页 + 状态筛选）。调用方传 pageSize=20（D14）。
+ * TECH-ETAG-CACHING-001 D7：cacheable=true，200 响应 ETag 被缓存，下次同路径注入 If-None-Match 协商缓存。
+ */
 export function listUsers(query: ListUserQuery): Promise<UserListResult> {
-  return request<UserListResult>('GET', '/v1/users', { query });
+  return request<UserListResult>('GET', '/v1/users', { query, cacheable: true });
 }
 
 /** POST /v1/users —— 创建用户（password 可选，空则不传，对齐 createUserInputSchema optional）。 */
 export function createUser(input: CreateUserInput): Promise<User> {
-  return request<User>('POST', '/v1/users', { body: input });
+  // 写操作成功后失效列表 ETag 缓存，确保下次 GET 拉最新数据（TECH-ETAG-CACHING-001 D7）
+  return request<User>('POST', '/v1/users', { body: input }).then((r) => {
+    invalidateEtagCache('GET', '/v1/users');
+    return r;
+  });
 }
 
 /**
  * PATCH /v1/users/:id/status —— 状态更新（启用/禁用）。
  * versioned=true + expectedVersion → client 注入 If-Match header（D7，AC-F4-7）。
  * 409 VERSION_CONFLICT 由 client 自动重试 1 次（D9，用 409 body current_version）。
+ * 成功后失效列表 ETag 缓存（status 变更影响列表查询结果，TECH-ETAG-CACHING-001 D7）。
  */
 export function updateUserStatus(
   id: string,
@@ -43,5 +51,8 @@ export function updateUserStatus(
     body: input,
     versioned: true,
     expectedVersion,
+  }).then((r) => {
+    invalidateEtagCache('GET', '/v1/users');
+    return r;
   });
 }

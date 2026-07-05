@@ -57,8 +57,9 @@ export class AuthService {
       throw new AppError('INVALID_CREDENTIALS', '邮箱或密码错误');
     }
     // B3: 密码校验（scrypt 比对）
-    const storedHash = user.password_hash ?? '';
-    if (!storedHash || !verifyPassword(input.password, storedHash)) {
+    // UserEntity.password_hash 必填（DB schema NOT NULL + contracts 1:1），无需 ?? '' 兜底。
+    const storedHash = user.password_hash;
+    if (!verifyPassword(input.password, storedHash)) {
       // audit login_failed（密码错；entity_id=用户 id）
       await this.recordLoginFailed(user.id);
       throw new AppError('INVALID_CREDENTIALS', '邮箱或密码错误');

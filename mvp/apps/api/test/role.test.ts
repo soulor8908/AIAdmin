@@ -63,6 +63,7 @@ function setup(): {
     email: 'admin@example.com',
     status: 'active',
     version: 0,
+    password_hash: 'test-hash-placeholder',
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -192,7 +193,7 @@ describe('单测 · repository CRUD（内存）', () => {
   it('user_roles insert/findByUser：写入后可按 user 查回列表', () => {
     // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
     const db = createTestDb();
-    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, password_hash: 'test-hash-placeholder', created_at: SEED_TS, updated_at: SEED_TS });
     const repo = new RoleRepository(db);
     const r1 = makeRole(1);
     const r2 = makeRole(2);
@@ -207,7 +208,7 @@ describe('单测 · repository CRUD（内存）', () => {
   it('user_roles existsPair/findByUserRole：检测 (user,role) 是否存在', () => {
     // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
     const db = createTestDb();
-    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, password_hash: 'test-hash-placeholder', created_at: SEED_TS, updated_at: SEED_TS });
     const repo = new RoleRepository(db);
     const r = makeRole(5);
     repo.insert(r);
@@ -221,7 +222,7 @@ describe('单测 · repository CRUD（内存）', () => {
   it('user_roles delete：按 (user,role) 删除', () => {
     // FK 约束：user_roles.user_id → users.id，须先 insert admin 用户
     const db = createTestDb();
-    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, created_at: SEED_TS, updated_at: SEED_TS });
+    new UserRepository(db).insert({ id: ADMIN_ID, name: 'admin', email: 'admin@example.com', status: 'active', version: 0, password_hash: 'test-hash-placeholder', created_at: SEED_TS, updated_at: SEED_TS });
     const repo = new RoleRepository(db);
     const r = makeRole(6);
     repo.insert(r);

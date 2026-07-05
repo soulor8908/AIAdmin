@@ -40,13 +40,14 @@ function setup(): { repo: UserRepository; service: UserService; router: ReturnTy
   return { repo, service, router };
 }
 
-function makeUser(i: number, overrides: Partial<User> = {}): User {
+function makeUser(i: number, overrides: Partial<User> = {}): User & { password_hash: string } {
   return {
     id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
     name: `user${i}`,
     email: `user${i}@example.com`,
     status: 'active',
     version: 0,
+    password_hash: 'test-hash-placeholder',
     created_at: SEED_TS,
     updated_at: SEED_TS,
     ...overrides,

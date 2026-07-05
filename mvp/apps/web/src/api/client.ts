@@ -1,10 +1,13 @@
-// apps/web/src/api/client.ts —— fetch 封装 request<T>（TECH-WEB-AUTH-USER-001 §4 核心）
+// apps/web/src/api/client.ts —— fetch 封装 request<T>（TECH-WEB-AUTH-USER-001 §4 核心 + TECH-ETAG-CACHING-001 D7 前端消费）
 //
 // 职责：
 //   - 基址：import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'（D5）
 //   - Header 注入：Bearer token（D6，除 skipAuth）、If-Match（D7，versioned + expectedVersion）
-//   - 响应处理：200→json / 204→undefined / 401 拦截（D8）/ 409 重试（D9）/ 错误体读 raw.code（D10 已消除）
+//     + If-None-Match（TECH-ETAG-CACHING-001 D7：cacheable 端点协商缓存，基于上次 ETag）
+//   - 响应处理：200→json / 204→undefined / 304→返回缓存（TECH-ETAG-CACHING-001）/ 401 拦截（D8）/ 409 重试（D9）/ 错误体读 raw.code（D10 已消除）
 //   - 网络错误兜底：fetch 抛 → ApiError code='NETWORK_ERROR'（AC-F7-3）
+//   - ETag 缓存：cacheable 端点（GET /v1/users, /v1/roles, /v1/notifications 等）的 200 响应携带 ETag，
+//     下次同路径请求注入 If-None-Match；服务端匹配则返 304，client 返回上次缓存的 body（避免重新解析）。
 //
 // [约束] ARCH-003：仅 import @admin/contracts + apps/web 内部（tokenStore），禁止 import apps/api/src/**。
 // [约束] D3：类型经 z.infer 派生自 contracts，禁止手写 TS 类型副本。
@@ -24,6 +27,13 @@ export type RequestOptions = {
   versioned?: boolean;
   expectedVersion?: number;
   skipAuth?: boolean;
+  /**
+   * 是否启用 ETag 协商缓存（TECH-ETAG-CACHING-001 D7 前端消费）。
+   * cacheable=true 时：200 响应的 ETag 被缓存，下次同方法+路径请求注入 If-None-Match；
+   * 服务端匹配返 304 → client 返回上次缓存的 body（无网络传输体，省带宽 + 解析）。
+   * 缺省 false（写操作/不可缓存端点不启用）。
+   */
+  cacheable?: boolean;
 };
 
 /** 前端本地错误码（非 contracts，兜底用）：NETWORK_ERROR（fetch 抛错）+ INTERNAL_ERROR（wire 解析失败降级）。 */
@@ -58,6 +68,21 @@ const AUTH_401_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   'TOKEN_EXPIRED',
   'TOKEN_REVOKED',
 ]);
+
+/**
+ * ETag 协商缓存存储（TECH-ETAG-CACHING-001 D7 前端消费）。
+ * key = `${method} ${path}`（不含 query；query 变化由调用方控制，同 path 不同 query 视为不同资源，
+ * 简化处理：query 变化时 ETag 不命中，服务端返 200 + 新 ETag，自动覆盖）。
+ * value = { etag, body }（上次 200 响应的 ETag + 解析后的 body，304 时直接返回缓存的 body）。
+ *
+ * 设计取舍：用模块级 Map 而非 sessionStorage —— SPA 生命周期内有效，刷新页清空（避免持久化脏缓存）。
+ * 生产级实现应考虑缓存淘汰策略（LRU）+ 大 body 内存压力，MVP 规模下 Map 足够。
+ */
+interface EtagCacheEntry {
+  etag: string;
+  body: unknown;
+}
+const etagCache = new Map<string, EtagCacheEntry>();
 
 /** 错误响应解析结果（§4.6，D10 已消除）：code 可能为 INTERNAL_ERROR（解析失败降级，D7 非 contracts 码 fallback）。 */
 type ParsedError = {
@@ -132,8 +157,8 @@ function buildUrl(
   return qs ? `${BASE_URL}${path}?${qs}` : `${BASE_URL}${path}`;
 }
 
-/** 构建请求 headers（Bearer D6 + If-Match D7 注入）。 */
-function buildHeaders(opts: RequestOptions): Record<string, string> {
+/** 构建请求 headers（Bearer D6 + If-Match D7 + If-None-Match D7 注入）。 */
+function buildHeaders(opts: RequestOptions, etagKey: string | null): Record<string, string> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -147,12 +172,20 @@ function buildHeaders(opts: RequestOptions): Record<string, string> {
   if (opts.versioned && opts.expectedVersion !== undefined) {
     headers['If-Match'] = String(opts.expectedVersion);
   }
+  // TECH-ETAG-CACHING-001 D7：cacheable 端点注入 If-None-Match（基于上次同 path 的 ETag 缓存）
+  if (opts.cacheable && etagKey !== null) {
+    const cached = etagCache.get(etagKey);
+    if (cached) {
+      headers['If-None-Match'] = cached.etag;
+    }
+  }
   return headers;
 }
 
 /**
  * 统一 fetch 封装。AC-F5-1：前端所有 HTTP 调用经此函数，不直接调 fetch（除 client 内部）。
  * 实现 §4.1~§4.6：header 注入（D6/D7）/ 401 拦截（D8）/ 409 重试（D9）/ 错误体读 raw.code（D10 已消除）。
+ * TECH-ETAG-CACHING-001 D7：cacheable 端点 304 → 返回缓存 body（协商缓存消费）。
  */
 export async function request<T>(
   method: string,
@@ -169,8 +202,10 @@ async function doRequest<T>(
   opts: RequestOptions,
   isRetry: boolean,
 ): Promise<T> {
+  // TECH-ETAG-CACHING-001 D7：ETag 缓存 key（method + path，不含 query）
+  const etagKey = opts.cacheable ? `${method} ${path}` : null;
   const url = buildUrl(path, opts.query);
-  const headers = buildHeaders(opts);
+  const headers = buildHeaders(opts, etagKey);
   const init: RequestInit = {
     method,
     headers,
@@ -188,6 +223,18 @@ async function doRequest<T>(
   // 204 → undefined（logout 场景）
   if (res.status === 204) {
     return undefined as T;
+  }
+
+  // TECH-ETAG-CACHING-001 D7：304 Not Modified → 返回上次缓存的 body（协商缓存命中）
+  // 服务端 If-None-Match 匹配时返 304（空体 + ETag header），client 直接返回上次 200 缓存的 body。
+  // 缓存丢失（理论上不会发生，因 If-None-Match 只在缓存存在时注入）→ 降级走 200 路径重新拉取。
+  if (res.status === 304 && etagKey !== null) {
+    const cached = etagCache.get(etagKey);
+    if (cached) {
+      return cached.body as T;
+    }
+    // 缓存丢失：降级抛错（不应发生，防御性处理）
+    throw new ApiError('INTERNAL_ERROR', '协商缓存命中但本地缓存丢失');
   }
 
   // 401 拦截（D8）：先解析错误体取 code（D10 已消除，直接读 raw.code），再按 code 分支
@@ -219,13 +266,36 @@ async function doRequest<T>(
     throw new ApiError(err.code, err.message, err.current_version);
   }
 
-  // 200 → res.json()
+  // 200 → res.json() + 缓存 ETag（cacheable 端点）
   if (res.status >= 200 && res.status < 300) {
-    return (await res.json()) as T;
+    const body = (await res.json()) as T;
+    // TECH-ETAG-CACHING-001 D7：缓存 200 响应的 ETag + body，供下次 If-None-Match 协商
+    if (opts.cacheable && etagKey !== null) {
+      const etag = res.headers.get('ETag');
+      if (etag) {
+        etagCache.set(etagKey, { etag, body });
+      }
+    }
+    return body;
   }
 
   // 其余 4xx/5xx → 解析错误体抛 ApiError（D10 已消除，直接读 raw.code）
   const body = await safeReadJson(res);
   const err = parseErrorResponse(body);
   throw new ApiError(err.code, err.message, err.current_version);
+}
+
+/**
+ * 清除指定路径的 ETag 缓存（TECH-ETAG-CACHING-001 D7）。
+ * 写操作成功后调用，确保下次 GET 拉取最新数据而非命中过期缓存。
+ * @param method HTTP 方法（如 'GET'）
+ * @param path API 路径（如 '/v1/users'）
+ */
+export function invalidateEtagCache(method: string, path: string): void {
+  etagCache.delete(`${method} ${path}`);
+}
+
+/** 清除所有 ETag 缓存（logout 等场景，避免跨账号缓存污染）。 */
+export function clearEtagCache(): void {
+  etagCache.clear();
 }

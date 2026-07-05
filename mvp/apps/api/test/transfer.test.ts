@@ -67,6 +67,7 @@ function seed(
     email: 'admin@example.com',
     status: 'active',
     version: 0,
+    password_hash: 'test-hash-placeholder',
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
@@ -76,6 +77,7 @@ function seed(
     email: 'alice@example.com',
     status: 'active',
     version: 0,
+    password_hash: 'test-hash-placeholder',
     department_id: FROM_DEPT_ID,
     created_at: SEED_TS,
     updated_at: SEED_TS,

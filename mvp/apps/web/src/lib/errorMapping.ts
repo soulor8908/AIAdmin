@@ -15,7 +15,6 @@ import { errorCodeSchema, type ErrorCode } from '@admin/contracts';
  * R14 扩展（D9）：追加角色/部门域码（TECH-ROLE/DEPT-001 §11 矩阵）。
  * R15 扩展（D9）：追加通知/报表域码（TECH-WEB-NOTIFICATION-REPORT-001 §11 矩阵）。
  * R16 扩展（D9）：追加 transfer/inheritance 域码（TECH-WEB-TRANSFER-INHERITANCE-001 §11 矩阵，全码映射收尾）。
- * [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）。
  * 全码映射收尾：R16 扩展后 errorCodeSchema 全集所有已知域码均映射具体中文提示，
  *   FALLBACK 仅作未来新增码兜底。
  */
@@ -62,7 +61,7 @@ const SPECIFIC_MESSAGES: Partial<Record<ErrorCode, string>> = {
   ROLE_HAS_CHILDREN: '角色仍有子角色，请先解除子角色继承',
 };
 
-/** 未映射码通用提示（全码映射收尾后仅作未来新增码兜底，[advisory] AUDIT_LOG_NOT_FOUND 沿用）。 */
+/** 未映射码通用提示（全码映射收尾后仅作未来新增码兜底）。 */
 const FALLBACK = '操作失败，请稍后重试';
 
 /**

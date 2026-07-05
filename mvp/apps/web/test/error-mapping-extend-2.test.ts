@@ -106,10 +106,6 @@ describe('errorMapping R15 扩展（通知/报表域码中文提示）', () => {
   it('R14 既有码中文提示不破坏（DEPT_NOT_FOUND → "部门不存在"）', () => {
     expect(mapErrorToMessage('DEPT_NOT_FOUND')).toBe('部门不存在');
   });
-
-  it('R14 AUDIT_LOG_NOT_FOUND 仍 FALLBACK（本期不触发，AC-F9-4 沿用 R14）', () => {
-    expect(mapErrorToMessage('AUDIT_LOG_NOT_FOUND')).toContain('操作失败');
-  });
 });
 
 // ---------- AC-F9-3 401/网络错误沿用 R12/R14 ----------

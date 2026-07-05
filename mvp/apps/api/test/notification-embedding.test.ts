@@ -94,6 +94,7 @@ function setup(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: U_VALID,
@@ -103,6 +104,7 @@ function setup(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: U_DISABLED,
@@ -112,6 +114,7 @@ function setup(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const userService = new UserService(userRepo);
   const notificationRepo = new NotificationRepository(db);
@@ -159,6 +162,7 @@ function setupThrowingAudit(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   userRepo.insert({
     id: U_VALID,
@@ -168,6 +172,7 @@ function setupThrowingAudit(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const userService = new UserService(userRepo);
   const notificationRepo = new NotificationRepository(db);

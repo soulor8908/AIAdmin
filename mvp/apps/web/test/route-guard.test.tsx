@@ -23,6 +23,20 @@ function makeAuthValue(authenticated: boolean): AuthContextValue {
   };
 }
 
+/**
+ * 全部受保护路由（AC-F8-1 7 入口路由侧落点）。
+ * AC-F8-3：未登录访问以下任一路由 → RouteGuard 跳 /login（白名单仅 /login）。
+ */
+const PROTECTED_ROUTES = [
+  '/users',
+  '/roles',
+  '/departments',
+  '/audit-logs',
+  '/notifications',
+  '/reports',
+  '/transfer',
+] as const;
+
 /** 在指定初始路径下渲染 RouteGuard 包裹的 children。 */
 function renderGuard(authenticated: boolean, initialPath: string) {
   return render(
@@ -31,6 +45,12 @@ function renderGuard(authenticated: boolean, initialPath: string) {
         <Routes>
           <Route path="/login" element={<RouteGuard><div>login-page-content</div></RouteGuard>} />
           <Route path="/users" element={<RouteGuard><div>users-page-content</div></RouteGuard>} />
+          <Route path="/roles" element={<RouteGuard><div>roles-page-content</div></RouteGuard>} />
+          <Route path="/departments" element={<RouteGuard><div>departments-page-content</div></RouteGuard>} />
+          <Route path="/audit-logs" element={<RouteGuard><div>audit-logs-page-content</div></RouteGuard>} />
+          <Route path="/notifications" element={<RouteGuard><div>notifications-page-content</div></RouteGuard>} />
+          <Route path="/reports" element={<RouteGuard><div>reports-page-content</div></RouteGuard>} />
+          <Route path="/transfer" element={<RouteGuard><div>transfer-page-content</div></RouteGuard>} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -49,6 +69,18 @@ describe('RouteGuard', () => {
     expect(screen.getByText('login-page-content')).toBeInTheDocument();
     expect(screen.queryByText('users-page-content')).not.toBeInTheDocument();
   });
+
+  // ---------- AC-F8-3 未登录访问 7 个受保护路由 → 全部跳 /login（白名单仅 /login）----------
+  it.each(PROTECTED_ROUTES)(
+    '未登录访问 %s → Navigate to /login（AC-F8-3，白名单仅 /login）',
+    (route) => {
+      renderGuard(false, route);
+      expect(screen.getByText('login-page-content')).toBeInTheDocument();
+      // 当前路由的 children 不应渲染（已跳 /login）
+      const routeContent = screen.queryByText(`${route.slice(1)}-page-content`);
+      expect(routeContent).not.toBeInTheDocument();
+    },
+  );
 
   // ---------- AC-F1-7 已登录访问 /login → 跳 /users ----------
   it('已登录访问 /login → Navigate to /users（AC-F1-7）', () => {
@@ -70,4 +102,16 @@ describe('RouteGuard', () => {
     expect(screen.getByText('login-page-content')).toBeInTheDocument();
     expect(screen.queryByText('users-page-content')).not.toBeInTheDocument();
   });
+
+  // ---------- AC-F8-3 已登录访问 7 个受保护路由 → 全部渲染 children（不跳转）----------
+  it.each(PROTECTED_ROUTES)(
+    '已登录访问 %s → 渲染 children（AC-F8-3，已登录不跳转）',
+    (route) => {
+      renderGuard(true, route);
+      const routeContent = screen.getByText(`${route.slice(1)}-page-content`);
+      expect(routeContent).toBeInTheDocument();
+      // 不应跳 /login
+      expect(screen.queryByText('login-page-content')).not.toBeInTheDocument();
+    },
+  );
 });

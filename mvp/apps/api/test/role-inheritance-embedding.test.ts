@@ -133,6 +133,7 @@ function setupShared(): {
     created_at: SEED_TS,
     updated_at: SEED_TS,
     version: 0,
+    password_hash: 'test-hash-placeholder',
   });
   const service = new RoleService(roleRepo, userRepo);
   const router = createRoleRouter(service, auditService);
@@ -357,6 +358,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
       created_at: SEED_TS,
       updated_at: SEED_TS,
       version: 0,
+      password_hash: 'test-hash-placeholder',
     });
     for (let i = 0; i < roleIds.length; i++) {
       roleRepo.insertUserRole({
@@ -444,7 +446,7 @@ describe('F3 端到端 · 计算用户有效权限码集合（读时聚合）', 
   it('AC-F3-7 §用户无角色 → 返回空数组', async () => {
     const { userRepo, service } = setupShared();
     userRepo.insert({
-      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     const perms = await service.getEffectivePermissions(USER_U1_ID, adminCtx);
     expect(perms).toEqual([]);
@@ -538,7 +540,7 @@ describe('端到端 · router 层 setParent withAudit 包装', () => {
     const A = makeRole(ROLE_A_ID, { permission_codes: ['user:read'] });
     roleRepo.insert(A);
     userRepo.insert({
-      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0,
+      id: USER_U1_ID, name: 'u', email: 'u@e.com', status: 'active', created_at: SEED_TS, updated_at: SEED_TS, version: 0, password_hash: 'test-hash-placeholder',
     });
     roleRepo.insertUserRole({ id: 'ur1', user_id: USER_U1_ID, role_id: A.id, assigned_at: SEED_TS });
     const beforeTotal = auditRepo.listAll().length;

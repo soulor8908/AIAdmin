@@ -151,6 +151,9 @@ function seedDemoData(): void {
     updated_at: now,
     // [约束] TECH-OPTIMISTIC-LOCKING-001 D8：seed 数据 version=0。
     version: 0,
+    // password_hash 必填（UserEntity 1:1 对齐 contracts + DB schema NOT NULL）；
+    // alice 为演示用户，无登录需求，用占位哈希（不可登录）。
+    password_hash: hashPassword('alice-demo-no-login'),
   });
 }
 

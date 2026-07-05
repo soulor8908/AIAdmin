@@ -70,14 +70,6 @@ describe('errorMapping R14 扩展（角色/部门/审计域码中文提示）', 
     expect(mapErrorToMessage('DEPT_DEPTH_EXCEEDED')).toBe('部门层级超过上限');
   });
 
-  // ---------- AC-F9-4 审计域码本期不触发，FALLBACK 兜底 ----------
-  it('AUDIT_LOG_NOT_FOUND → FALLBACK "操作失败" 提示（AC-F9-4，§11.3 本期不触发）', () => {
-    // 审计域只读无写，无单条详情端点，AUDIT_LOG_NOT_FOUND 本期不触发
-    // FALLBACK 兜底（D9：审计码不扩展 SPECIFIC_MESSAGES）
-    const msg = mapErrorToMessage('AUDIT_LOG_NOT_FOUND');
-    expect(msg).toContain('操作失败');
-  });
-
   // ---------- R12 既有码不破坏（D9 扩展不影响 R12 已映射码）----------
   it('R12 既有码中文提示不破坏（INVALID_CREDENTIALS → "邮箱或密码错误"）', () => {
     expect(mapErrorToMessage('INVALID_CREDENTIALS')).toBe('邮箱或密码错误');

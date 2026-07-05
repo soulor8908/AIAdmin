@@ -146,11 +146,6 @@ describe('errorMapping R16 扩展（transfer/inheritance 域码中文提示 + �
   it('R15 既有码中文提示不破坏（REPORT_TIME_RANGE_INVALID → "开始时间不能晚于结束时间"）', () => {
     expect(mapErrorToMessage('REPORT_TIME_RANGE_INVALID')).toBe('开始时间不能晚于结束时间');
   });
-
-  it('R14 AUDIT_LOG_NOT_FOUND 仍 FALLBACK（本期不触发，沿用 R14）', () => {
-    // [advisory] AUDIT_LOG_NOT_FOUND 保持 FALLBACK（前端列表查询空结果返回 items=[]，不触发该码，本期无单条详情端点）
-    expect(mapErrorToMessage('AUDIT_LOG_NOT_FOUND')).toContain('操作失败');
-  });
 });
 
 // ---------- AC-F9-3 401/网络错误沿用 R12/R14/R15 ----------

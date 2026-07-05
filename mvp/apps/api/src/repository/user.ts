@@ -139,7 +139,7 @@ export class UserRepository {
         user.created_at,
         user.updated_at,
         user.version,
-        user.password_hash ?? '',
+        user.password_hash,
       );
       return user;
     } catch (e) {

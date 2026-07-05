@@ -94,6 +94,7 @@ function setup(): {
     email: 'admin@example.com',
     status: 'active',
     version: 0,
+    password_hash: 'test-hash-placeholder',
     created_at: SEED_TS,
     updated_at: SEED_TS,
   });
