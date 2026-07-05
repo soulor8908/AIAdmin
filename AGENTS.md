@@ -5,12 +5,16 @@
 
 ## 项目定位（先读这一段）
 
-本仓库是 **spec-first AI 原生开发工作流的实验载体**，不是产品代码。两层产物：
+本仓库**已结束 spec-first 工作流实验阶段**（24 轮迭代完成，tag `v0.1.0-experimental` 归档），**正在进入生产化阶段**。
 
-1. **工作流层（真正产物）**：五角色编排 + 7 道门禁 + 规则机器化校验 + 复盘反推机制，经 24 轮迭代验证。完整定义见 [mvp/docs/workflow/spec-first-workflow.md](mvp/docs/workflow/spec-first-workflow.md)。
-2. **代码层（流程载体）**：admin 管理系统。代码本身是工作流的运行时证据，每个文件/注释/测试都应可追溯到某条 Spec 决策。
+两层产物：
 
-**关键认知**：当工作流与代码冲突时，工作流优先；当 Spec 与代码冲突时，Spec 优先（AI-001）；当规则与 Spec 冲突时，规则优先（META-001/003/004）。
+1. **工作流层（实验产物，已归档为方法论资产）**：五角色编排 + 7 道门禁 + 规则机器化校验 + 复盘反推机制，经 24 轮迭代验证。完整定义见 [mvp/docs/workflow/spec-first-workflow.md](mvp/docs/workflow/spec-first-workflow.md)。
+2. **代码层（实验载体，正在生产化改造）**：admin 管理系统。原为流程运行时证据，现需按生产化路线图（见 [mvp/docs/workflow/production-transition.md](mvp/docs/workflow/production-transition.md)）演进为生产级产品。
+
+**关键认知**（实验阶段保留）：当工作流与代码冲突时，工作流优先；当 Spec 与代码冲突时，Spec 优先（AI-001）；当规则与 Spec 冲突时，规则优先（META-001/003/004）。
+
+**生产化阶段新认知**：实验期为证明可行性而设的人为约束（零新依赖 / 角色严格禁读 / 每轮 retro 反推规则 / 手动编排门禁）已不再适用，应按 [生产化路线图](mvp/docs/workflow/production-transition.md) 演进。方法论内核（spec-first / SSOT / 类型派生 / 断言级红 / 机器化校验）保留并嵌入真实工程基座。
 
 ## 接到任务时的第一动作
 
@@ -132,9 +136,49 @@ npm test            # vitest run（1272 用例）
 | 元改进轮（无 PRD AC） | 最新 retro §6 候选清单 | 仅元资产（规则 / Spec 模板 / 提示词），走 G6.5 不走 G1-G4 |
 | 修 bug | 对应 `spec/<domain>.tech.md` + 实现文件 | 先复现测试（test-writer 角色）→ 修实现（impl-writer 角色）→ Reviewer 核对 Spec 是否需反向同步 |
 
-## 不在本仓库范围内
+## 不在本仓库范围内（实验阶段约束，生产化阶段已废止）
 
-- 生产部署（见 README "生产就绪性警告"）
+> ⚠️ 以下为实验阶段（v0.1.0-experimental）约束，**生产化阶段已废止**，按 [生产化路线图](mvp/docs/workflow/production-transition.md) 演进。
+
+实验期保留的硬约束（已不再适用）：
+- ~~生产部署（见 README "生产就绪性警告"）~~ → 生产化阶段的核心目标
+- ~~替换 `node:sqlite` 为 PostgreSQL（属未来生产化项目）~~ → 生产化阶段优先项
+- ~~引入 Express / Hapi / axios / Redux / UI 框架（违背零新依赖设计原则）~~ → 零新依赖原则已废止
+
+仍不在范围内：
 - 产品本身的 AI 能力（LLM 调用 / embedding / agent 行为）—— "AI Native" 指开发流程
-- 替换 `node:sqlite` 为 PostgreSQL（属未来生产化项目）
-- 引入 Express / Hapi / axios / Redux / UI 框架（违背零新依赖设计原则）
+
+## 生产化阶段工作指引（新增）
+
+进入生产化阶段后，工作模式调整：
+
+### 角色协作（实验期"严格禁读"已废止）
+
+| 角色 | 实验期禁读 | 生产化阶段调整 |
+|---|---|---|
+| BA | 实现代码 / 测试 / Spec / contracts | 不变（BA 仍不读代码） |
+| Tech Lead | 测试 / 实现 / Review | 可读既有实现（设计契约时需核验现状） |
+| test-writer | 实现 / PRD 非本域 / Review | 可读实现（写测试时需了解接口现状） |
+| impl-writer | PRD / Review / 前端测试（后端轮） | 可读 PRD（理解业务意图）+ 可读测试（理解断言） |
+| Reviewer | 未改动文件 / 历史 retro 明细 | 不变 |
+
+**理由**：实验期为证明 spec-first 可行性而设严格禁读；生产团队是"人 + AI 副驾"，人是 owner，AI 是助手，强制禁读变成流程税。
+
+### Retro 反推（实验期"每轮反推规则"已废止）
+
+- 实验期：每轮 retro 自动反推到 `.trae/rules/`（24 轮规则越堆越多，收敛期红利）
+- 生产化：**事件驱动**反推——出 incident / postmortem / blocker 才反推规则；常规 retro 仅记录不反推
+
+### 门禁（实验期"手动编排 7 道门禁"演进）
+
+| 门禁 | 实验期 | 生产化阶段 |
+|---|---|---|
+| G1 PRD | 编排者人工 | PR 模板 checklist 自动 |
+| G3 Spec | 编排者人工 tsc + 契约 1:1 | CI 自动（contract drift 检测） |
+| G4 测试 | 编排者实跑断言级红 | CI 自动（vitest + coverage threshold） |
+| G5 实现 | 编排者实跑三件套 | CI 自动（typecheck + lint + test + SAST） |
+| G6 Review | Reviewer subagent | 人 + 自动化 linter/SAST/依赖扫描 |
+| G6.1 修复 | 编排者重跑 | CI 重跑 |
+| G7 合入 | 编排者 | branch protection + required reviews |
+
+完整生产化路线图见 [mvp/docs/workflow/production-transition.md](mvp/docs/workflow/production-transition.md)。

@@ -3,6 +3,8 @@
 > 一个用 AI agent 编排开发流程的 spec-first 工作流实验，以 admin 系统为载体验证 24 轮迭代。
 >
 > **"AI Native" 指开发流程由 AI agent 编排**（BA→TechLead→test-writer→impl-writer→Reviewer 五角色 + 7 道门禁），**非产品本身含 AI 能力**。本仓库的真正产物是工作流，admin 系统是流程的运行时证据。
+>
+> **当前阶段**：实验已归档（tag `v0.1.0-experimental`），正在进入生产化阶段。完整生产化路线图见 [mvp/docs/workflow/production-transition.md](mvp/docs/workflow/production-transition.md)。
 
 ## 这是什么
 
@@ -102,16 +104,43 @@ PRD(BA) → Tech-Spec+契约(TechLead) → 测试先行(test-writer) → 实现(
 | PII | 审计日志查询返回 `redactedAuditLogSchema`（脱敏态），邮箱脱敏 `ab***@domain` |
 | 错误码 | `errorCodeSchema` 全局 SSOT，`errors.ts` `Record<ErrorCode, number>` 穷举 HTTP 映射，新增码须四处处同步 |
 
-## 生产就绪性警告
+## 生产化路线图
 
-⚠️ **本仓库为流程实验载体，未做生产就绪加固**。生产部署前须解决：
+⚠️ **本仓库为流程实验载体（tag `v0.1.0-experimental`），未做生产就绪加固**。完整生产化路线图见 [mvp/docs/workflow/production-transition.md](mvp/docs/workflow/production-transition.md)，核心待办按优先级：
 
-- `AUTH_SECRET` 强制环境变量注入（当前有开发默认值 `'dev-auth-secret-do-not-use-in-prod'`）
-- `CORS_ORIGIN` 收紧为前端实际域名（当前默认 `'*'`）
-- `readBody` 加 body size limit（防 DoS）
-- `tokenBlacklistRepo` 改为分布式存储（当前 SQLite 进程内，多实例失效）
-- 加速率限制 + 请求日志
-- SQLite 单文件 + 同步 API，无法横向扩展，须迁移到 PostgreSQL 等可扩展存储
+### P0（阻塞生产化，必须先做）
+
+- 替换 `node:sqlite` → PostgreSQL（repository 层异步化）
+- 引入 HTTP 框架（fastify 替代 `node:http`，零新依赖原则已废止）
+- `AUTH_SECRET` / `CORS_ORIGIN` 强制环境变量注入（当前有开发默认值）
+- `tokenBlacklistRepo` 改 Redis（当前 SQLite 进程内，多实例失效）
+- 审计日志改事务性存储（当前 best-effort 吞异常，合规风险）
+
+### P1（生产化必备）
+
+- 可观测性：pino + Prometheus + OpenTelemetry + Sentry（实验无任何可观测性）
+- CI/CD 流水线：typecheck + lint + test + contract drift + SAST + E2E + load test
+- 数据迁移工具（Prisma Migrate / Atlas，当前裸 `schema.sql` 不可接受）
+- 真 RBAC（permission 继承链 + OAuth/OIDC，当前 admin 单角色桩）
+- 限流 / 熔断 / WAF
+
+### P2/P3（增强）
+
+- 契约测试（Pact）/ 负载测试（k6）/ 混沌测试
+- API 版本化策略 / GDPR 合规 / SBOM
+- OpenAPI 自动生成 + 客户端 SDK / 错误目录 + i18n
+- 运维 Runbook / SLO / SLI / 故障演练
+
+### 实验脚手架（已废止）
+
+以下为实验期为证明可行性而设的人为约束，生产化阶段已废止：
+
+- 零新依赖原则（实验装置，非工程美德）
+- 五角色严格禁读隔离（生产变流程税，改人机协作）
+- 每轮 retro 自动反推规则（收敛期红利，生产改事件驱动反推）
+- 手动编排 7 道门禁（生产改 CI 自动化）
+- best-effort 审计吞异常（生产改事务性 outbox）
+- 模块级 Map 缓存（生产改 Redis 共享）
 
 ## 演进脉络
 
