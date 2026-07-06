@@ -20,13 +20,19 @@ export function TransferPage(_props: TransferPageProps): JSX.Element {
   const [success, setSuccess] = useState(false);
 
   return (
-    <div>
-      <h1>调岗管理</h1>
-      <TransferForm
-        onSubmitted={() => {
-          setSuccess(true);
-        }}
-      />
+    <div className="page">
+      <header className="page-header">
+        <h1 className="page-title">调岗管理</h1>
+      </header>
+      <div className="card">
+        <div className="card-body">
+          <TransferForm
+            onSubmitted={() => {
+              setSuccess(true);
+            }}
+          />
+        </div>
+      </div>
       {success && <div>调岗成功</div>}
     </div>
   );

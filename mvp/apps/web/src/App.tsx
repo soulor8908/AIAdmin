@@ -8,9 +8,10 @@
 //   - React.lazy 须用 .then(m => ({ default: m.XxxPage })) 转换 named export 为 default export（lazy 仅支持 default）
 //   - Suspense fallback 文案"加载中..."（与既有 loading 文案一致，避免新文案破坏既有测试断言）
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext.js';
 import { RouteGuard } from './auth/RouteGuard.js';
+import { AppLayout, ToastContainer } from './components/AppLayout.js';
 
 // R22 D6 / AC-P7：每页独立 chunk（React.lazy 动态 import + .then 转 default export）。
 const LoginPage = lazy(() => import('./pages/LoginPage.js').then((m) => ({ default: m.LoginPage })));
@@ -36,64 +37,27 @@ export function App() {
               </RouteGuard>
             }
           />
+          {/* 受保护路由统一经 AppLayout 包裹（Sidebar + Header + Main） */}
           <Route
-            path="/users"
             element={
               <RouteGuard>
-                <UserListPage />
+                <AppLayout>
+                  <Outlet />
+                </AppLayout>
+                <ToastContainer />
               </RouteGuard>
             }
-          />
-          <Route
-            path="/roles"
-            element={
-              <RouteGuard>
-                <RoleListPage />
-              </RouteGuard>
-            }
-          />
-          <Route
-            path="/departments"
-            element={
-              <RouteGuard>
-                <DeptTreePage />
-              </RouteGuard>
-            }
-          />
-          <Route
-            path="/audit-logs"
-            element={
-              <RouteGuard>
-                <AuditLogPage />
-              </RouteGuard>
-            }
-          />
-          {/* + R15 §7：通知/报表路由，AC-F8-1 6 入口路由侧落点 */}
-          <Route
-            path="/notifications"
-            element={
-              <RouteGuard>
-                <NotificationListPage />
-              </RouteGuard>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <RouteGuard>
-                <ReportPage />
-              </RouteGuard>
-            }
-          />
-          {/* + R16 §7：调岗路由，AC-F8-1 6→7 入口路由侧落点 */}
-          <Route
-            path="/transfer"
-            element={
-              <RouteGuard>
-                <TransferPage />
-              </RouteGuard>
-            }
-          />
+          >
+            <Route path="/users" element={<UserListPage />} />
+            <Route path="/roles" element={<RoleListPage />} />
+            <Route path="/departments" element={<DeptTreePage />} />
+            <Route path="/audit-logs" element={<AuditLogPage />} />
+            {/* + R15 §7：通知/报表路由，AC-F8-1 6 入口路由侧落点 */}
+            <Route path="/notifications" element={<NotificationListPage />} />
+            <Route path="/reports" element={<ReportPage />} />
+            {/* + R16 §7：调岗路由，AC-F8-1 6→7 入口路由侧落点 */}
+            <Route path="/transfer" element={<TransferPage />} />
+          </Route>
           <Route path="/" element={<Navigate to="/users" replace />} />
           <Route path="*" element={<Navigate to="/users" replace />} />
         </Routes>

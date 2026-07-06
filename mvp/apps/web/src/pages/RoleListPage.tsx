@@ -210,28 +210,43 @@ export function RoleListPage(): JSX.Element {
   );
 
   return (
-    <div>
-      <header>
-        <h1>角色列表</h1>
-        <button type="button" onClick={() => setShowCreateModal(true)}>
-          创建角色
-        </button>
-      </header>
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">角色列表</h1>
+        <div className="page-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            创建角色
+          </button>
+        </div>
+      </div>
 
-      <div>
-        <input
-          type="text"
-          placeholder="搜索角色名称"
-          value={searchKeyword}
-          onChange={(e) => setSearchKeyword(e.target.value)}
-        />
+      <div className="page-filters">
+        <div className="page-filter-group">
+          <label className="form-label">搜索</label>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="搜索角色名称"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+        </div>
       </div>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          <span>加载中...</span>
+        </div>
+      )}
 
-      {!loading && filteredItems.length === 0 && <div>暂无角色</div>}
+      {!loading && filteredItems.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-title">暂无角色</div>
+        </div>
+      )}
 
       {!loading && filteredItems.length > 0 && (
         useVirtualList ? (
@@ -265,43 +280,44 @@ export function RoleListPage(): JSX.Element {
           </FixedSizeList>
         ) : (
           // R22 D5 / AC-P6：行数 ≤ 50 回退普通 map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试）。
-          <table>
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>描述</th>
-                <th>类型</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((role) => (
-                <RoleRow
-                  key={role.id}
-                  role={role}
-                  onDelete={handleDelete}
-                  onSetParent={handleSetParent}
-                  onUnsetParent={handleUnsetParent}
-                  onViewChain={handleViewChain}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>描述</th>
+                  <th>类型</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredItems.map((role) => (
+                  <RoleRow
+                    key={role.id}
+                    role={role}
+                    onDelete={handleDelete}
+                    onSetParent={handleSetParent}
+                    onUnsetParent={handleUnsetParent}
+                    onViewChain={handleViewChain}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       )}
 
       {!loading && filteredItems.length > 0 && (
-        <div>
-          <span>共 {total} 条</span>
-          <span>
-            第 {page}/{totalPages} 页
-          </span>
-          <button type="button" onClick={handlePrevPage} disabled={page <= 1}>
-            上一页
-          </button>
-          <button type="button" onClick={handleNextPage} disabled={page >= totalPages}>
-            下一页
-          </button>
+        <div className="pagination">
+          <div className="pagination-info">共 {total} 条，第 {page}/{totalPages} 页</div>
+          <div className="pagination-buttons">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handlePrevPage} disabled={page <= 1}>
+              上一页
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleNextPage} disabled={page >= totalPages}>
+              下一页
+            </button>
+          </div>
         </div>
       )}
 

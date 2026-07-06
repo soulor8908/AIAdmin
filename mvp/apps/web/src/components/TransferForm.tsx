@@ -148,6 +148,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
         用户 ID
         <input
           type="text"
+          className="form-input"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
           onBlur={handleUserIdBlur}
@@ -157,6 +158,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
       <label>
         目标部门
         <select
+          className="form-select"
           value={toDepartmentId}
           onChange={(e) => setToDepartmentId(e.target.value)}
           aria-label="目标部门"
@@ -171,7 +173,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
       </label>
       <label>
         原角色
-        <select value={oldRoleId} onChange={(e) => setOldRoleId(e.target.value)} aria-label="原角色">
+        <select className="form-select" value={oldRoleId} onChange={(e) => setOldRoleId(e.target.value)} aria-label="原角色">
           <option value="">请选择</option>
           {allRoles.map((r) => (
             <option key={r.id} value={r.id}>
@@ -182,7 +184,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
       </label>
       <label>
         新角色
-        <select value={newRoleId} onChange={(e) => setNewRoleId(e.target.value)} aria-label="新角色">
+        <select className="form-select" value={newRoleId} onChange={(e) => setNewRoleId(e.target.value)} aria-label="新角色">
           <option value="">请选择</option>
           {allRoles.map((r) => (
             <option key={r.id} value={r.id}>
@@ -195,6 +197,7 @@ export function TransferForm(props: TransferFormProps): JSX.Element {
       {formError && <div role="alert">{formError}</div>}
       <button
         type="submit"
+        className="btn btn-primary"
         disabled={submitting || !isFormComplete}
         aria-label="提交调岗"
       >

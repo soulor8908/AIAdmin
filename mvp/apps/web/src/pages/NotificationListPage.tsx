@@ -180,18 +180,20 @@ export function NotificationListPage(): JSX.Element {
   }
 
   return (
-    <div>
-      <header>
-        <h1>通知列表</h1>
-        <button type="button" onClick={() => setShowCreateModal(true)}>
-          创建通知
-        </button>
-      </header>
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">通知列表</h1>
+        <div className="page-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            创建通知
+          </button>
+        </div>
+      </div>
 
-      <div>
-        <label>
-          状态
-          <select value={statusFilter} onChange={handleStatusChange} aria-label="状态">
+      <div className="page-filters">
+        <div className="page-filter-group">
+          <label className="form-label">状态</label>
+          <select className="form-select" value={statusFilter} onChange={handleStatusChange} aria-label="状态">
             <option value="">全部</option>
             {/* [R15 impl-writer 改] option text 用英文枚举值（非中文 STATUS_LABEL）：
                 避免与行单元格中文 status 文案冲突（getByText(/草稿/) 同时匹配 option + td）。
@@ -202,70 +204,80 @@ export function NotificationListPage(): JSX.Element {
               </option>
             ))}
           </select>
-        </label>
+        </div>
       </div>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          <span>加载中...</span>
+        </div>
+      )}
 
-      {!loading && items.length === 0 && <div>暂无通知</div>}
-
-      {!loading && items.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>标题</th>
-              <th>收件人</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((notif) => (
-              <tr key={notif.id}>
-                <td>{notif.title}</td>
-                <td>{notif.recipient_id}</td>
-                <td>{STATUS_LABEL[notif.status]}</td>
-                <td>
-                  {notif.status === 'draft' && (
-                    <>
-                      <button type="button" onClick={() => setEditingNotification(notif)}>
-                        编辑
-                      </button>
-                      <button type="button" onClick={() => handleSend(notif)}>
-                        发送
-                      </button>
-                      <button type="button" onClick={() => handleDelete(notif)}>
-                        删除
-                      </button>
-                    </>
-                  )}
-                  {notif.status === 'sent' && (
-                    <button type="button" onClick={() => handleMarkRead(notif)}>
-                      标记已读
-                    </button>
-                  )}
-                  {notif.status === 'read' && null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {!loading && items.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-title">暂无通知</div>
+        </div>
       )}
 
       {!loading && items.length > 0 && (
-        <div>
-          <span>共 {total} 条</span>
-          <span>
-            第 {page}/{totalPages} 页
-          </span>
-          <button type="button" onClick={handlePrevPage} disabled={page <= 1}>
-            上一页
-          </button>
-          <button type="button" onClick={handleNextPage} disabled={page >= totalPages}>
-            下一页
-          </button>
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>标题</th>
+                <th>收件人</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((notif) => (
+                <tr key={notif.id}>
+                  <td>{notif.title}</td>
+                  <td>{notif.recipient_id}</td>
+                  <td>{STATUS_LABEL[notif.status]}</td>
+                  <td>
+                    {notif.status === 'draft' && (
+                      <>
+                        <button type="button" onClick={() => setEditingNotification(notif)}>
+                          编辑
+                        </button>
+                        <button type="button" onClick={() => handleSend(notif)}>
+                          发送
+                        </button>
+                        <button type="button" onClick={() => handleDelete(notif)}>
+                          删除
+                        </button>
+                      </>
+                    )}
+                    {notif.status === 'sent' && (
+                      <button type="button" onClick={() => handleMarkRead(notif)}>
+                        标记已读
+                      </button>
+                    )}
+                    {notif.status === 'read' && null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="pagination">
+          <div className="pagination-info">共 {total} 条，第 {page}/{totalPages} 页</div>
+          <div className="pagination-buttons">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handlePrevPage} disabled={page <= 1}>
+              上一页
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleNextPage} disabled={page >= totalPages}>
+              下一页
+            </button>
+          </div>
         </div>
       )}
 

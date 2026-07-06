@@ -74,25 +74,41 @@ export function DeptNode(props: DeptNodeProps): JSX.Element {
   }
 
   return (
-    <li>
-      <div>
-        <span>{node.name}</span>
-        <button type="button" onClick={handleDelete} disabled={submitting}>
+    <li className="dept-tree-node">
+      <div className="dept-node-content">
+        <span className="dept-node-name">{node.name}</span>
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          onClick={handleDelete}
+          disabled={submitting}
+        >
           删除
         </button>
-        <button type="button" onClick={() => setShowCreateChild(true)} disabled={submitting}>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowCreateChild(true)}
+          disabled={submitting}
+        >
           添加子部门
         </button>
         <label>
           用户ID
           <input
             type="text"
+            className="form-input"
             value={assignUserId}
             onChange={(e) => setAssignUserId(e.target.value)}
             aria-label="用户ID"
           />
         </label>
-        <button type="button" onClick={handleAssign} disabled={submitting}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleAssign}
+          disabled={submitting}
+        >
           分配用户
         </button>
       </div>
@@ -105,7 +121,7 @@ export function DeptNode(props: DeptNodeProps): JSX.Element {
         />
       )}
       {node.children.length > 0 && (
-        <ul>
+        <ul className="dept-tree-children">
           {node.children.map((child) => (
             <DeptNode key={child.id} node={child} onRefresh={onRefresh} />
           ))}

@@ -109,15 +109,16 @@ export function AuditLogPage(): JSX.Element {
   }
 
   return (
-    <div>
-      <header>
-        <h1>审计日志</h1>
-      </header>
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">审计日志</h1>
+      </div>
 
-      <div>
-        <label>
-          实体类型
+      <div className="page-filters">
+        <div className="page-filter-group">
+          <label className="form-label">实体类型</label>
           <select
+            className="form-select"
             value={entityType}
             onChange={(e) => {
               setEntityType(e.target.value);
@@ -132,11 +133,12 @@ export function AuditLogPage(): JSX.Element {
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          操作者
+        </div>
+        <div className="page-filter-group">
+          <label className="form-label">操作者</label>
           <input
             type="text"
+            className="form-input"
             value={operatorId}
             onChange={(e) => {
               setOperatorId(e.target.value);
@@ -144,11 +146,12 @@ export function AuditLogPage(): JSX.Element {
             }}
             aria-label="操作者"
           />
-        </label>
-        <label>
-          开始
+        </div>
+        <div className="page-filter-group">
+          <label className="form-label">开始</label>
           <input
             type="datetime-local"
+            className="form-input"
             value={operatedFrom}
             onChange={(e) => {
               setOperatedFrom(e.target.value);
@@ -156,11 +159,12 @@ export function AuditLogPage(): JSX.Element {
             }}
             aria-label="开始"
           />
-        </label>
-        <label>
-          结束
+        </div>
+        <div className="page-filter-group">
+          <label className="form-label">结束</label>
           <input
             type="datetime-local"
+            className="form-input"
             value={operatedTo}
             onChange={(e) => {
               setOperatedTo(e.target.value);
@@ -168,56 +172,66 @@ export function AuditLogPage(): JSX.Element {
             }}
             aria-label="结束"
           />
-        </label>
+        </div>
       </div>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          <span>加载中...</span>
+        </div>
+      )}
 
-      {!loading && items.length === 0 && <div>暂无审计日志</div>}
-
-      {!loading && items.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>操作时间</th>
-              <th>操作者</th>
-              <th>实体类型</th>
-              <th>动作</th>
-              <th>变更</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((log) => (
-              <tr key={log.id}>
-                <td>{log.operated_at}</td>
-                <td>{log.operator_name}</td>
-                <td>{log.entity_type}</td>
-                <td>{log.action}</td>
-                <td>
-                  {log.after.map((f, i) => (
-                    <span key={i}>{String(f.value)}</span>
-                  ))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {!loading && items.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-title">暂无审计日志</div>
+        </div>
       )}
 
       {!loading && items.length > 0 && (
-        <div>
-          <span>共 {total} 条</span>
-          <span>
-            第 {page}/{totalPages} 页
-          </span>
-          <button type="button" onClick={handlePrevPage} disabled={page <= 1}>
-            上一页
-          </button>
-          <button type="button" onClick={handleNextPage} disabled={page >= totalPages}>
-            下一页
-          </button>
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>操作时间</th>
+                <th>操作者</th>
+                <th>实体类型</th>
+                <th>动作</th>
+                <th>变更</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((log) => (
+                <tr key={log.id}>
+                  <td>{log.operated_at}</td>
+                  <td>{log.operator_name}</td>
+                  <td>{log.entity_type}</td>
+                  <td>{log.action}</td>
+                  <td>
+                    {log.after.map((f, i) => (
+                      <span key={i}>{String(f.value)}</span>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="pagination">
+          <div className="pagination-info">共 {total} 条，第 {page}/{totalPages} 页</div>
+          <div className="pagination-buttons">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handlePrevPage} disabled={page <= 1}>
+              上一页
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleNextPage} disabled={page >= totalPages}>
+              下一页
+            </button>
+          </div>
         </div>
       )}
     </div>

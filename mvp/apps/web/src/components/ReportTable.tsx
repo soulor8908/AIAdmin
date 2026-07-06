@@ -34,29 +34,35 @@ export function ReportTable(props: ReportTableProps): JSX.Element | null {
   const { result } = props;
   if (!result) return null;
   if (result.items.length === 0) {
-    return <div>暂无统计数据</div>;
+    return (
+      <div className="empty-state">
+        <div className="empty-state-title">暂无统计数据</div>
+      </div>
+    );
   }
   const dims = result.group_by;
   return (
-    <table>
-      <thead>
-        <tr>
-          {dims.map((dim) => (
-            <th key={dim}>{DIM_LABEL[dim]}</th>
-          ))}
-          <th>计数</th>
-        </tr>
-      </thead>
-      <tbody>
-        {result.items.map((item, idx) => (
-          <tr key={idx}>
+    <div className="table-wrapper">
+      <table className="table">
+        <thead>
+          <tr>
             {dims.map((dim) => (
-              <td key={dim}>{item[dim] !== undefined ? String(item[dim]) : ''}</td>
+              <th key={dim}>{DIM_LABEL[dim]}</th>
             ))}
-            <td>{item.count}</td>
+            <th>计数</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {result.items.map((item, idx) => (
+            <tr key={idx}>
+              {dims.map((dim) => (
+                <td key={dim}>{item[dim] !== undefined ? String(item[dim]) : ''}</td>
+              ))}
+              <td>{item.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -71,26 +71,45 @@ export function DeptTreePage(): JSX.Element {
   }
 
   return (
-    <div>
-      <header>
-        <h1>部门树</h1>
-        <button type="button" onClick={() => setShowCreateRoot(true)}>
-          创建根部门
-        </button>
+    <div className="page">
+      <header className="page-header">
+        <h1 className="page-title">部门树</h1>
+        <div className="page-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setShowCreateRoot(true)}
+          >
+            创建根部门
+          </button>
+        </div>
       </header>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          加载中...
+        </div>
+      )}
 
-      {!loading && tree.length === 0 && <div>暂无部门</div>}
+      {!loading && tree.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-title">暂无部门</div>
+        </div>
+      )}
 
       {!loading && tree.length > 0 && (
-        <ul>
-          {tree.map((node) => (
-            <DeptNode key={node.id} node={node} onRefresh={refresh} />
-          ))}
-        </ul>
+        <div className="card">
+          <div className="card-body">
+            <ul className="dept-tree">
+              {tree.map((node) => (
+                <DeptNode key={node.id} node={node} onRefresh={refresh} />
+              ))}
+            </ul>
+          </div>
+        </div>
       )}
 
       {showCreateRoot && (

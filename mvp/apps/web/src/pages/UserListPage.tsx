@@ -26,7 +26,6 @@ import { FixedSizeList } from 'react-window';
 import type { ErrorCode, ListUserQuery, User, UserListResult, UserStatus } from '@admin/contracts';
 import { listUsers, updateUserStatus } from '../api/users.js';
 import { ApiError } from '../api/client.js';
-import { useAuth } from '../auth/AuthContext.js';
 import { ErrorBanner } from '../components/ErrorBanner.js';
 import { UserRow } from '../components/UserRow.js';
 import { CreateUserModal } from '../components/CreateUserModal.js';
@@ -47,7 +46,6 @@ const VIRTUAL_OVERSCAN_COUNT = 5;
 
 /** UserListPage 组件。 */
 export function UserListPage(): JSX.Element {
-  const { logout } = useAuth();
   const [items, setItems] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -178,21 +176,21 @@ export function UserListPage(): JSX.Element {
   );
 
   return (
-    <div>
-      <header>
-        <h1>用户列表</h1>
-        <button type="button" onClick={() => logout()}>
-          登出
-        </button>
-        <button type="button" onClick={() => setShowCreateModal(true)}>
-          创建用户
-        </button>
-      </header>
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">用户列表</h1>
+        <div className="page-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            创建用户
+          </button>
+        </div>
+      </div>
 
-      <div>
-        <label>
-          状态筛选
+      <div className="page-filters">
+        <div className="page-filter-group">
+          <label className="form-label">状态筛选</label>
           <select
+            className="form-select"
             value={statusFilter ?? ''}
             onChange={handleStatusFilterChange}
             aria-label="状态筛选"
@@ -201,14 +199,23 @@ export function UserListPage(): JSX.Element {
             <option value="active">已激活</option>
             <option value="disabled">已停用</option>
           </select>
-        </label>
+        </div>
       </div>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          <span>加载中...</span>
+        </div>
+      )}
 
-      {!loading && items.length === 0 && <div>暂无用户</div>}
+      {!loading && items.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-title">暂无用户</div>
+        </div>
+      )}
 
       {!loading && items.length > 0 && (
         useVirtualList ? (
@@ -241,46 +248,48 @@ export function UserListPage(): JSX.Element {
           </FixedSizeList>
         ) : (
           // R22 D5 / AC-P6：行数 ≤ 50 回退普通 map（保持既有 <table><tr><td> DOM 结构，避免破坏既有测试）。
-          <table>
-            <thead>
-              <tr>
-                <th>姓名</th>
-                <th>邮箱</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((u) => (
-                <UserRow
-                  key={u.id}
-                  user={u}
-                  onToggleStatus={handleToggleStatus}
-                  onToggleRoles={handleToggleRoles}
-                  onViewEffectivePermissions={handleViewEffectivePermissions}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>邮箱</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((u) => (
+                  <UserRow
+                    key={u.id}
+                    user={u}
+                    onToggleStatus={handleToggleStatus}
+                    onToggleRoles={handleToggleRoles}
+                    onViewEffectivePermissions={handleViewEffectivePermissions}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       )}
 
       {!loading && items.length > 0 && (
-        <div>
-          <span>共 {total} 条</span>
-          <span>
-            第 {page}/{totalPages} 页
-          </span>
-          <button type="button" onClick={handlePrevPage} disabled={page <= 1}>
-            上一页
-          </button>
-          <button
-            type="button"
-            onClick={handleNextPage}
-            disabled={page >= totalPages}
-          >
-            下一页
-          </button>
+        <div className="pagination">
+          <div className="pagination-info">共 {total} 条，第 {page}/{totalPages} 页</div>
+          <div className="pagination-buttons">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handlePrevPage} disabled={page <= 1}>
+              上一页
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleNextPage}
+              disabled={page >= totalPages}
+            >
+              下一页
+            </button>
+          </div>
         </div>
       )}
 

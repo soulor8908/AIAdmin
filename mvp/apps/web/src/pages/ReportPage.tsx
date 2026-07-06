@@ -80,40 +80,57 @@ export function ReportPage(): JSX.Element {
   const hasResult = result !== null;
 
   return (
-    <div>
-      <header>
-        <h1>操作统计报表</h1>
+    <div className="page">
+      <header className="page-header">
+        <h1 className="page-title">操作统计报表</h1>
       </header>
 
-      <ReportFilter onApply={handleApply} />
+      <div className="page-filters">
+        <ReportFilter onApply={handleApply} />
+      </div>
 
       <ErrorBanner message={error} />
 
-      {loading && <div>加载中...</div>}
+      {loading && (
+        <div className="loading-container">
+          <span className="spinner" />
+          加载中...
+        </div>
+      )}
 
       {!loading && !hasResult && (
-        <div>请选择分组维度后应用筛选</div>
+        <div className="empty-state">
+          <div className="empty-state-title">请选择分组维度后应用筛选</div>
+        </div>
       )}
 
       {!loading && hasResult && (
         <>
           <ReportTable result={result} />
           {result.items.length > 0 && (
-            <div>
-              <span>共 {total} 条</span>
-              <span>
+            <div className="pagination">
+              <span className="pagination-info">共 {total} 条</span>
+              <span className="pagination-info">
                 第 {page}/{totalPages} 页
               </span>
-              <button type="button" onClick={handlePrevPage} disabled={page <= 1}>
-                上一页
-              </button>
-              <button
-                type="button"
-                onClick={handleNextPage}
-                disabled={page >= totalPages}
-              >
-                下一页
-              </button>
+              <div className="pagination-buttons">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handlePrevPage}
+                  disabled={page <= 1}
+                >
+                  上一页
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleNextPage}
+                  disabled={page >= totalPages}
+                >
+                  下一页
+                </button>
+              </div>
             </div>
           )}
         </>

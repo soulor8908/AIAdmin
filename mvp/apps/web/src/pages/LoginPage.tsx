@@ -77,32 +77,46 @@ export function LoginPage(): JSX.Element {
 
   // noValidate：禁用 HTML5 原生校验（input type=email 非法值会阻断 submit），全部经 loginInputSchema.safeParse（D4）
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <label>
-        邮箱
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          aria-label="邮箱"
-        />
-      </label>
-      {errors.email && <span>{errors.email}</span>}
-      <label>
-        密码
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-label="密码"
-        />
-      </label>
-      {errors.password && <span>{errors.password}</span>}
-      <ErrorBanner message={submitError} />
-      <button type="submit" disabled={submitting}>
-        {submitting ? '登录中...' : '登录'}
-      </button>
-    </form>
+    <div className="login-page">
+      <div className="login-card">
+        <h1 className="login-title">AIAdmin</h1>
+        <p className="login-subtitle">登录到管理后台</p>
+        <form onSubmit={handleSubmit} noValidate className="login-form">
+          <div className="form-group">
+            <label className="form-label" htmlFor="login-email">邮箱</label>
+            <input
+              id="login-email"
+              type="email"
+              className="form-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-label="邮箱"
+              autoComplete="email"
+              disabled={submitting}
+            />
+            {errors.email && <span className="form-error">{errors.email}</span>}
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="login-password">密码</label>
+            <input
+              id="login-password"
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-label="密码"
+              autoComplete="current-password"
+              disabled={submitting}
+            />
+            {errors.password && <span className="form-error">{errors.password}</span>}
+          </div>
+          <ErrorBanner message={submitError} />
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? '登录中...' : '登录'}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
