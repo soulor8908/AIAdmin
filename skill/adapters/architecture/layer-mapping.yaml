@@ -1,0 +1,209 @@
+# adapters/architecture/layer-mapping.yaml —— 四层架构 → 各语言/框架的目录/类名映射
+# P0-3 产出：声明式描述"通用四层单向依赖"如何在不同框架落地。
+#
+# 通用层名（kernel/rules/architecture.yaml 引用）：
+#   domain / repository / service / router
+# 每个框架声明自己的"目录名 / 文件后缀 / 类名后缀 / import 风格"。
+
+frameworks:
+  fastify-ts:
+    language: typescript
+    layers:
+      domain:
+        dir: "apps/api/src/domain"
+        file_ext: ".ts"
+        # 纯函数模块，无类
+        exports: ["functions"]
+        example: |
+          // apps/api/src/domain/user.ts
+          export type UserStatus = 'active' | 'disabled';
+          export function canTransition(from: UserStatus, to: UserStatus): boolean {
+            // 状态机纯函数
+          }
+      repository:
+        dir: "apps/api/src/repository"
+        file_ext: ".ts"
+        exports: ["class *Repository"]
+        example: |
+          // apps/api/src/repository/user.ts
+          export class UserRepository {
+            constructor(private db: Database) {}
+            async findById(id: string): Promise<User | null> { /* ... */ }
+          }
+      service:
+        dir: "apps/api/src/service"
+        file_ext: ".ts"
+        exports: ["class *Service"]
+        example: |
+          // apps/api/src/service/user.ts
+          export class UserService {
+            constructor(private repo: UserRepository) {}
+            async list(query: ListUserQuery): Promise<UserListResult> {
+              requireAdmin(ctx);  // SEC-002
+              return this.repo.list(query);
+            }
+          }
+      router:
+        dir: "apps/api/src/router"
+        file_ext: ".ts"
+        exports: ["function create*Router"]
+        example: |
+          // apps/api/src/router/user.ts
+          export function createUserRouter({ service }: Dependencies) {
+            return {
+              listUsers: { input: listUserQuerySchema, auth: 'admin', handler: async (ctx, input) => service.list(input) },
+            };
+          }
+    entry_point: "apps/api/src/server.ts"
+    notes: "实验期 mvp/ 的目标实现。无装饰器，函数式风格。"
+
+  express-ts:
+    language: typescript
+    layers:
+      domain:
+        dir: "src/domain"
+        file_ext: ".ts"
+        exports: ["functions"]
+      repository:
+        dir: "src/repository"
+        file_ext: ".ts"
+        exports: ["class *Repository"]
+      service:
+        dir: "src/service"
+        file_ext: ".ts"
+        exports: ["class *Service"]
+      router:
+        dir: "src/router"
+        file_ext: ".ts"
+        exports: ["Router"]
+        example: |
+          // src/router/user.ts
+          import { Router } from 'express';
+          import { requireAdmin } from '../middleware/auth';
+          export function userRouter(service: UserService): Router {
+            const r = Router();
+            r.get('/', requireAdmin, async (req, res) => res.json(await service.list(req.query)));
+            return r;
+          }
+    entry_point: "src/app.ts"
+    notes: "Express 中间件链。auth 中间件实现 SEC-001/002。"
+
+  spring-boot:
+    language: java
+    layers:
+      domain:
+        dir: "src/main/java/<group>/<artifact>/entity"
+        file_ext: ".java"
+        exports: ["class *Entity / record *"]
+        example: |
+          // src/main/java/com/example/app/entity/User.java
+          @Entity
+          public class User {
+            @Id private UUID id;
+            private String name;
+            // ...
+          }
+      repository:
+        dir: "src/main/java/<group>/<artifact>/repository"
+        file_ext: ".java"
+        exports: ["interface *Repository extends JpaRepository"]
+        example: |
+          // src/main/java/com/example/app/repository/UserRepository.java
+          @Repository
+          public interface UserRepository extends JpaRepository<User, UUID> {
+            Optional<User> findByEmail(String email);
+          }
+      service:
+        dir: "src/main/java/<group>/<artifact>/service"
+        file_ext: ".java"
+        exports: ["@Service class *Service"]
+        example: |
+          // src/main/java/com/example/app/service/UserService.java
+          @Service
+          public class UserService {
+            private final UserRepository repo;
+            public UserService(UserRepository repo) { this.repo = repo; }
+            @PreAuthorize("hasRole('ADMIN')")  // SEC-002
+            public Page<User> list(Pageable p) { return repo.findAll(p); }
+          }
+      router:
+        dir: "src/main/java/<group>/<artifact>/controller"
+        file_ext: ".java"
+        exports: ["@RestController class *Controller"]
+        example: |
+          // src/main/java/com/example/app/controller/UserController.java
+          @RestController
+          @RequestMapping("/v1/users")
+          public class UserController {
+            private final UserService service;
+            public UserController(UserService service) { this.service = service; }
+            @GetMapping
+            public Page<User> list(@Pageable Pageable p) { return service.list(p); }  // SEC-001: @PreAuthorize
+          }
+    entry_point: "src/main/java/<group>/<artifact>/Application.java"
+    notes: "Spring 用 @PreAuthorize 注解实现 SEC-002；@RestController 默认受保护（Spring Security 全局配置）。"
+
+  fastapi:
+    language: python
+    layers:
+      domain:
+        dir: "app/models"
+        file_ext: ".py"
+        exports: ["class *Domain / Enum"]
+        example: |
+          # app/models/user.py
+          from enum import Enum
+          class UserStatus(str, Enum):
+            active = 'active'
+            disabled = 'disabled'
+          def can_transition(from_: UserStatus, to: UserStatus) -> bool:
+            return True
+      repository:
+        dir: "app/repositories"
+        file_ext: ".py"
+        exports: ["class *Repository"]
+        example: |
+          # app/repositories/user.py
+          from sqlalchemy.ext.asyncio import AsyncSession
+          from app.models.user import User
+          class UserRepository:
+            def __init__(self, session: AsyncSession):
+              self.session = session
+            async def find_by_id(self, id: str) -> User | None:
+              return await self.session.get(User, id)
+      service:
+        dir: "app/services"
+        file_ext: ".py"
+        exports: ["class *Service"]
+        example: |
+          # app/services/user.py
+          from app.repositories.user import UserRepository
+          class UserService:
+            def __init__(self, repo: UserRepository):
+              self.repo = repo
+            async def list(self, ctx, query):
+              require_admin(ctx)  # SEC-002
+              return await self.repo.list(query)
+      router:
+        dir: "app/routers"
+        file_ext: ".py"
+        exports: ["APIRouter instance"]
+        example: |
+          # app/routers/user.py
+          from fastapi import APIRouter, Depends
+          from app.services.user import UserService
+          router = APIRouter(prefix="/v1/users", tags=["users"])
+          @router.get("/", dependencies=[Depends(require_admin)])  # SEC-001
+          async def list_users(service: UserService = Depends()):
+            return await service.list(...)
+    entry_point: "app/main.py"
+    notes: "FastAPI 用 Depends 依赖注入实现 SEC-002；@router decorator 默认受保护。"
+
+# 共通约束（所有框架都遵守）：
+common_constraints:
+  - "ARCH-001: 依赖方向 router/controller → service → repository → domain/entity，禁止反向"
+  - "ARCH-002: contracts 包/模块纯净，只导出 schema + 类型"
+  - "ARCH-003: 前端只能经 contracts 调用后端，禁直连 service/repository"
+  - "SEC-001: 每个 endpoint 必须声明 auth 元数据（默认受保护）"
+  - "SEC-002: 每个 service public 方法必须调用权限守卫"
+  - "SEC-003a: 输出 schema 必须拒绝多余字段（strict mode）"

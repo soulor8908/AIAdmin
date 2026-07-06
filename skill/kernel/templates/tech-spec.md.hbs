@@ -1,0 +1,137 @@
+---
+doc_type: Tech-Spec
+id: TECH-{{DOMAIN_UPPER}}-001
+title: {{domain_title}} 技术规格
+prd_ref: PRD-{{DOMAIN_UPPER}}-001
+status: draft
+owner: tech-lead@team
+created: {{date}}
+---
+
+# {{domain_title}} 技术规格
+
+## §1 覆盖范围
+
+> 核验既有路由表（R10 S-2），确认新增端点非覆盖既有。
+
+- 新增端点：
+  - {{METHOD}} {{PATH}} —— {{说明}}
+  - ...
+- 既有端点改动：
+  - {{METHOD}} {{PATH}} —— {{改动性质}}
+  - ...
+
+## §2 数据模型
+
+> 与 contracts schema 1:1。
+
+- {{Entity}}：
+  - {{字段}}：{{类型}} —— {{约束}} —— {{语义标签（PII/输出/存储）}}
+  - ...
+
+## §3 接口契约
+
+> 引用 contracts schema 名（如 `userSchema` / `createUserInputSchema`）。
+
+### §3.1 端点契约
+
+| 端点 | 入参 schema | 输出 schema | auth | 缓存 | 锁 |
+|---|---|---|---|---|---|
+| {{METHOD}} {{PATH}} | {{inputSchema}} | {{outputSchema}} | admin | - | - |
+
+### §3.2 表单校验复用清单
+
+> R12 S-1：区分"自由文本表单"（须 safeParse）与"类型派生操作"（类型保证，schema 校验冗余）。
+
+- {{表单/操作}}：自由文本 → 须 safeParse
+- {{表单/操作}}：类型派生 → 可不调或保留 defensive safeParse
+
+## §4 状态机
+
+> 含状态迁移规则。
+
+```
+{{状态 A}} ⇄ {{状态 B}}
+```
+
+## §5 鉴权与越权（SEC-001/002）
+
+- {{端点}}：auth=admin
+- {{service 方法}}：requireAdmin(ctx) 或 requirePermission(ctx, '{{perm}}')
+- 豁免：{{方法}} — SEC-002-exempt: {{理由}}
+
+## §6 错误码
+
+> 引用 errorCodeSchema 的子集。新增码须四处处同步：contracts / errors / OpenAPI / 前端 errorMapping。
+
+- {{ERROR_CODE}}：{{触发条件}} → {{HTTP status}}
+- ...
+
+## §7 审计埋点（D9）
+
+- {{操作}}：action={{action}} / entity_type={{type}} / operator_id=ctx.user.id
+- before/after 快照须脱敏 PII（D7）
+
+## §8 边界与异常
+
+> 边界 case + 异常处理。
+
+- {{边界 1}}：{{处理方式}}
+- ...
+
+## §9 受影响测试清单（AI-006）
+
+> 两类标注完整：①类显式影响（grep 符号引用）+ ①类隐式影响（全集断言依赖枚举值）+ ②类签名变更 + ③类新增。
+
+### ①类 显式影响（grep 命中）
+
+- `{{file}}:{{line}}` — 引用 `{{symbol}}` — 同步方向：{{方向}}
+
+### ①类 隐式影响（枚举扩展导致全集断言失效）
+
+- `{{file}}:{{line}}` — `toEqual([...])` 含 `{{枚举值}}` 全集 — 同步方向：全集→子集 toContain
+
+### ②类 签名变更影响
+
+- `{{file}}:{{line}}` — 消费 `{{method}}` 返回值 — 同步方向：{{方向}}
+
+### ③类 新增
+
+- `{{file}}` — 新增测试覆盖 F{{N}}
+
+## §10 advisory 偏离预判
+
+> 含多 [约束] 组合副作用分析。
+
+- [advisory] {{项}}：{{说明}} — 反向同步边界：{{行为/数据/schema 偏离同步 §10；纯 UI 文案偏离仅 Review 报告记录}}
+- 组合副作用预判：
+  - 全码映射收尾的全集定义（R16 S-18）
+  - 简单常量跨组件复用边界（R16 S-19）
+  - 测试工具限制 workaround（R16 S-20）
+  - [约束] 偏离反向同步闭环性（R18 S-21）
+  - 第三方库版本 API 差异（R20 S-23）
+
+## §11 实现提示（impl-writer）
+
+> 按 domain → repository → service → router 顺序。
+
+- {{domain_layer_dir}}/{{domain}}.{{ext}}：
+  - {{类型/函数}}
+- {{repository_layer_dir}}/{{domain}}.{{ext}}：
+  - {{Repository class}}
+- {{service_layer_dir}}/{{domain}}.{{ext}}：
+  - {{Service class}} —— 每个方法须调权限守卫
+- {{router_layer_dir}}/{{domain}}.{{ext}}：
+  - {{Router}} —— 每个 procedure 须声明 auth
+- entry point：
+  - 注册新路由
+
+---
+
+## 门禁 G3（编排者检查）
+
+- [ ] `{{typecheck_cmd}}` 编译通过
+- [ ] Spec 与 contracts 1:1（schema 名一致）
+- [ ] 边界覆盖完整（§8）
+- [ ] 受影响清单两类标注完整（§9）
+- [ ] advisory 偏离预判含组合副作用分析（§10）

@@ -1,0 +1,102 @@
+# kernel/rules/architecture.yaml —— 架构约束（声明式）
+# P0-1 产出：从 mvp/.trae/rules/architecture/layering.md 提取，语言无关。
+#
+# 四层单向依赖是核心架构约束，跨语言通用：
+#   domain → repository → service → router（依赖方向反向：router → service → repository → domain）
+# 各语言映射：
+#   Node.js: router→service→repository→domain
+#   Java:    Controller→Service→Repository→Entity
+#   Python:  Router→Service→Repository→Model
+#
+# 适配器 plugin 负责"将语言无关的层名映射到具体语言的目录/包名"。
+
+rules:
+  - id: ARCH-001
+    title: 单向依赖（覆盖全部四层）
+    category: architecture
+    severity: error
+    applies_to:
+      file_patterns:
+        # 通用层目录名（适配器映射到具体语言）：
+        # Node.js: src/{domain,repository,service,router}
+        # Java:    src/main/java/.../{entity,repository,service,controller}
+        # Python:  app/{models,repositories,services,routers}
+        - "src/{domain,repository,service,router}/**/*"
+        - "src/main/java/**/{entity,repository,service,controller}/**/*"
+        - "app/{models,repositories,services,routers}/**/*"
+      min_confidence: 0.6
+    check:
+      kind: import-graph
+      plugin_required: true  # 须 plugin 分析 import 关系
+      # 校验意图：依赖方向 router → service → repository → domain；
+      # 各层不得反向 import 上层。
+      # 层级 → 禁止 import 的上层：
+      #   domain → [service, repository, router, controller]
+      #   repository → [service, router, controller]
+      #   service → [router, controller]
+      #   router/controller → []（最外层）
+      # 同层之间允许（如 service 互调），推荐通过 domain 协作。
+      expr: |
+        layer_rules:
+          domain: [service, repository, router, controller]
+          repository: [service, router, controller]
+          service: [router, controller]
+          router: []
+        layer_mapping:
+          # 适配器须提供本字段，将通用层名映射到具体语言的目录名。
+          # 键名使用生态系标识（nodejs / jvm / python），与 StackId 前缀一致。
+          nodejs: { domain: domain, repository: repository, service: service, router: router }
+          jvm: { domain: entity, repository: repository, service: service, router: controller }
+          python: { domain: models, repository: repositories, service: services, router: routers }
+      negative: true  # 禁出现反向 import
+    fix_hint: "domain 不得 import service/repository/router；repository 不得 import service/router；service 不得 import router"
+    rationale_ref: "ARCH-001 (layering.md)"
+
+  - id: ARCH-002
+    title: 契约层纯净
+    category: architecture
+    severity: error
+    applies_to:
+      file_patterns:
+        # 通用契约层目录（适配器映射）：
+        # Node.js: packages/contracts/**
+        # Java:    contracts/** (or api-contracts/**)
+        # Python: contracts/** (or schemas/**)
+        - "packages/contracts/**/*"
+        - "contracts/**/*"
+        - "schemas/**/*"
+    check:
+      kind: import-graph
+      plugin_required: false  # 核心可独立完成（扫 import 是否含业务层路径）
+      # 校验意图：contracts 不得 import 业务层（apps/、src/main/java/.../service/、app/services/）；
+      # 只导出 schema + 派生类型，禁含业务逻辑。
+      expr: "import from business layer (apps/, src/main/java/**/service/, app/services/)"
+      negative: true
+    fix_hint: "contracts 只导出 schema + 类型派生，业务逻辑移到 service 层"
+    rationale_ref: "ARCH-002 (layering.md)"
+
+  - id: ARCH-003
+    title: 跨层只经契约
+    category: architecture
+    severity: error
+    applies_to:
+      file_patterns:
+        # 前端目录（适配器映射）：
+        # React/Vue/Angular: src/**/*.{ts,tsx,vue,js,jsx}
+        - "apps/web/src/**/*"
+        - "frontend/src/**/*"
+        - "web/src/**/*"
+    check:
+      kind: import-graph
+      plugin_required: false  # 核心可独立完成
+      # 校验意图：前端只能经契约层调用后端（如 @admin/contracts / contracts package）；
+      # 禁止直连后端实现层（apps/api/src/** / app/services/** / @admin/api 等）。
+      expr: |
+        forbidden_imports:
+          - "@admin/api"
+          - "apps/api/src/"
+          - "app/services/"
+          - "src/main/java/**/service/"
+      negative: true
+    fix_hint: "前端只能 import @admin/contracts / contracts package + 第三方依赖 + 自身模块；禁直连后端"
+    rationale_ref: "ARCH-003 (layering.md)"

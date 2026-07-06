@@ -1,0 +1,238 @@
+# adapters/contract/samples/user.meta.yaml —— 契约元模型样例（用户域）
+# P0-2 产出：从 mvp/packages/contracts/src/schemas/user.ts 提取，语言无关。
+#
+# renderer 读这个 YAML，渲染为 Zod / Pydantic / JSON Schema。
+# 字段语义由 ContractSchemaMeta (spi/adapter.ts) 定义。
+
+schemas:
+  - name: userStatus
+    kind: enum
+    enum_values:
+      - active
+      - disabled
+    description: |
+      用户状态机取值：
+      - active   = 启用（默认初始态）
+      - disabled = 禁用
+      状态迁移：active ⇄ disabled
+    related_rules:
+      - ARCH-002
+
+  - name: user
+    kind: object
+    is_output: true
+    description: |
+      用户实体：DB users 表行的契约投影。
+      字段命名沿用 snake_case 以与 DB schema 对齐。
+    fields:
+      - name: id
+        type: uuid
+        description: 用户唯一 ID
+      - name: name
+        type: string
+        min: 1
+        description: 用户名
+      - name: email
+        type: email
+        description: 邮箱（唯一约束）
+        semantic_tags:
+          - pii
+      - name: status
+        type: enum
+        enum_values_ref: userStatus
+        description: 用户状态
+      - name: department_id
+        type: uuid
+        nullable: true
+        optional: true
+        description: 跨域联动字段（TECH-DEPT-001 引入），空表示用户未归属任何部门
+      - name: created_at
+        type: datetime
+        description: 创建时间
+      - name: updated_at
+        type: datetime
+        description: 更新时间
+      - name: version
+        type: number
+        min_value: 0
+        description: 乐观锁版本号（TECH-OPTIMISTIC-LOCKING-001 D1），If-Match 携带
+    strict: true
+    related_rules:
+      - ARCH-002
+      - SEC-003a
+      - CODE-004
+
+  - name: userEntity
+    kind: object
+    is_storage: true
+    extends: user
+    description: |
+      用户存储实体：DB users 表行的完整投影（含敏感字段 password_hash）。
+      HTTP 响应输出前须经 user 投影剥离 password_hash。
+    fields:
+      - name: password_hash
+        type: string
+        min: 1
+        semantic_tags:
+          - storage
+        description: scrypt 输出 salt.hash 格式（base64）
+    strict: true
+    related_rules:
+      - SEC-003a
+
+  - name: createUserInput
+    kind: object
+    description: |
+      新建用户输入。
+      Q5 决策：本期新建必填 = email + name；不含角色 / 部门。
+    fields:
+      - name: email
+        type: email
+        semantic_tags:
+          - pii
+      - name: name
+        type: string
+        min: 1
+      - name: password
+        type: string
+        min: 8
+        optional: true
+        description: 缺省时 service 层生成临时密码并记审计日志
+    strict: true
+
+  - name: updateUserStatusInput
+    kind: object
+    description: 更新用户状态输入（F3 禁用 / F4 启用共用同一 PATCH 端点）
+    fields:
+      - name: status
+        type: enum
+        enum_values_ref: userStatus
+    strict: true
+
+  - name: listUserQuery
+    kind: object
+    description: |
+      分页查询用户列表入参。
+      page / pageSize 经 coerce 以兼容 query string 透传。
+      pageSize 上限 100，防止一次性全量加载。
+    fields:
+      - name: page
+        type: number
+        min_value: 1
+        default: 1
+      - name: pageSize
+        type: number
+        min_value: 1
+        max_value: 100
+        default: 10
+      - name: status
+        type: enum
+        enum_values_ref: userStatus
+        optional: true
+
+  - name: userListResult
+    kind: object
+    is_output: true
+    description: 分页查询用户列表结果
+    fields:
+      - name: items
+        type: array
+        items:
+          type: ref
+          ref: user
+      - name: total
+        type: number
+        min_value: 0
+      - name: page
+        type: number
+        min_value: 1
+      - name: pageSize
+        type: number
+        min_value: 1
+      - name: totalPages
+        type: number
+        min_value: 0
+    strict: true
+    related_rules:
+      - SEC-003a
+      - CODE-004
+
+  - name: errorCode
+    kind: enum
+    description: |
+      错误码枚举：全局 SSOT，聚合各域错误码。
+      新增错误码须同步：contracts / errors.ts / OpenAPI / 前端 errorMapping 四处。
+    enum_values:
+      # 入参校验失败
+      - VALIDATION_ERROR
+      # 未认证 / 未登录
+      - UNAUTHORIZED
+      # 已认证但越权
+      - FORBIDDEN
+      # 用户域
+      - USER_NOT_FOUND
+      - USER_EMAIL_DUPLICATE
+      - USER_DISABLE_SELF_FORBIDDEN
+      - USER_ALREADY_DISABLED
+      - USER_ALREADY_ACTIVE
+      # 角色域
+      - ROLE_NOT_FOUND
+      - ROLE_NAME_DUPLICATE
+      - ROLE_BUILTIN_FORBIDDEN
+      - ROLE_IN_USE
+      - USER_ROLE_ALREADY_ASSIGNED
+      # 部门域
+      - DEPT_NOT_FOUND
+      - DEPT_NAME_DUPLICATE
+      - DEPT_HAS_CHILDREN
+      - DEPT_DEPTH_EXCEEDED
+      # 报表域
+      - REPORT_GROUP_BY_REQUIRED
+      - REPORT_TIME_RANGE_INVALID
+      # 通知域
+      - NOTIFICATION_NOT_FOUND
+      - NOTIFICATION_RECIPIENT_NOT_FOUND
+      - NOTIFICATION_RECIPIENT_DISABLED
+      - NOTIFICATION_INVALID_TRANSITION
+      # 调岗事务域
+      - TRANSFER_SAME_ROLE
+      - TRANSFER_OLD_ROLE_NOT_ASSIGNED
+      - TRANSFER_COMPENSATION_FAILED
+      - TRANSFER_FAILED
+      # 角色继承域
+      - ROLE_SELF_INHERITANCE
+      - ROLE_BUILTIN_PARENT_FORBIDDEN
+      - ROLE_INHERITANCE_CYCLE
+      - ROLE_HAS_CHILDREN
+      # 乐观锁域
+      - VERSION_REQUIRED
+      - VERSION_CONFLICT
+      # 鉴权域
+      - INVALID_CREDENTIALS
+      - TOKEN_INVALID
+      - TOKEN_EXPIRED
+      - TOKEN_REVOKED
+    related_rules:
+      - ARCH-002
+      - AI-005
+
+  - name: errorResponse
+    kind: object
+    is_output: true
+    description: |
+      统一错误响应体。所有 procedure 失败均回包此结构。
+      current_version 为可选字段，仅 VERSION_CONFLICT 时填充（供客户端重试）。
+    fields:
+      - name: code
+        type: enum
+        enum_values_ref: errorCode
+      - name: message
+        type: string
+      - name: current_version
+        type: number
+        min_value: 0
+        optional: true
+    strict: true
+    related_rules:
+      - SEC-003a
+      - CODE-004

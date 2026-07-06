@@ -1,0 +1,90 @@
+# kernel/rules/security.yaml —— 安全约束（声明式）
+# P0-1 产出：从 mvp/.trae/rules/security/ 提取，语言无关。
+
+rules:
+  - id: SEC-001
+    title: 路由默认受保护（声明式 auth 元数据）
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        # 通用路由目录（适配器映射）：
+        # Node.js: src/router/**
+        # Java:    src/main/java/**/controller/**
+        # Python:  app/routers/**
+        - "src/router/**/*"
+        - "src/main/java/**/controller/**/*"
+        - "app/routers/**/*"
+    check:
+      kind: structure
+      plugin_required: true  # 须 plugin 分析路由声明结构（不同框架语法不同）
+      # 校验意图：每个路由 procedure / endpoint / handler 必须含 auth 元数据字段；
+      # 默认 auth: 'admin' / 'authenticated'；public 路由须显式声明 + 上方注释说明理由。
+      expr: "every route procedure must declare auth metadata field"
+      negative: false  # 必须出现匹配
+      exempt_marker: "// public:"  # public 路由须有注释说明理由（缺失则 suggestion）
+    fix_hint: "Procedure 类型须含 auth: 'admin' | 'public' 字段；public 路由上方注释说明理由"
+    rationale_ref: "SEC-001 (authz.md)"
+
+  - id: SEC-002
+    title: 越权校验在 service 层
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        # 通用 service 目录
+        - "src/service/**/*"
+        - "src/main/java/**/service/**/*"
+        - "app/services/**/*"
+    check:
+      kind: structure
+      plugin_required: true  # 须 plugin 分析方法体（不同语言方法声明语法不同）
+      # 校验意图：每个 service public 方法须调用 requireAdmin/requirePermission 或等效守卫；
+      # 例外：标 SEC-002-exempt: <reason> 的方法跳过检查并输出 info 供 Reviewer 审计。
+      # 自服务方法（如 markRead 收件人自服务）改用资源所有权守卫；
+      # 框架内部旁路方法（如 AuditLogService.record）由调用方负责鉴权。
+      expr: "every service public method must call requireAdmin/requirePermission or mark SEC-002-exempt"
+      negative: false  # 必须出现匹配
+      exempt_marker: "SEC-002-exempt:"
+    fix_hint: "service public 方法入口须调 requireAdmin(ctx) 或更细粒度 requirePermission(ctx, 'xxx')"
+    rationale_ref: "SEC-002 (authz.md), TECH-NOTIFICATION-001 §3.3 D5"
+
+  - id: SEC-003a
+    title: 响应不返回未声明 PII（输出 schema 须 .strict()）
+    category: security
+    severity: warning  # 实验期为 warning（suggestion）；生产化可升级为 error
+    applies_to:
+      file_patterns:
+        - "packages/contracts/**/*"
+        - "contracts/**/*"
+        - "schemas/**/*"
+    check:
+      kind: structure
+      plugin_required: true  # 须 plugin 识别输出态 schema（命名约定 Result/Response 后缀）
+      # 校验意图：所有输出态 schema（命名含 Result/Response 后缀的 z.object）须带 .strict() / extra='forbid'；
+      # 拒绝多余字段，防止 PII 泄漏。
+      expr: "every output schema (named *Result/*Response) must use .strict() / extra='forbid'"
+      negative: false  # 必须出现匹配
+    fix_hint: "输出 schema 须 .strict()（Zod）/ extra='forbid'（Pydantic）/ additionalProperties: false（JSON Schema）"
+    rationale_ref: "SEC-003a (pii.md)"
+
+  - id: SEC-003b
+    title: 错误消息与日志的 PII 边界
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*"
+        - "src/main/java/**/*"
+        - "app/**/*"
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：
+      #   - 错误消息不得回显**其他用户**的 PII（如查询他人邮箱冲突时不得回显他人邮箱）
+      #   - 回显**调用者自身提交**的值允许，但该错误消息不得在日志中持久化完整值
+      #     （日志须脱敏：邮箱保留首 2 字符 + 域名，手机号保留后 4 位）
+      #   - 审计 before-after 中的 PII 须脱敏
+      # 因"自身 vs 他人 PII"区分需语义判断，脚本不精确扫描，由 Reviewer 人工审查。
+    fix_hint: "错误消息不回显他人 PII；日志/审计 PII 须脱敏"
+    rationale_ref: "SEC-003b (pii.md), D7"

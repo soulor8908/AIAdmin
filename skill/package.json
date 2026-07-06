@@ -1,0 +1,23 @@
+{
+  "name": "@ai-spec/skill",
+  "version": "0.1.0-phase0",
+  "description": "AI Spec Skill —— spec-first 工作流方法论的共享内核 + 可插拔适配器",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:dod": "vitest run --dir test",
+    "engine:parity": "vitest run test/parity-13-enforcements.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

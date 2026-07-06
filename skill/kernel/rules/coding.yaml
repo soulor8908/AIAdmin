@@ -1,0 +1,99 @@
+# kernel/rules/coding.yaml —— 编码约束（声明式）
+# P0-1 产出：从 mvp/.trae/rules/coding/ 提取，语言无关。
+#
+# 跨语言等价表达：
+#   CODE-001 禁 any  →  TS: any / Java: Object raw type / Python: Any (without type guard)
+#   CODE-002 禁吞错  →  通用：空 catch + 仅 console/log 的 catch
+#   CODE-003 禁 eval →  通用：eval / new Function / Java 反射滥用 / Python exec
+#   CODE-004 命名   →  适配器 plugin 实现（schema 后缀规则语言特化）
+
+rules:
+  - id: CODE-001
+    title: 禁止 any / raw type
+    category: coding
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*.{ts,tsx}"
+        - "src/main/java/**/*.java"
+        - "app/**/*.py"
+    check:
+      kind: regex
+      plugin_required: false  # 核心可独立完成（纯正则）
+      # 校验意图：
+      #   TS: 扫描 ": any" / "as any"
+      #   Java: 扫描 raw type (Object/Map/List without generics) — 适配器 plugin 实现
+      #   Python: 扫描 "Any" without type guard — 适配器 plugin 实现
+      # 本 expr 默认覆盖 TS；其他语言由 plugin 扩展。
+      expr: ": any\\b|as any\\b"
+      negative: true
+    fix_hint: "用 unknown + 类型守卫，或具体类型；确需宽松处用泛型约束"
+    rationale_ref: "CODE-001 (forbidden-patterns.md)"
+
+  - id: CODE-002
+    title: 禁止吞错（空 catch + 仅 console/log 的 catch）
+    category: coding
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*.{ts,tsx,js,jsx}"
+        - "src/main/java/**/*.java"
+        - "app/**/*.py"
+    check:
+      kind: regex
+      plugin_required: false  # 核心可独立完成
+      # 校验意图：
+      #   通用：catch 块为空或仅 console/log（多行容忍）
+      #   TS/JS: catch (e) {} / catch (e) { console.x }
+      #   Java: catch (Exception e) {} / catch (Exception e) { e.printStackTrace(); } — 适配器 plugin
+      #   Python: except: pass / except Exception: pass / except Exception as e: print(e) — 适配器 plugin
+      # 本 expr 默认覆盖 TS/JS；其他语言由 plugin 扩展。
+      expr: "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}|catch\\s*\\([^)]*\\)\\s*\\{\\s*console\\.[^}]*\\}"
+      negative: true
+    fix_hint: "转换为 AppError 并带错误码，或显式 rethrow；禁止 silent catch"
+    rationale_ref: "CODE-002 (forbidden-patterns.md)"
+
+  - id: CODE-003
+    title: 禁止 eval 与动态执行
+    category: coding
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*.{ts,tsx,js,jsx}"
+        - "src/main/java/**/*.java"
+        - "app/**/*.py"
+    check:
+      kind: regex
+      plugin_required: false  # 核心可独立完成
+      # 校验意图：
+      #   TS/JS: eval( / new Function( / 裸 Function(
+      #   Java: Runtime.exec / ProcessBuilder with user input — 适配器 plugin
+      #   Python: eval( / exec( / compile( with user input — 适配器 plugin
+      # 本 expr 默认覆盖 TS/JS；其他语言由 plugin 扩展。
+      expr: "\\beval\\s*\\(|new\\s+Function\\s*\\(|[^.\\w]Function\\s*\\("
+      negative: true
+    fix_hint: "动态逻辑用映射表；禁止 eval / new Function / exec"
+    rationale_ref: "CODE-003 (forbidden-patterns.md)"
+
+  - id: CODE-004
+    title: 命名约定（schema 后缀 + 命名风格）
+    category: coding
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*.{ts,tsx}"
+        - "packages/contracts/**/*.ts"
+        - "contracts/**/*.py"
+        - "src/main/java/**/*.java"
+    check:
+      kind: regex
+      plugin_required: true  # 须 plugin 实现（不同契约库的 schema 声明语法不同）
+      # 校验意图：
+      #   Zod (TS): export const X = z.object/enum/array/... 须以 Schema 结尾
+      #   Pydantic: class X(BaseModel) 须以 Schema 结尾（或 Schema 后缀约定）
+      #   Java Bean Validation: 须遵循约定（适配器 plugin 实现）
+      # 通用约定：变量/函数 camelCase / 类型 PascalCase / 常量 UPPER_SNAKE
+      expr: "exported schema declaration must end with Schema suffix"
+      negative: true
+    fix_hint: "Zod schema 命名须带 Schema 后缀；z.infer 派生类型用裸名词"
+    rationale_ref: "CODE-004 (naming.md)"

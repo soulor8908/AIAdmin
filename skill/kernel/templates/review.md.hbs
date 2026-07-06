@@ -1,0 +1,98 @@
+---
+doc_type: Review-Report
+id: REVIEW-{{DOMAIN_UPPER}}-001
+title: {{domain_title}} Review 报告
+prd_ref: PRD-{{DOMAIN_UPPER}}-001
+spec_ref: TECH-{{DOMAIN_UPPER}}-001
+status: draft
+verdict: pending
+owner: reviewer@team
+created: {{date}}
+---
+
+# {{domain_title}} Review 报告
+
+## Verdict
+
+- verdict: **{{pass|block}}**
+- blocker 数：{{N}}
+- 严重违规数：{{N}}
+
+## PRD 验收逐条核对（AI-007）
+
+| AC ID | Given | When | Then | 实现/测试对齐 | 结论 |
+|---|---|---|---|---|---|
+| F1.1 | {{Given}} | {{When}} | {{Then}} | {{测试用例 ID}} | ✅ 对齐 / ⚠️ 偏离 / ❌ 缺失 |
+| ... | ... | ... | ... | ... | ... |
+
+## 规则合规核对（13 项 enforcement）
+
+| 规则 ID | 检查项 | 结论 | 说明 |
+|---|---|---|---|
+| AI-001 | diff 新增导出符号有 Spec/contracts 来源 | ✅/❌ | {{说明}} |
+| AI-002 | impl-writer 未改测试断言 | ✅/❌ | {{说明}} |
+| AI-003 | advisory 偏离反向同步 Spec（伪同步检测） | ✅/❌ | {{说明}} |
+| AI-004 | 三件套全绿 | ✅/❌ | {{typecheck/lint/test 输出}} |
+| AI-005 | 跨域枚举断言用 SSOT 派生 | ✅/❌ | {{说明}} |
+| AI-006 | Tech-Spec §9 受影响清单两类标注完整 | ✅/❌ | {{说明}} |
+| AI-007 | 每条 AC 有端到端测试覆盖 | ✅/❌ | {{说明}} |
+| ARCH-001 | 四层单向依赖，无反向 import | ✅/❌ | {{说明}} |
+| ARCH-002 | contracts 纯净层 | ✅/❌ | {{说明}} |
+| ARCH-003 | 前端禁连后端 | ✅/❌ | {{说明}} |
+| CODE-001 | 禁 any / raw type | ✅/❌ | {{说明}} |
+| CODE-002 | 禁吞错 | ✅/❌ | {{说明}} |
+| CODE-003 | 禁 eval | ✅/❌ | {{说明}} |
+| CODE-004 | schema 命名带 Schema 后缀 | ✅/❌ | {{说明}} |
+| SEC-001 | 每个 procedure 声明 auth | ✅/❌ | {{说明}} |
+| SEC-002 | 每个 service 方法调权限守卫或标豁免 | ✅/❌ | {{说明}} |
+| SEC-003a | 输出 schema strict 模式 | ✅/❌ | {{说明}} |
+| SEC-003b | 错误消息不回显他人 PII | ✅/❌ | {{说明}} |
+| META-001 | 每条规则有机器校验关键词 | ✅/❌ | {{说明}} |
+| META-003 | 声明即实现（无声明漂移） | ✅/❌ | {{说明}} |
+| META-004 | 实现即声明（无反向缺口） | ✅/❌ | {{说明}} |
+
+## Spec 与实现一致性核对
+
+- [ ] 每个 Spec §2 字段在 contracts 有对应 schema 字段
+- [ ] 每个 Spec §3 端点在 router 有对应 procedure
+- [ ] 每个 Spec §6 错误码在 errors mapping 有对应
+- [ ] 每个 Spec §7 审计埋点在 service 实现
+
+## 测试覆盖核对
+
+- AC 总数：{{N}}
+- 测试用例覆盖：{{N}}
+- 未覆盖 AC：{{列表 + reason}}
+- 组合场景测试：{{列表}}
+
+## [约束] 偏离确认
+
+| 偏离项 | 理由 | Spec 同步 | 验收对齐 | Reviewer 确认 |
+|---|---|---|---|---|
+| {{项}} | {{理由是否成立}} | ✅/❌ | ✅/❌ | ✅ 通过 / ❌ blocker |
+
+## SEC-002 豁免审计清单
+
+| 方法 | 豁免理由 | 合理性 |
+|---|---|---|
+| {{method}} | {{reason}} | ✅ 合理 / ❌ 滥用 |
+
+## Blocker 清单
+
+> blocker = 0 时 verdict = pass；> 0 时 verdict = block。
+
+1. {{blocker 描述 + 修复建议}}
+2. ...
+
+---
+
+## 门禁 G6
+
+- [ ] PRD 逐条核对完成
+- [ ] 规则合规核对完成
+- [ ] [约束] 偏离均合规
+- [ ] blocker = 0
+
+## 修复复验 G6.1（若 verdict=block）
+
+blocker 修复后重跑 G5+G6。

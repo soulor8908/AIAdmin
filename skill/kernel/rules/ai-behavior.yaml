@@ -1,0 +1,124 @@
+# kernel/rules/ai-behavior.yaml —— AI 行为约束（声明式）
+# P0-1 产出：从 mvp/.trae/rules/ai-behavior/spec-first.md 提取，语言无关。
+# 校验由实验期规则脚本（产物）→ engine + plugin（生产化）执行.
+#
+# 规则 ID 稳定标识，跨语言不变：
+#   AI-001 先读 Spec / AI-002 测试先行 / AI-003 禁越界 / AI-004 三件套 / AI-005 SSOT 派生 / AI-006 受影响清单 / AI-007 端到端验收
+#
+# 注：AI-001/002/003/004/006/007 多为流程级约束，机器 enforcement 仅作辅助；本文件声明"意图"+"约束"，具体校验由 manual 流程或辅助脚本完成。
+# 仅 AI-005 有专属机器 enforcement（扫描硬编码跨域枚举断言）。
+
+rules:
+  - id: AI-001
+    title: 先读 Spec 再写码
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*"        # 通用写法（适配器映射到具体扩展名）
+      min_confidence: 0.5
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：diff 新增导出符号须在 docs/spec 或 contracts 有来源；无来源即越界。
+      # Reviewer 流程校验，无机器 enforcement（不触发 META-003）。
+    fix_hint: "新增导出符号前先在 docs/spec/<domain>.tech.md 声明，并补 packages/contracts schema"
+    rationale_ref: "AI-001 (spec-first.md)"
+
+  - id: AI-002
+    title: 测试先行（断言级红 + tsc 自检）
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "test/**/*"
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：test-writer 须产出断言级红（因逻辑未实现而失败的断言，非导入级红）；
+      # impl-writer 禁改测试断言（含 expect( 的行）；test-writer 交付须附 tsc 自检结果。
+      # 编排者实跑 vitest 确认断言级红作为 G4 通过证据。
+    fix_hint: "断言级红 N ≥ 测试矩阵覆盖类型数；impl-writer 改 setup/import 须注明理由"
+    rationale_ref: "AI-002 (spec-first.md)"
+
+  - id: AI-003
+    title: 禁止越界发挥（advisory 偏离须反向同步 Spec + [约束] 项偏离处理流程）
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "src/**/*"
+        - "docs/spec/**"
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：[约束] 偏离须显式标注 + 反向同步 Spec + Reviewer 确认；
+      # advisory 偏离 PR 描述须含"反向同步 Spec：{{项}}"且 Spec 文件实际已改；
+      # 伪同步检测：仅在代码注释声明"已反向同步"但 Spec 文件未实际编辑 = 违规。
+    fix_hint: "impl-writer 显式标注偏离项 + 理由 + 反向同步 Spec；Reviewer 须 git diff 核实 Spec 已改"
+    rationale_ref: "AI-003 (spec-first.md), R18 S-21 (伪同步检测)"
+
+  - id: AI-004
+    title: 每次改动必跑三件套
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "**/*"
+    check:
+      kind: manual
+      manual_checker: "CI / 编排者实跑"
+      # 校验意图：完成代码改动提交前必跑 typecheck + lint:rules + test，全绿方可提交。
+      # 由 CI 整体执行保障（无专属 enforcement 分支，不触发 META-003）。
+    fix_hint: "提交前跑 typecheck + lint:rules + test，任一失败禁止提交"
+    rationale_ref: "AI-004 (spec-first.md)"
+
+  - id: AI-005
+    title: 禁止硬编码跨域可变数据
+    category: ai-behavior
+    severity: warning  # 实验期为 suggestion；生产化可升级为 error
+    applies_to:
+      file_patterns:
+        - "test/**/*"
+    check:
+      kind: regex
+      plugin_required: false  # 核心可独立完成（纯正则）
+      # 校验意图：扫描测试中 .toEqual([...]) / .toStrictEqual([...]) 后紧跟多个字符串字面量（≥3 个），
+      # 字面量匹配跨域枚举模式（权限码 xxx:xxx / 错误码 XXX_XXX 长度≥6 大写下划线）即标记 suggestion。
+      # expr 为意图描述（实际两个正则由 plugin 内部实现）：
+      expr: "assertArrayLiteralWith >= 3 cross-domain enum literals (permission_code_pattern | error_code_pattern)"
+      negative: true  # 禁出现匹配
+    fix_hint: "改用 SSOT 派生断言：[...schema.options].toContain(x) 而非硬编码全集"
+    rationale_ref: "AI-005 (spec-first.md)"
+
+  - id: AI-006
+    title: Tech Lead 须产出受影响测试清单
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "docs/spec/**/*.tech.md"
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：Tech-Spec 涉及 contracts 联动改动或既有 service/repository 签名变更时须含"受影响测试清单"章节，
+      # 含两类标注：①类显式影响（grep 符号引用）+ ①类隐式影响（全集断言依赖枚举值）+ ②类签名变更 + ③类新增；
+      # test-writer 须反向核实清单完整性，发现遗漏须显式列出差异。
+    fix_hint: "Tech-Spec §9 须含受影响清单 + 两类标注 + 隐式影响子类"
+    rationale_ref: "AI-006 (spec-first.md), R11 S-2 (隐式影响), R11 S-3"
+
+  - id: AI-007
+    title: 端到端验收测试 + Reviewer PRD 逐条核对
+    category: ai-behavior
+    severity: error
+    applies_to:
+      file_patterns:
+        - "test/**/*"
+        - "docs/review/**"
+    check:
+      kind: manual
+      manual_checker: "Reviewer subagent"
+      # 校验意图：PRD 每条 Given/When/Then 须有端到端断言覆盖（注入共享依赖观测旁路副作用）；
+      # Reviewer 报告须含"PRD 验收逐条核对"章节，列出每条验收点的对齐结论。
+    fix_hint: "对照 PRD AC 写端到端测试 + Review 报告附 PRD 逐条核对表"
+    rationale_ref: "AI-007 (spec-first.md)"

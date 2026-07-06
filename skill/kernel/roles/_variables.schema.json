@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Role Prompt Variables",
+  "description": "P0-5 五角色提示词的参数 schema。模板用 {{var}} 占位，由适配器/CLI 注入。",
+  "type": "object",
+  "required": ["backend_framework", "language", "orm", "db", "contract_lib", "test_runner"],
+  "properties": {
+    "backend_framework": {
+      "type": "string",
+      "description": "后端框架，如 'Fastify' / 'Express' / 'Spring Boot' / 'FastAPI'"
+    },
+    "language": {
+      "type": "string",
+      "description": "后端主语言，如 'TypeScript' / 'Java' / 'Python'"
+    },
+    "orm": {
+      "type": "string",
+      "description": "ORM / 数据访问层，如 'Prisma' / 'JPA/Hibernate' / 'SQLAlchemy' / 'raw SQL'"
+    },
+    "db": {
+      "type": "string",
+      "description": "数据库，如 'PostgreSQL' / 'MySQL' / 'SQLite'"
+    },
+    "contract_lib": {
+      "type": "string",
+      "description": "契约库，如 'Zod' / 'Pydantic' / 'JSON Schema' / 'Bean Validation'"
+    },
+    "test_runner": {
+      "type": "string",
+      "description": "测试框架，如 'Vitest' / 'JUnit' / 'pytest'"
+    },
+    "frontend_framework": {
+      "type": "string",
+      "description": "前端框架（如有），如 'React + Vite' / 'Vue3' / null"
+    },
+    "ci_platform": {
+      "type": "string",
+      "description": "CI 平台，如 'GitHub Actions' / 'GitLab CI'"
+    },
+    "auth_scheme": {
+      "type": "string",
+      "description": "认证方案，如 'JWT 自签发' / 'OAuth2/OIDC' / 'Session'"
+    },
+    "typecheck_cmd": {
+      "type": "string",
+      "description": "类型检查命令，如 'npx tsc --noEmit' / 'mvn compile' / 'mypy .'"
+    },
+    "lint_cmd": {
+      "type": "string",
+      "description": "规则校验命令，如 'npm run lint:rules' / 'ai-spec check'"
+    },
+    "test_cmd": {
+      "type": "string",
+      "description": "测试命令，如 'npm test' / 'mvn test' / 'pytest'"
+    },
+    "domain_layer_dir": {
+      "type": "string",
+      "description": "domain 层目录路径（按框架），如 'apps/api/src/domain' / 'src/main/java/.../entity'"
+    },
+    "repository_layer_dir": {
+      "type": "string"
+    },
+    "service_layer_dir": {
+      "type": "string"
+    },
+    "router_layer_dir": {
+      "type": "string"
+    },
+    "contract_dir": {
+      "type": "string",
+      "description": "契约层目录，如 'packages/contracts/src' / 'contracts/' / 'schemas/'"
+    },
+    "spec_dir": {
+      "type": "string",
+      "description": "Tech-Spec 目录，默认 'docs/spec'"
+    },
+    "prd_dir": {
+      "type": "string",
+      "description": "PRD 目录，默认 'docs/prd'"
+    },
+    "review_dir": {
+      "type": "string",
+      "description": "Review 报告目录，默认 'docs/review'"
+    },
+    "retro_dir": {
+      "type": "string",
+      "description": "复盘目录，默认 'docs/retro'"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+# kernel/rules/meta.yaml —— 规则元约束（声明式）
+# P0-1 产出：从 mvp/.trae/rules/meta/rule-meta.md 提取，语言无关。
+#
+# META 类是"规则的规则"——保证规则集自身的可机器校验性。
+# 实验期 4 条 → 生产化保留 4 条，校验对象从实验期规则脚本扩展为 engine + plugin.
+
+rules:
+  - id: META-001
+    title: 无校验不立规
+    category: meta
+    severity: error
+    applies_to:
+      file_patterns:
+        - "kernel/rules/**/*.yaml"
+        - "kernel/rules/**/*.yml"
+        - "kernel/rules/**/*.json"
+    check:
+      kind: structure
+      plugin_required: false  # 核心可独立完成（扫 YAML 字段）
+      # 校验意图：每条规则的 check 段必须注明具体工具 + kind（regex/ast/import-graph/structure/manual）；
+      # 仅靠 manual 校验的规则不得合入生产化阻断集合（advisory 仅记录）。
+      # manual kind 须显式声明 manual_checker，否则报 META-001 违规。
+      expr: "every rule.check must declare kind; manual kind must declare manual_checker"
+      negative: false
+    fix_hint: "每条规则的 check.kind 必须填写；manual 须含 manual_checker"
+    rationale_ref: "META-001 (rule-meta.md)"
+
+  - id: META-002
+    title: 规则 PR 准入
+    category: meta
+    severity: error
+    applies_to:
+      file_patterns:
+        - "kernel/rules/**/*"
+        - "engine/src/**/*"
+    check:
+      kind: manual
+      manual_checker: "CI"
+      # 校验意图：规则文件改动必须同 PR 内含 engine/plugin 对应改动（新增规则→新增 check 分支）；
+      # CI 校验规则集 + engine 双绿方可合入。
+    fix_hint: "改 kernel/rules/ 时同 PR 改 engine 对应 plugin；CI 校验双向绑定"
+    rationale_ref: "META-002 (rule-meta.md)"
+
+  - id: META-003
+    title: 声明即实现（无声明漂移）
+    category: meta
+    severity: error
+    applies_to:
+      file_patterns:
+        - "kernel/rules/**/*.yaml"
+        - "engine/src/plugins/**/*"
+    check:
+      kind: structure
+      plugin_required: false  # 核心可独立完成（差集校验）
+      # 校验意图：声明式规则集里 check.plugin_required=true 的规则，对应语言的 plugin 必须实现 supported_rules 含该 ID；
+      # 声称需要 plugin 但 plugin 无 supported_rules 注册 = 声明漂移，报错。
+      expr: |
+        for each rule with check.plugin_required=true:
+          the targeted plugin's supported_rules array must contain this rule ID
+      negative: false
+    fix_hint: "声明 plugin_required=true 的规则须在 plugin.supported_rules 注册对应 ID"
+    rationale_ref: "META-003 (rule-meta.md)"
+
+  - id: META-004
+    title: 实现即声明（无反向缺口）
+    category: meta
+    severity: error
+    applies_to:
+      file_patterns:
+        - "engine/src/plugins/**/*"
+        - "kernel/rules/**/*.yaml"
+    check:
+      kind: structure
+      plugin_required: false  # 核心可独立完成（差集校验）
+      # 校验意图：plugin 的 supported_rules 数组中每个 ID 必须在 kernel/rules/ 声明式规则集里有对应规则定义；
+      # plugin 有注册但规则集无定义 = 反向缺口，报错。
+      expr: |
+        for each ID in plugin.supported_rules:
+          kernel/rules/**/*.yaml must contain a rule with this ID
+      negative: false
+    fix_hint: "plugin.supported_rules 中每个 ID 须在 kernel/rules/ 有规则定义"
+    rationale_ref: "META-004 (rule-meta.md)"
