@@ -8,8 +8,8 @@ export const STACK_OPTIONS = {
   backend: [
     { value: 'fastify-ts', label: 'Fastify + TypeScript', recommended: true },
     { value: 'express-ts', label: 'Express + TypeScript' },
-    { value: 'spring-boot', label: 'Spring Boot + Java', experimental: true },
-    { value: 'fastapi', label: 'FastAPI + Python', experimental: true },
+    { value: 'spring-boot', label: 'Spring Boot + Java' },
+    { value: 'fastapi', label: 'FastAPI + Python' },
   ],
   db: [
     { value: 'postgresql', label: 'PostgreSQL', recommended: true },

@@ -1,0 +1,14 @@
+id: spring-boot
+label: Spring Boot + Java
+version: "3.2"
+capabilities:
+  - detect-project
+  - render-architecture
+  - render-role-prompts
+  - rule-check
+language: java
+ecosystem: jvm
+notes: |
+  Spring Boot 3.x + Java 17+。MVP 期 Phase 2 P2-8 实现。
+  探测器：pom.xml + build.gradle
+  分析器：@RestController / @Service / @Repository / @Entity 注解识别

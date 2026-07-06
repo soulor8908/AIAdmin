@@ -1,0 +1,14 @@
+id: fastapi
+label: FastAPI + Python
+version: "0.111"
+capabilities:
+  - detect-project
+  - render-architecture
+  - render-role-prompts
+  - rule-check
+language: python
+ecosystem: python
+notes: |
+  FastAPI 0.111+ + Python 3.10+。MVP 期 Phase 2 P2-8 实现。
+  探测器：requirements.txt / pyproject.toml
+  分析器：@app.get / @router.get 装饰器识别 + Pydantic BaseModel 类型推导
