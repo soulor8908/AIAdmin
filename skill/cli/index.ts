@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { registerInjectCommand } from './inject-command.js';
+import { registerSkillCommand } from './skill-command.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +56,9 @@ async function main(): Promise<void> {
 
   // Phase 2：注册 inject / gate-up / rollback 子命令
   registerInjectCommand(program);
+
+  // Phase 3：注册 skill 子命令（list / search / add / update / remove）
+  registerSkillCommand(program);
 
   await program.parseAsync(process.argv);
 }

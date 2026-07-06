@@ -1,0 +1,54 @@
+---
+doc_type: PRD
+domain: user
+title: {{domain-title}}
+status: draft
+---
+
+# {{domain-title}} PRD
+
+> 本模板由 @core/user-mgmt skill 渲染。
+
+## 1 · 背景与目标
+
+{{background}}
+
+## 2 · 验收标准（AC）
+
+### AC-1: 用户注册
+- Given 一个未注册的邮箱
+- When 调用 POST /users
+- Then 返回 201 + userOutput（不含 password_hash）
+- And 入库 password_hash（bcrypt cost=12）
+
+### AC-2: 重复注册拒绝
+- Given 已存在的 email
+- When 调用 POST /users
+- Then 返回 409 + ErrorCode DUPLICATE_USER
+- And 不暴露已存在用户的任何 PII
+
+### AC-3: 登录（public 路由）
+- Given 注册用户 + 正确密码
+- When 调用 POST /auth/login
+- Then 返回 200 + JWT token
+- And login 路由须显式标注 `auth: public`
+
+### AC-4: 角色变更审计
+- Given admin 用户
+- When 修改某用户的 role
+- Then 写入 audit_log（含 before/after 快照）
+
+## 3 · BLOCKING Q&A
+
+> 在进入 Tech-Spec 前必须拍板的设计决策。
+
+- Q1: JWT 过期策略？（短 TTL + refresh token / 长 TTL）
+- Q2: 密码重置流程？（邮箱链接 / OTP / 不在本期）
+
+## 4 · 受影响规则
+
+- USER-001 用户唯一标识不可复用
+- USER-002 密码哈希存储
+- USER-003 输出态剥离 password_hash
+- USER-004 角色变更须审计
+- USER-005 公共路由显式标注

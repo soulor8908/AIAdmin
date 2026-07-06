@@ -1,0 +1,77 @@
+---
+doc_type: Tech-Spec
+domain: user
+title: {{domain-title}} Tech-Spec
+status: draft
+---
+
+# {{domain-title}} Tech-Spec
+
+> 本模板由 @core/user-mgmt skill 渲染。
+
+## 1 · 上下文
+
+{{context}}
+
+## 2 · 架构层映射
+
+| 层 | 路径 | 职责 |
+|---|---|---|
+| domain | `src/domain/user.ts` | User 实体 + 值对象 |
+| repository | `src/repository/userRepository.ts` | DB 访问 + 唯一性校验 |
+| service | `src/service/userService.ts` | 业务编排 + 密码哈希 |
+| router | `src/router/userRouter.ts` | HTTP 端点 + auth 元数据 |
+
+## 3 · 契约层
+
+详见 `packages/contracts/src/schemas/user.ts`：
+- `userOutputSchema`（输出态，剥离 password_hash）
+- `userStorageSchema`（存储态，含 password_hash）
+- `createUserInputSchema`
+- `loginInputSchema`
+- `userRoleSchema`（枚举 SSOT）
+
+## 4 · 受影响规则清单
+
+- USER-001 唯一性 → repository 层 typed error
+- USER-002 密码哈希 → service 层 bcrypt
+- USER-003 输出剥离 → contracts 层 schema 拆分
+- USER-004 审计 → service 注入 AuditLogRepository
+- USER-005 公共路由 → router 显式 `auth: public`
+
+## 5 · 数据模型
+
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+```
+
+## 6 · 错误码
+
+- `DUPLICATE_USER` - 邮箱或用户名已存在
+- `INVALID_CREDENTIALS` - 登录失败
+- `USER_NOT_FOUND` - 用户不存在
+
+## 7 · 测试用例（断言级红）
+
+- 注册：成功 / 重复拒绝 / 密码强度不足
+- 登录：成功 / 错误密码 / 不存在用户
+- 输出剥离：response body 不含 password_hash 字段
+
+## 8 · BLOCKING 决策
+
+- [ ] JWT TTL 决定
+- [ ] 密码重置流程决定
+
+## 9 · 受影响清单
+
+- 既有 contracts：无新增ErrorCode（复用通用 DUPLICATE_* 前缀）
+- 既有 router：新增 POST /users / POST /auth/login
+- 既有 service：新增 userService / authService

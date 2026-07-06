@@ -1,0 +1,33 @@
+# skills/i18n-spec/rules/i18n.yaml —— 国际化规则（占位）
+
+rules:
+  - id: I18N-001
+    title: UI 文案禁硬编码
+    category: domain
+    severity: warning
+    applies_to:
+      file_patterns:
+        - 'apps/web/src/**/*.tsx'
+        - 'apps/web/src/**/*.vue'
+    check:
+      kind: keyword
+      plugin_required: true
+      expr: 'UI text must use i18n key, not hardcoded string'
+      negative: true
+    fix_hint: '所有文案走 t("key") 而非字面量'
+    rationale_ref: 'I18N-001'
+
+  - id: I18N-002
+    title: 翻译键须带 namespace
+    category: domain
+    severity: warning
+    applies_to:
+      file_patterns:
+        - 'apps/web/src/locales/*.json'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'translation keys must be namespaced by domain (user.* / audit.* / ...)'
+      negative: false
+    fix_hint: 'i18n 文件按域分 namespace'
+    rationale_ref: 'I18N-002'

@@ -1,0 +1,33 @@
+# skills/rbac-spec/rules/rbac.yaml —— RBAC 角色继承规则（占位）
+
+rules:
+  - id: RBAC-001
+    title: 角色继承须是无环图
+    category: domain
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/domain/role*.ts'
+        - 'src/main/java/**/domain/Role*.java'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'role inheritance graph must be a DAG (no cycle)'
+      negative: false
+    fix_hint: '构建 RoleGraph，在 addInheritance 时检测环'
+    rationale_ref: 'RBAC-001'
+
+  - id: RBAC-002
+    title: 权限检查须基于 effective permissions
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/service/auth*.ts'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'permission check must use effective permissions (inherited + direct)'
+      negative: false
+    fix_hint: 'permission service 须 expand inheritance 后做 hasPermission()'
+    rationale_ref: 'RBAC-002'

@@ -1,0 +1,31 @@
+# skills/i18n-spec/skill.yaml —— P3-3 示例 Skill: 国际化
+# 占位 manifest。
+
+package:
+  name: '@community/i18n-spec'
+  version: '0.1.0'
+  description: '社区 Skill: i18n / l10n / 翻译键管理规则'
+  author: '@community-contributor'
+  license: 'MIT'
+  keywords: ['i18n', 'l10n', 'translation']
+  category: 'community'
+
+compatibility:
+  requires_kernel_version: '>=0.1.0'
+  supported_stacks: []
+
+artifacts:
+  rules:
+    - 'rules/*.yaml'
+  templates: []
+  role_prompts: []
+  adapters: []
+  contracts: []
+
+dependencies:
+  depends_on: []
+  conflicts_with: []
+
+overrides:
+  rules: {}
+  templates: {}

@@ -1,0 +1,74 @@
+# skills/audit-log/rules/audit-domain.yaml —— 审计日志域规则（沉淀自实验期 audit 域）
+
+rules:
+  - id: AUDIT-001
+    title: 审计日志 append-only
+    category: audit
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/repository/audit*.ts'
+        - 'src/main/java/**/repository/Audit*.java'
+        - 'app/repositories/audit*.py'
+    check:
+      kind: keyword
+      plugin_required: true
+      expr: 'audit log repository must expose only record() / query(); no update()/delete()'
+      forbidden_patterns:
+        - 'update('
+        - 'delete('
+        - 'destroy('
+      negative: true  # 不应出现
+    fix_hint: 'audit log repository 只暴露 record() / query()，禁任何 update/delete'
+    rationale_ref: 'AUDIT-001 (实验期 lessons-learned.md L-08)'
+
+  - id: AUDIT-002
+    title: before/after 快照
+    category: audit
+    severity: warning
+    applies_to:
+      file_patterns:
+        - 'src/service/*.ts'
+        - 'src/main/java/**/service/*.java'
+        - 'app/services/*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'mutations (create/update/delete) must record before/after snapshot to audit log'
+      negative: false
+    fix_hint: 'service 层 mutations 后调用 auditLog.record({ before, after })'
+    rationale_ref: 'AUDIT-002 / USER-004'
+
+  - id: AUDIT-003
+    title: PII 脱敏
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'packages/contracts/src/schemas/audit*.ts'
+        - 'src/main/java/**/dto/Audit*.java'
+        - 'app/schemas/audit*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'audit log output schema must redact PII fields (email/phone)'
+      negative: false
+    fix_hint: '使用 redactedAuditLogSchema，对 actor_email / target_email 字段做 mask 处理（a***@b.com）'
+    rationale_ref: 'AUDIT-003 / SEC-002'
+
+  - id: AUDIT-004
+    title: 操作人不可伪造
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/router/audit*.ts'
+        - 'src/main/java/**/controller/Audit*.java'
+        - 'app/routers/audit*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'audit log query must take actor_id from ctx, not request body'
+      negative: false
+    fix_hint: 'audit query 接口的 actor_id 须来自 ctx.user.id（认证态），禁来自 req.body'
+    rationale_ref: 'AUDIT-004 / SEC-002'

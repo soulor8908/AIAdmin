@@ -1,0 +1,39 @@
+# skills/audit-log/skill.yaml —— P3-3 领域 Skill: 审计日志域
+# 沉淀自 mvp/ 实验期 audit 域（append-only + before/after 快照 + redaction）。
+
+package:
+  name: '@core/audit-log'
+  version: '0.1.0'
+  description: '审计日志域 Skill：append-only 写入 + before/after 快照 + PII 脱敏'
+  author: 'ai-spec'
+  license: 'MIT'
+  keywords: ['audit', 'logging', 'compliance', 'pii']
+  category: 'domain'
+
+compatibility:
+  requires_kernel_version: '>=0.1.0'
+  supported_stacks:
+    - 'fastify-ts'
+    - 'express-ts'
+    - 'spring-boot'
+    - 'fastapi'
+
+artifacts:
+  rules:
+    - 'rules/*.yaml'
+  templates:
+    - 'templates/*.hbs'
+  role_prompts:
+    - 'roles/*.md'
+  adapters: []
+  contracts:
+    - 'contracts/*.meta.yaml'
+
+dependencies:
+  # 注：核心规则集（@core/spec-first）作为 builtin 隐式可用，无须显式声明依赖
+  depends_on: []
+  conflicts_with: []
+
+overrides:
+  rules: {}
+  templates: {}

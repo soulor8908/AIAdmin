@@ -1,0 +1,50 @@
+# skills/audit-log/contracts/audit.meta.yaml —— 审计日志域契约元模型
+
+schemas:
+  - name: 'auditLogStorage'
+    kind: 'object'
+    description: '审计日志存储态 schema（含完整 PII，仅供内部存储）'
+    is_storage: true
+    strict: true
+    related_rules: ['AUDIT-001', 'AUDIT-002']
+    fields:
+      - { name: 'id', type: 'uuid' }
+      - { name: 'actor_id', type: 'uuid', description: '操作人 ID（来自 ctx，禁来自 req.body）' }
+      - { name: 'actor_email', type: 'email', semantic_tags: ['pii'], description: '操作人邮箱（存储态）' }
+      - { name: 'action', type: 'string', description: '操作类型（user.create / user.update.role / ...）' }
+      - { name: 'target_type', type: 'string', description: '目标实体类型' }
+      - { name: 'target_id', type: 'uuid', description: '目标实体 ID' }
+      - { name: 'before', type: 'object', description: '变更前快照（JSON）' }
+      - { name: 'after', type: 'object', description: '变更后快照（JSON）' }
+      - { name: 'ip', type: 'string', description: '请求来源 IP' }
+      - { name: 'user_agent', type: 'string' }
+      - { name: 'created_at', type: 'datetime', semantic_tags: ['immutable'] }
+
+  - name: 'auditLogOutput'
+    kind: 'object'
+    description: '审计日志输出态 schema（PII 脱敏）'
+    is_output: true
+    strict: true
+    related_rules: ['AUDIT-003']
+    fields:
+      - { name: 'id', type: 'uuid' }
+      - { name: 'actor_id', type: 'uuid' }
+      - { name: 'actor_email', type: 'string', description: '脱敏后的邮箱（a***@b.com）' }
+      - { name: 'action', type: 'string' }
+      - { name: 'target_type', type: 'string' }
+      - { name: 'target_id', type: 'uuid' }
+      - { name: 'before', type: 'object' }
+      - { name: 'after', type: 'object' }
+      - { name: 'created_at', type: 'datetime' }
+
+  - name: 'auditAction'
+    kind: 'enum'
+    description: '审计操作类型枚举（部分，扩展由业务域贡献）'
+    enum_values:
+      - 'user.create'
+      - 'user.update'
+      - 'user.update.role'
+      - 'user.delete'
+      - 'auth.login'
+      - 'auth.logout'
+    related_rules: ['AI-005']

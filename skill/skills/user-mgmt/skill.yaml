@@ -1,0 +1,40 @@
+# skills/user-mgmt/skill.yaml —— P3-3 领域 Skill: 用户管理域
+# 沉淀自 mvp/ 实验期 user / auth / role 域的 spec-first 规则与模板。
+
+package:
+  name: '@core/user-mgmt'
+  version: '0.1.0'
+  description: '用户管理域 Skill：注册 / 登录 / 角色 / 权限的 spec-first 规则与模板'
+  author: 'ai-spec'
+  license: 'MIT'
+  keywords: ['user', 'auth', 'role', 'rbac']
+  category: 'domain'
+
+compatibility:
+  requires_kernel_version: '>=0.1.0'
+  supported_stacks:
+    - 'fastify-ts'
+    - 'express-ts'
+    - 'spring-boot'
+    - 'fastapi'
+
+artifacts:
+  rules:
+    - 'rules/*.yaml'
+  templates:
+    - 'templates/*.hbs'
+  role_prompts:
+    - 'roles/*.md'
+  adapters: []
+  contracts:
+    - 'contracts/*.meta.yaml'
+
+dependencies:
+  # 注：核心规则集（@core/spec-first）作为 builtin 隐式可用，无须显式声明依赖
+  depends_on: []
+  conflicts_with: []
+
+# overrides：本 skill 不覆盖核心规则，仅在核心规则上追加域规则
+overrides:
+  rules: {}
+  templates: {}

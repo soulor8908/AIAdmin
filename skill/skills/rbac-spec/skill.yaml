@@ -1,0 +1,37 @@
+# skills/rbac-spec/skill.yaml —— P3-3 示例 Skill: RBAC 角色继承
+# 占位 manifest，证明 Skill 包可被 Registry 加载。
+
+package:
+  name: '@community/rbac-spec'
+  version: '0.1.0'
+  description: '社区 Skill: RBAC 角色继承树（admin > manager > user > guest）'
+  author: '@community-contributor'
+  license: 'MIT'
+  keywords: ['rbac', 'role', 'permission', 'inheritance']
+  category: 'community'
+
+compatibility:
+  requires_kernel_version: '>=0.1.0'
+  supported_stacks:
+    - 'fastify-ts'
+    - 'express-ts'
+    - 'spring-boot'
+    - 'fastapi'
+
+artifacts:
+  rules:
+    - 'rules/*.yaml'
+  templates: []
+  role_prompts: []
+  adapters: []
+  contracts:
+    - 'contracts/*.meta.yaml'
+
+dependencies:
+  # 注：依赖 @core/user-mgmt 作为 builtin 隐式可用，无须显式安装
+  depends_on: []
+  conflicts_with: []
+
+overrides:
+  rules: {}
+  templates: {}

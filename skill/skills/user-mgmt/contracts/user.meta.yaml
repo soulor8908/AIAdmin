@@ -1,0 +1,58 @@
+# skills/user-mgmt/contracts/user.meta.yaml —— 用户域契约元模型（语言无关）
+# 适配器据此渲染 Zod / Pydantic / JSON Schema。
+
+schemas:
+  - name: 'userOutput'
+    kind: 'object'
+    description: '用户输出态 schema（剥离敏感字段）'
+    is_output: true
+    strict: true
+    related_rules: ['USER-003']
+    fields:
+      - { name: 'id', type: 'uuid', description: '用户 ID' }
+      - { name: 'email', type: 'email', semantic_tags: ['pii', 'output'] }
+      - { name: 'username', type: 'string', min: 3, max: 32 }
+      - { name: 'role', type: 'enum', enum_values: ['admin', 'user', 'guest'] }
+      - { name: 'created_at', type: 'datetime', semantic_tags: ['immutable'] }
+      - { name: 'updated_at', type: 'datetime', semantic_tags: ['immutable'] }
+
+  - name: 'userStorage'
+    kind: 'object'
+    description: '用户存储态 schema（含 password_hash，禁对外输出）'
+    is_storage: true
+    strict: true
+    related_rules: ['USER-002', 'USER-003']
+    fields:
+      - { name: 'id', type: 'uuid' }
+      - { name: 'email', type: 'email', semantic_tags: ['pii'] }
+      - { name: 'username', type: 'string', min: 3, max: 32 }
+      - { name: 'password_hash', type: 'string', semantic_tags: ['storage'], description: 'bcrypt/argon2 哈希，禁明文' }
+      - { name: 'role', type: 'enum', enum_values: ['admin', 'user', 'guest'] }
+      - { name: 'created_at', type: 'datetime', semantic_tags: ['immutable'] }
+      - { name: 'updated_at', type: 'datetime', semantic_tags: ['immutable'] }
+
+  - name: 'createUserInput'
+    kind: 'object'
+    description: '创建用户输入 schema'
+    strict: true
+    related_rules: ['USER-001']
+    fields:
+      - { name: 'email', type: 'email', semantic_tags: ['pii'] }
+      - { name: 'username', type: 'string', min: 3, max: 32 }
+      - { name: 'password', type: 'string', min: 8, max: 128, semantic_tags: ['pii'], description: '明文密码（仅入参，禁存储）' }
+      - { name: 'role', type: 'enum', enum_values: ['admin', 'user', 'guest'], optional: true, default: 'user' }
+
+  - name: 'loginInput'
+    kind: 'object'
+    description: '登录输入 schema'
+    strict: true
+    related_rules: ['USER-005']
+    fields:
+      - { name: 'email', type: 'email' }
+      - { name: 'password', type: 'string', min: 1 }
+
+  - name: 'userRole'
+    kind: 'enum'
+    description: '用户角色枚举'
+    enum_values: ['admin', 'user', 'guest']
+    related_rules: ['AI-005']

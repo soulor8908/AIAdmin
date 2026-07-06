@@ -1,0 +1,19 @@
+# skills/notification/contracts/notification.meta.yaml —— 通知域契约元模型
+
+schemas:
+  - name: 'notification'
+    kind: 'object'
+    description: '通知实体'
+    fields:
+      - { name: 'id', type: 'uuid' }
+      - { name: 'user_id', type: 'uuid' }
+      - { name: 'channel', type: 'enum', enum_values: ['email', 'sms', 'in_app', 'push'] }
+      - { name: 'subject', type: 'string' }
+      - { name: 'body', type: 'string' }
+      - { name: 'status', type: 'enum', enum_values: ['pending', 'sent', 'failed', 'read'] }
+      - { name: 'created_at', type: 'datetime' }
+
+  - name: 'notificationChannel'
+    kind: 'enum'
+    description: '通知渠道'
+    enum_values: ['email', 'sms', 'in_app', 'push']

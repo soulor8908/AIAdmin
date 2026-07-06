@@ -1,0 +1,45 @@
+---
+doc_type: PRD
+domain: audit
+title: {{domain-title}} PRD
+status: draft
+---
+
+# {{domain-title}} PRD
+
+> 本模板由 @core/audit-log skill 渲染。
+
+## 1 · 背景与目标
+
+{{background}}
+
+## 2 · 验收标准（AC）
+
+### AC-1: 写入审计日志
+- Given admin 用户修改某 user 的 role
+- When service 执行 updateRole()
+- Then audit_log 写入一条记录（含 before/after 快照）
+- And actor_id 来自 ctx.user.id，禁来自 req.body
+
+### AC-2: 查询审计日志（PII 脱敏）
+- Given admin 用户调用 GET /audit-logs?user_id=...
+- When 返回结果
+- Then 每条记录的 actor_email 已脱敏（a***@b.com）
+- And 不含 IP 之外的 PII
+
+### AC-3: append-only 不可修改
+- Given 已写入的 audit_log 记录
+- When 尝试调用 update() / delete()
+- Then repository 层不暴露此类方法（编译期阻断）
+
+## 3 · BLOCKING Q&A
+
+- Q1: 审计日志保留期？（永久 / 1 年 / 按合规要求）
+- Q2: 是否需要异步写入（不阻塞主流程）？
+
+## 4 · 受影响规则
+
+- AUDIT-001 append-only
+- AUDIT-002 before/after 快照
+- AUDIT-003 PII 脱敏
+- AUDIT-004 操作人不可伪造

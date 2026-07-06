@@ -1,0 +1,91 @@
+# skills/user-mgmt/rules/user-domain.yaml —— 用户管理域规则（沉淀自实验期 user/auth/role 域）
+
+rules:
+  - id: USER-001
+    title: 用户唯一标识不可复用
+    category: domain
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/repository/user*.ts'
+        - 'src/main/java/**/repository/User*.java'
+        - 'app/repositories/user*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'createUser must reject duplicate email/username with typed error'
+      negative: false
+    fix_hint: 'repository 层抛 typed ErrorCode DUPLICATE_USER，service 层不吞错'
+    rationale_ref: 'USER-001 (实验期 lessons-learned.md L-04)'
+
+  - id: USER-002
+    title: 密码哈希存储（禁明文）
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/repository/user*.ts'
+        - 'src/main/java/**/repository/User*.java'
+        - 'app/repositories/user*.py'
+    check:
+      kind: keyword
+      expr: 'never store password plaintext; always hash with bcrypt/argon2'
+      forbidden_patterns:
+        - 'password:'
+        - 'password ='
+      negative: true  # 不应出现明文存储
+    fix_hint: '存储 password_hash 字段，使用 bcrypt（cost ≥ 12）或 argon2id'
+    rationale_ref: 'USER-002 / SEC-003a'
+
+  - id: USER-003
+    title: 输出态 schema 剥离 password_hash
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'packages/contracts/src/schemas/user*.ts'
+        - 'src/main/java/**/dto/User*.java'
+        - 'app/schemas/user*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'output schema must not contain password_hash / password field'
+      negative: true
+    fix_hint: '拆分 userStorageSchema（含 password_hash）与 userOutputSchema（剥离）'
+    rationale_ref: 'SEC-003a'
+
+  - id: USER-004
+    title: 角色变更须审计
+    category: audit
+    severity: warning
+    applies_to:
+      file_patterns:
+        - 'src/service/role*.ts'
+        - 'src/main/java/**/service/Role*.java'
+        - 'app/services/role*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'role change operations must emit audit log (before/after snapshot)'
+      negative: false
+    fix_hint: '注入 AuditLogRepository，在 assignRole / revokeRole 后调用 auditLog.record()'
+    rationale_ref: 'USER-004 / AUDIT-002'
+
+  - id: USER-005
+    title: 公共路由须显式标注
+    category: security
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/router/auth*.ts'
+        - 'src/router/user*.ts'
+        - 'src/main/java/**/controller/Auth*.java'
+        - 'app/routers/auth*.py'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'public routes (login/register) must declare auth: public with reason comment'
+      negative: false
+      exempt_marker: '// public:'
+    fix_hint: 'login/register 路由须显式 auth: public + 上方注释说明理由'
+    rationale_ref: 'SEC-001（域特化）'

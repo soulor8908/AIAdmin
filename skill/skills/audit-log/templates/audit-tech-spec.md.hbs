@@ -1,0 +1,80 @@
+---
+doc_type: Tech-Spec
+domain: audit
+title: {{domain-title}} Tech-Spec
+status: draft
+---
+
+# {{domain-title}} Tech-Spec
+
+> 本模板由 @core/audit-log skill 渲染。
+
+## 1 · 上下文
+
+{{context}}
+
+## 2 · 架构层映射
+
+| 层 | 路径 | 职责 |
+|---|---|---|
+| domain | `src/domain/auditLog.ts` | AuditLog 实体 + AuditAction 枚举 |
+| repository | `src/repository/auditLogRepository.ts` | append-only 写入 + 查询（无 update/delete） |
+| service | `src/service/auditLogService.ts` | 脱敏 + 权限过滤 |
+| router | `src/router/auditLogRouter.ts` | GET /audit-logs（admin-only） |
+
+## 3 · 契约层
+
+详见 `packages/contracts/src/schemas/auditLog.ts`：
+- `auditLogStorageSchema`（存储态，含完整 PII）
+- `auditLogOutputSchema`（输出态，PII 脱敏）
+- `redactedAuditLogSchema`（同 output，命名强调脱敏意图）
+- `auditActionSchema`（枚举 SSOT）
+
+## 4 · 受影响规则清单
+
+- AUDIT-001 append-only → repository 只暴露 record() / query()
+- AUDIT-002 before/after → service 调用方注入快照
+- AUDIT-003 PII 脱敏 → output schema 字段 mask
+- AUDIT-004 操作人 → router/service 强制从 ctx 取 actor_id
+
+## 5 · 数据模型
+
+```sql
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY,
+  actor_id UUID NOT NULL,
+  actor_email TEXT NOT NULL,  -- 存储态完整，输出态脱敏
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id UUID NOT NULL,
+  before JSONB,
+  after JSONB,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL
+);
+
+-- 不允许 UPDATE / DELETE（DB 层用 trigger 兜底，参见 AUDIT-001）
+```
+
+## 6 · 脱敏算法
+
+```
+mask_email(s) = s[0] + '***@' + s.split('@')[1]
+```
+
+## 7 · 测试用例（断言级红）
+
+- 写入：record() 成功 + 不暴露 update() / delete()
+- 查询：actor_email 已脱敏
+- 操作人：actor_id 来自 ctx，service 层断言 `actor_id !== req.body.actor_id`
+
+## 8 · BLOCKING 决策
+
+- [ ] 异步写入是否启用？
+- [ ] 保留期决定
+
+## 9 · 受影响清单
+
+- 新增 ErrorCode: `AUDIT_QUERY_DENIED`（非 admin 查询）
+- 新增 ErrorCode: `AUDIT_WRITE_FAILED`

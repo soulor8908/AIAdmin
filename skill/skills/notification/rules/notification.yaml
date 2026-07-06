@@ -1,0 +1,32 @@
+# skills/notification/rules/notification.yaml —— 通知域规则（占位）
+
+rules:
+  - id: NOTIF-001
+    title: 通知发送须幂等
+    category: domain
+    severity: error
+    applies_to:
+      file_patterns:
+        - 'src/service/notif*.ts'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'notification send must be idempotent (same request_id returns same result)'
+      negative: false
+    fix_hint: 'notification service 用 request_id 做幂等键'
+    rationale_ref: 'NOTIF-001'
+
+  - id: NOTIF-002
+    title: 用户偏好须尊重
+    category: security
+    severity: warning
+    applies_to:
+      file_patterns:
+        - 'src/service/notif*.ts'
+    check:
+      kind: structure
+      plugin_required: true
+      expr: 'notification must respect user preference (opt-out / channel selection)'
+      negative: false
+    fix_hint: 'service 层查询 user.notification_preferences 后再决定渠道'
+    rationale_ref: 'NOTIF-002'

@@ -1,0 +1,16 @@
+# skills/rbac-spec/contracts/role.meta.yaml —— 角色继承契约元模型
+
+schemas:
+  - name: 'role'
+    kind: 'object'
+    description: '角色定义'
+    fields:
+      - { name: 'id', type: 'uuid' }
+      - { name: 'name', type: 'string' }
+      - { name: 'parent_id', type: 'uuid', optional: true, description: '父角色 ID（继承自）' }
+      - { name: 'permissions', type: 'array', items: { name: 'perm', type: 'string' } }
+
+  - name: 'permission'
+    kind: 'enum'
+    description: '权限枚举（示例）'
+    enum_values: ['user.read', 'user.write', 'user.delete', 'audit.read', 'system.admin']

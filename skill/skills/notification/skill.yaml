@@ -1,0 +1,33 @@
+# skills/notification/skill.yaml —— P3-3 示例 Skill: 通知域
+# 占位 manifest。
+
+package:
+  name: '@core/notification'
+  version: '0.1.0'
+  description: '通知域 Skill: 邮件 / 短信 / 站内信 / 推送的 spec-first 规则'
+  author: 'ai-spec'
+  license: 'MIT'
+  keywords: ['notification', 'email', 'sms', 'push']
+  category: 'domain'
+
+compatibility:
+  requires_kernel_version: '>=0.1.0'
+  supported_stacks: []
+
+artifacts:
+  rules:
+    - 'rules/*.yaml'
+  templates: []
+  role_prompts: []
+  adapters: []
+  contracts:
+    - 'contracts/*.meta.yaml'
+
+dependencies:
+  # 注：依赖 @core/user-mgmt 作为 builtin 隐式可用，无须显式安装
+  depends_on: []
+  conflicts_with: []
+
+overrides:
+  rules: {}
+  templates: {}
