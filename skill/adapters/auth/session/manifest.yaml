@@ -1,0 +1,11 @@
+id: session
+label: Session
+version: "express-session-1.18"
+capabilities:
+  - detect-project
+  - render-architecture
+language: typescript
+ecosystem: nodejs
+experimental: true
+notes: |
+  Session-based 认证。MVP 期 experimental，仅适配 express-ts。

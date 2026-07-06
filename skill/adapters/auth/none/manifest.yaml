@@ -1,0 +1,11 @@
+id: none
+label: 无认证 (开发用)
+version: "n/a"
+capabilities:
+  - detect-project
+  - render-architecture
+language: typescript
+ecosystem: nodejs
+notes: |
+  无认证方案，开发用。所有路由 public。
+  生产环境不推荐。SEC-001 默认受保护规则需手动放宽（标注 auth: 'public'）。

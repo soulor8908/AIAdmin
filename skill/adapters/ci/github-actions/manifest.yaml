@@ -1,0 +1,10 @@
+id: github-actions
+label: GitHub Actions
+version: "n/a"
+capabilities:
+  - generate-ci-config
+language: yaml
+ecosystem: github
+notes: |
+  GitHub Actions。MVP 默认。
+  生成 .github/workflows/ai-spec-ci.yml，含 typecheck + lint:rules + test + contract drift 检测。

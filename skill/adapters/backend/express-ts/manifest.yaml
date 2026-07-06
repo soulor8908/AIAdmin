@@ -1,0 +1,14 @@
+id: express-ts
+label: Express + TypeScript
+version: "4.19"
+capabilities:
+  - detect-project
+  - render-architecture
+  - render-role-prompts
+  - rule-check
+language: typescript
+ecosystem: nodejs
+notes: |
+  Express 4 + TypeScript。
+  Express API 风格与 Fastify 差异显著（middleware 链 vs hook）。
+  MVP 期与 fastify-ts 共享 contracts 层（Zod），仅 server/router 实现差异。

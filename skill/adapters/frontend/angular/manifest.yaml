@@ -1,0 +1,11 @@
+id: angular
+label: Angular
+version: "18"
+capabilities:
+  - detect-project
+  - render-architecture
+language: typescript
+ecosystem: nodejs
+experimental: true
+notes: |
+  Angular 18。MVP 期 experimental。Angular CLI 与 vite 工作流差异大。

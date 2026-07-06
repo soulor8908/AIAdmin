@@ -1,0 +1,10 @@
+id: gitlab-ci
+label: GitLab CI
+version: "n/a"
+capabilities:
+  - generate-ci-config
+language: yaml
+ecosystem: gitlab
+experimental: true
+notes: |
+  GitLab CI。MVP 期 experimental，未提供完整 .gitlab-ci.yml 模板。

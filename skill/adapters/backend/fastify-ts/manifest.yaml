@@ -1,0 +1,13 @@
+id: fastify-ts
+label: Fastify + TypeScript
+version: "4.27"
+capabilities:
+  - detect-project
+  - render-architecture
+  - render-role-prompts
+  - rule-check
+language: typescript
+ecosystem: nodejs
+notes: |
+  与实验期 AIAdmin 对齐，MVP 黄金组合首选。
+  Fastify 4 原生支持 JSON Schema 校验，可与 contracts 层 Zod schema 配合（zod-to-json-schema 转换）。

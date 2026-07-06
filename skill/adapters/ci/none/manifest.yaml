@@ -1,0 +1,8 @@
+id: none
+label: 无 (手动)
+version: "n/a"
+capabilities: []
+language: n/a
+ecosystem: none
+notes: |
+  不生成 CI 配置。门禁须手动运行。

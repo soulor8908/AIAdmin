@@ -1,0 +1,12 @@
+id: vue3-vite
+label: Vue3 + Vite
+version: "vue-3.4 / vite-5.3"
+capabilities:
+  - detect-project
+  - render-architecture
+language: typescript
+ecosystem: nodejs
+experimental: true
+notes: |
+  Vue3 + Vite + TypeScript。MVP 期 experimental。
+  与 react-vite 共享 vitest 测试配置。

@@ -1,0 +1,13 @@
+id: jwt
+label: JWT (自签发)
+version: "jsonwebtoken-9"
+capabilities:
+  - detect-project
+  - render-architecture
+  - rule-check
+language: typescript
+ecosystem: nodejs
+notes: |
+  JWT 自签发方案。MVP 默认。
+  密钥从 env 读取：JWT_SECRET（开发用 dev-secret，生产须替换）。
+  五守卫：UNAUTHORIZED / TOKEN_INVALID / TOKEN_EXPIRED / TOKEN_REVOKED / FORBIDDEN。

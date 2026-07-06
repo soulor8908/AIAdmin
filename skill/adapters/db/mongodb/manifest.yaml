@@ -1,0 +1,12 @@
+id: mongodb
+label: MongoDB
+version: "7.0"
+capabilities:
+  - detect-project
+  - render-architecture
+language: bson
+ecosystem: mongo
+experimental: true
+notes: |
+  MongoDB 7。MVP 期 experimental，未提供完整适配。
+  文档型数据库与传统 SQL 适配器差异显著，schema 校验策略不同。

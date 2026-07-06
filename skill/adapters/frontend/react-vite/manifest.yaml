@@ -1,0 +1,13 @@
+id: react-vite
+label: React + Vite
+version: "react-18.3 / vite-5.3"
+capabilities:
+  - detect-project
+  - render-architecture
+  - render-role-prompts
+  - rule-check
+language: typescript
+ecosystem: nodejs
+notes: |
+  React 18 + Vite 5 + TypeScript。
+  黄金组合前端首选。vitest 复用 backend 测试配置。

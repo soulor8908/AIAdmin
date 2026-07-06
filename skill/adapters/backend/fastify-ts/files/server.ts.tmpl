@@ -1,0 +1,29 @@
+// apps/api/src/server.ts —— Fastify 入口
+// 由 create-ai-spec-app 生成（backend: fastify-ts）
+// 后续 spec:init 创建第一个业务域时由 impl-writer 角色驱动填充。
+
+import Fastify, { type FastifyInstance } from 'fastify';
+
+const PORT = Number(process.env.PORT ?? 3000);
+
+export async function buildServer(): Promise<FastifyInstance> {
+  const app = Fastify({ logger: true });
+
+  app.get('/health', async () => ({ status: 'ok' }));
+
+  // TODO: spec:init 后在此注册业务路由
+  // app.register(userRouter, { prefix: '/v1/users' });
+
+  return app;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const app = await buildServer();
+  try {
+    await app.listen({ port: PORT, host: '0.0.0.0' });
+    app.log.info(`服务启动：http://localhost:${PORT}`);
+  } catch (e) {
+    app.log.error(e);
+    process.exit(1);
+  }
+}

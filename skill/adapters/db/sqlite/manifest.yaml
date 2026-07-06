@@ -1,0 +1,12 @@
+id: sqlite
+label: SQLite (开发用)
+version: "3.45"
+capabilities:
+  - detect-project
+  - render-architecture
+language: sql
+ecosystem: sqlite
+notes: |
+  开发用数据库，文件存储。
+  连接字符串格式：file:./data/dev.db
+  生产环境不推荐。

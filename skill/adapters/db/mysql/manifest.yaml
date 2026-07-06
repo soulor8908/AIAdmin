@@ -1,0 +1,11 @@
+id: mysql
+label: MySQL
+version: "8.0"
+capabilities:
+  - detect-project
+  - render-architecture
+language: sql
+ecosystem: mysql
+experimental: true
+notes: |
+  MySQL 8。MVP 期 experimental，未提供完整适配。

@@ -1,0 +1,29 @@
+// apps/api/src/server.ts —— Express 入口
+// 由 create-ai-spec-app 生成（backend: express-ts）
+// 后续 spec:init 创建第一个业务域时由 impl-writer 角色驱动填充。
+
+import express, { type Express } from 'express';
+
+const PORT = Number(process.env.PORT ?? 3000);
+
+export function buildServer(): Express {
+  const app = express();
+
+  app.use(express.json());
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  // TODO: spec:init 后在此注册业务路由
+  // app.use('/v1/users', userRouter);
+
+  return app;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const app = buildServer();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`服务启动：http://localhost:${PORT}`);
+  });
+}

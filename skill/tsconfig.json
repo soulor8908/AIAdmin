@@ -17,6 +17,7 @@
     "engine/src/**/*.ts",
     "adapters/contract/**/*.ts",
     "tools/**/*.ts",
+    "cli/**/*.ts",
     "test/**/*.ts"
   ]
 }

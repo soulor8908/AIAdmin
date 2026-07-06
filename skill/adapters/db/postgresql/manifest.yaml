@@ -1,0 +1,12 @@
+id: postgresql
+label: PostgreSQL
+version: "16"
+capabilities:
+  - detect-project
+  - render-architecture
+language: sql
+ecosystem: postgres
+notes: |
+  生产默认数据库。
+  MVP 期推荐连接字符串格式：postgresql://user:pass@host:5432/dbname
+  migrations 目录约定：db/migrations/*.sql

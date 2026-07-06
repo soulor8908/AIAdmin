@@ -1,0 +1,11 @@
+id: oauth2
+label: OAuth2/OIDC
+version: "n/a"
+capabilities:
+  - detect-project
+language: typescript
+ecosystem: nodejs
+experimental: true
+notes: |
+  OAuth2/OIDC。MVP 期 experimental，未提供完整适配。
+  需外部 IdP 配置（Auth0 / Keycloak 等）。
