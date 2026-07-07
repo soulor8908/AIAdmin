@@ -29,6 +29,7 @@
     "vitest": "^1.6.0"
   },
   "dependencies": {
+    "@ai-spec/skill": "github:soulor8908/ai-spec-skill#main",
     "zod": "^3.23.0"
   }
 }

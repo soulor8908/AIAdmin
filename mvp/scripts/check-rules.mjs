@@ -1,13 +1,29 @@
 // scripts/check-rules.mjs —— MVP 规则自动校验脚本（第三轮：META-003/004 双向绑定）
 // 落实"规则可机器校验"原则 + META-001/003/004 元约束。
 // 每个 enforcement 分支以 `// === XXX-NNN ===` 注释标记，META-004 据此与规则文档双向绑定。
+//
+// Phase 2.2：规则定义委托 @ai-spec/skill（独立 npm 包）。
+// - 声明式规则 YAML 从 @ai-spec/skill 的 kernel/rules/ 加载（SSOT）
+// - 本脚本负责 AIAdmin 项目特化的 enforcement 执行（路径感知、AST 级检查）
+// - 末尾 parity 校验：脚本 enforcement ID 须与包内规则 ID 对齐（防漂移）
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadRules, getBuiltinRulesDir } from '@ai-spec/skill';
 
 const ROOT = process.cwd();
 const errors = [];
 const warnings = []; // suggestion 级，不阻断但记录
 const infos = []; // info 级（如 SEC-002 豁免标记审计清单），不阻断
+
+// ============ Phase 2.2：从 @ai-spec/skill 加载声明式规则（SSOT） ============
+const SKILL_RULES_DIR = getBuiltinRulesDir();
+const skillLoadResult = loadRules(SKILL_RULES_DIR);
+if (skillLoadResult.errors.length > 0) {
+  console.error('❌ @ai-spec/skill 规则加载失败：');
+  for (const e of skillLoadResult.errors) console.error('  - ' + e);
+  process.exit(1);
+}
+const SKILL_RULE_IDS = new Set(skillLoadResult.rules.map((r) => r.id));
 
 function walk(dir, acc = []) {
   if (!existsSync(dir)) return acc;
@@ -328,6 +344,16 @@ for (const id of SCRIPT_ENFORCEMENT_IDS) {
   }
 }
 
+// ============ Phase 2.2 parity：脚本 enforcement ID 须存在于 @ai-spec/skill 规则集 ============
+// 防止 check-rules.mjs 与 @ai-spec/skill 规则定义漂移：
+// - 脚本每个 enforcement 分支须在 @ai-spec/skill kernel/rules/ 有对应规则定义
+// - 反向不做强校验（包内部分规则为 plugin_required/manual，不经 check-rules.mjs 执行）
+for (const id of SCRIPT_ENFORCEMENT_IDS) {
+  if (!SKILL_RULE_IDS.has(id)) {
+    errors.push(`SKILL-PARITY 漂移：脚本有 // === ${id} === enforcement 分支，但 @ai-spec/skill kernel/rules 无对应规则定义`);
+  }
+}
+
 // ============ 输出 ============
 if (infos.length) {
   console.log('ℹ️  审计清单（不阻断，供 Reviewer 逐条核对）：');
@@ -346,6 +372,8 @@ if (errors.length) {
   console.log('✅ 规则校验通过');
   console.log('   enforcement 覆盖：' + [...SCRIPT_ENFORCEMENT_IDS].sort().join('/'));
   console.log('   双向绑定：META-003(声明即实现) + META-004(实现即声明) 已校验');
+  console.log(`   规则定义委托 @ai-spec/skill（${skillLoadResult.rules.length} 条规则，${SKILL_RULES_DIR}）`);
+  console.log('   SKILL-PARITY：脚本 enforcement ID 与包内规则集已对齐');
   if (infos.length) console.log(`   另有 ${infos.length} 条 SEC-002 豁免审计清单`);
   if (warnings.length) console.log(`   另有 ${warnings.length} 条建议`);
 }

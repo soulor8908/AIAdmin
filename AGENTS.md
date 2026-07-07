@@ -97,6 +97,40 @@ npm test            # vitest run（1272 用例）
 - `[advisory]` 项：允许偏离，但必须 PR 描述含"反向同步 Spec：{{项}}"，并实际编辑 Tech-Spec 对应章节
 - **伪同步检测**（R18 S-21）：仅在代码注释声明"已反向同步"但 Spec 文件未实际编辑 = 违规
 
+### @ai-spec/skill 消费（Phase 2 新增）
+
+AIAdmin 通过 npm 依赖 `@ai-spec/skill`（独立仓库 [soulor8908/ai-spec-skill](https://github.com/soulor8908/ai-spec-skill)）消费 spec-first 工作流方法论资产。
+
+**依赖关系**：
+- `mvp/package.json`：`"@ai-spec/skill": "github:soulor8908/ai-spec-skill#main"`
+- 包提供：RuleEngine / loadRules / BuiltinRegexPlugin / InjectPipeline / 三个契约 renderer / scoreSpec
+- 包内 `src/kernel/rules/*.yaml` 为 13 项 enforcement 的声明式 SSOT
+
+**check-rules.mjs 委托**（`mvp/scripts/check-rules.mjs`）：
+- 规则**定义**委托 @ai-spec/skill：启动时 `loadRules(getBuiltinRulesDir())` 加载 22 条声明式规则
+- 规则**执行**留在 AIAdmin：enforcement 逻辑（路径感知 / AST 级检查）仍由 check-rules.mjs 内联实现（项目特化）
+- SKILL-PARITY 校验：脚本每个 `// === XXX-NNN ===` enforcement 分支须在 @ai-spec/skill kernel/rules 有对应规则定义（防漂移）
+
+**parity 测试**（`mvp/apps/api/test/skill-parity.test.ts`）：
+- 验证规则加载：22 条规则可加载，0 错误，13 项 enforcement ID 全覆盖
+- 验证 BuiltinRegexPlugin 与 check-rules.mjs 的 regex 检查等价（CODE-001/002/003 检出 + 干净代码不误报）
+- @ai-spec/skill 包内仅保留 schema 一致性精简测试，完整 parity 留 AIAdmin 消费侧
+
+**更新 @ai-spec/skill 包**：
+```bash
+# 1. 在 ai-spec-skill 仓库改代码 → push main
+# 2. AIAdmin 拉最新版：
+cd mvp && npm update @ai-spec/skill
+# 3. 跑 parity 测试验证：
+npx vitest run apps/api/test/skill-parity.test.ts
+# 4. 跑 lint:rules 验证 SKILL-PARITY 对齐：
+npm run lint:rules
+```
+
+**已知限制**：
+- @ai-spec/skill 的 glob 实现不支持段内 brace expansion（`*.{ts,tsx}`），engine 的文件收集对含 `{}` 的 pattern 会返回空。parity 测试绕过此限制直接调用 `BuiltinRegexPlugin.check()`。
+- 未来修复：ai-spec-skill 的 `src/engine/glob.ts` 需支持段内 brace expansion，或改用 `fast-glob`。
+
 ## 测试约定
 
 - **断言级红**（AI-002）：test-writer 须产出"因逻辑未实现而失败的断言"，非"导入级红"（模块未实现）。交付前自跑 `npx tsc --noEmit`，区分预期导入红 vs 真实缺陷
