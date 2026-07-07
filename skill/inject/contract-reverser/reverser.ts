@@ -20,13 +20,14 @@ interface RouteCall {
 }
 
 /**
- * 计算准确性标记（建议 7）。
- * - verified：置信度 ≥ 0.9 且 request/response 类型都已知
+ * 计算准确性标记（建议 7 / 问题 6）。
+ * - high_confidence：置信度 ≥ 0.9 且 request/response 类型都已知（问题 6：原 verified 改名）
  * - partial：置信度 0.7-0.9 或仅知单一类型
  * - inferred：置信度 < 0.7 或类型全无
+ * - verified：本函数不返回（保留给人工确认后赋值）
  */
 function computeAccuracy(confidence: number, hasRequest: boolean, hasResponse: boolean): AccuracyTag {
-  if (confidence >= 0.9 && hasRequest && hasResponse) return 'verified';
+  if (confidence >= 0.9 && hasRequest && hasResponse) return 'high_confidence';
   if (confidence >= 0.7 && (hasRequest || hasResponse)) return 'partial';
   return 'inferred';
 }
@@ -75,14 +76,15 @@ export function reverseApi(rootDir: string, profile: ProjectProfile): ReverseRes
     };
   });
 
-  // 汇总 accuracy
+  // 汇总 accuracy（问题 6：verified 改为 high_confidence）
   const accuracySummary = {
     inferred: endpoints.filter((e) => e.accuracy === 'inferred').length,
     partial: endpoints.filter((e) => e.accuracy === 'partial').length,
-    verified: endpoints.filter((e) => e.accuracy === 'verified').length,
+    high_confidence: endpoints.filter((e) => e.accuracy === 'high_confidence').length,
+    verified: endpoints.filter((e) => e.accuracy === 'verified').length, // 机器不自动赋值，未来人工确认
   };
   if (accuracySummary.inferred > 0) {
-    warnings.push(`${accuracySummary.inferred} 个端点为 inferred（置信度 < 0.7），需人工 review 后改为 verified`);
+    warnings.push(`${accuracySummary.inferred} 个端点为 inferred（置信度 < 0.7），需人工 review 后标记为 verified`);
   }
 
   // 生成 OpenAPI（带 accuracy 标记）
@@ -204,10 +206,11 @@ function buildOpenApi(endpoints: ReversedEndpoint[], profile: ProjectProfile): R
         : undefined,
     };
   }
-  // 整体 accuracy：所有 verified → verified；否则 inferred 或 partial
-  const allVerified = endpoints.length > 0 && endpoints.every((e) => e.accuracy === 'verified');
+  // 整体 accuracy：所有 high_confidence → high_confidence；否则 inferred 或 partial
+  // 问题 6：verified 仅人工赋值，机器不自动升为 verified
+  const allHighConfidence = endpoints.length > 0 && endpoints.every((e) => e.accuracy === 'high_confidence' || e.accuracy === 'verified');
   const anyInferred = endpoints.some((e) => e.accuracy === 'inferred');
-  const overallAccuracy: AccuracyTag = allVerified ? 'verified' : anyInferred ? 'inferred' : 'partial';
+  const overallAccuracy: AccuracyTag = allHighConfidence ? 'high_confidence' : anyInferred ? 'inferred' : 'partial';
   return {
     openapi: '3.0.3',
     info: {
@@ -224,22 +227,23 @@ function buildOpenApi(endpoints: ReversedEndpoint[], profile: ProjectProfile): R
 function renderMarkdown(
   endpoints: ReversedEndpoint[],
   warnings: string[],
-  accuracySummary: { inferred: number; partial: number; verified: number },
+  accuracySummary: { inferred: number; partial: number; high_confidence: number; verified: number },
 ): string {
   const lines: string[] = [];
   lines.push('# API 逆向契约报告');
   lines.push('');
   lines.push(`> 自动生成 · ${new Date().toISOString()}`);
   lines.push('');
-  // 建议 7：accuracy 汇总
+  // 建议 7：accuracy 汇总（问题 6：verified 拆分为 high_confidence + verified）
   if (endpoints.length > 0) {
     lines.push('## 准确性汇总');
     lines.push('');
     lines.push('| 标记 | 数量 | 含义 |');
     lines.push('|---|---|---|');
-    lines.push(`| [verified] | ${accuracySummary.verified} | 类型完整，置信度 ≥ 0.9，可直接使用 |`);
+    lines.push(`| [high_confidence] | ${accuracySummary.high_confidence} | 机器推断置信度 ≥ 0.9 且类型完整，可直接使用 |`);
     lines.push(`| [partial] | ${accuracySummary.partial} | 部分类型已知，需补充 |`);
     lines.push(`| [inferred] | ${accuracySummary.inferred} | 推断生成，置信度 < 0.7，须人工 review |`);
+    lines.push(`| [verified] | ${accuracySummary.verified} | 人工确认过（机器不自动赋值） |`);
     lines.push('');
   }
   if (endpoints.length === 0) {

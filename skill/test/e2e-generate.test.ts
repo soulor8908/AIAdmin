@@ -70,11 +70,23 @@ describe.skipIf(SKIP)('E2E 冒烟：fastify-ts + express-ts 生成项目三件�
         expect(existsSync(join(projectDir, 'apps/api/src/server.ts'))).toBe(true);
       });
 
-      it('npm install 应成功', () => {
-        const { code } = run('npm install --no-audit --no-fund --silent', projectDir);
-        expect(code).toBe(0);
+      it('npm install 应成功（含失败重试 + prefer-offline，问题 2）', () => {
+        // 问题 2：CI 中 npm install 可能因网络问题失败，加：
+        // - --prefer-offline 减少网络依赖（优先用本地缓存）
+        // - 失败重试 1 次（应对瞬时网络抖动）
+        const installCmd = 'npm install --no-audit --no-fund --silent --prefer-offline';
+        let result = run(installCmd, projectDir, true);
+        if (result.code !== 0) {
+          // 重试 1 次（不带 --prefer-offline，允许回源）
+          console.warn(`[${name}] npm install 首次失败，重试中...`);
+          result = run('npm install --no-audit --no-fund --silent', projectDir, true);
+        }
+        if (result.code !== 0) {
+          console.error(`[${name}] npm install 重试仍失败：\n${result.out.slice(0, 2000)}`);
+        }
+        expect(result.code).toBe(0);
         expect(existsSync(join(projectDir, 'node_modules'))).toBe(true);
-      }, 180_000);
+      }, 240_000);
 
       it('npm run typecheck 应全绿', () => {
         const { code, out } = run('npm run typecheck', projectDir, true);

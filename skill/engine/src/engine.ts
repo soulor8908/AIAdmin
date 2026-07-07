@@ -23,7 +23,8 @@ import type {
   RuleCheckInput,
   ProjectProfile,
 } from '../../spi/adapter.js';
-import { extractMatches, collectFiles } from './glob.js';
+import { collectFiles } from './glob.js';
+import { BuiltinRegexPlugin } from './builtin-regex-plugin.js';
 
 export interface EngineOptions {
   /** 规则目录（默认 'kernel/rules'） */
@@ -68,6 +69,7 @@ export class RuleEngine {
   private loadErrors: string[] = [];
   private loadWarnings: string[] = [];
   private options: Required<EngineOptions>;
+  private builtinRegistered = false;
 
   constructor(options: EngineOptions) {
     this.options = {
@@ -77,6 +79,21 @@ export class RuleEngine {
       ruleIds: options.ruleIds ?? [],
       advisoryMode: options.advisoryMode ?? false,
     };
+  }
+
+  /**
+   * 加载规则后自动注册内置 plugin（builtin-regex）。
+   * 问题 1 修复：核心不再直接执行 regex 检查，而是注册 BuiltinRegexPlugin 处理。
+   */
+  private ensureBuiltinPlugins(): void {
+    if (!this.builtinRegistered) {
+      // builtin-regex plugin 处理 regex/structure 类、非 plugin_required 的规则
+      const regexPlugin = new BuiltinRegexPlugin(this.rules);
+      if (!this.plugins.has(regexPlugin.id)) {
+        this.plugins.set(regexPlugin.id, regexPlugin);
+      }
+      this.builtinRegistered = true;
+    }
   }
 
   /**
@@ -101,6 +118,9 @@ export class RuleEngine {
       this.loadErrors = loadResult.errors;
       this.loadWarnings = loadResult.warnings;
     }
+
+    // 1.5 注册内置 plugin（问题 1：核心不直接执行检查）
+    this.ensureBuiltinPlugins();
 
     const findings: RuleFinding[] = [];
     const executed = new Set<string>();
@@ -159,17 +179,17 @@ export class RuleEngine {
 
   /**
    * 执行单条规则。
+   * 问题 1 修复：核心只调度 plugin，不直接执行检查。
+   *
+   * 分派逻辑：
    * - manual kind：跳过机器检查（由 Reviewer 流程校验）
-   * - regex kind：核心内置检查（无需 plugin）
-   * - structure kind：核心内置基础检查 + plugin 扩展
-   * - import-graph / ast kind：须 plugin
+   * - 其他 kind：全部交给 plugin 处理
+   *   - builtin-regex plugin 处理 regex/structure 类（非 plugin_required）
+   *   - 外部 plugin（如 typescript）处理 plugin_required 类
+   *   - 若无 plugin 注册且 plugin_required=true → 报缺失 warning
    */
   private async executeRule(rule: DeclarativeRule): Promise<RuleFinding[]> {
-    // 文件预过滤（按 applies_to.file_patterns，建议 3：抽到 glob.ts）
-    const files = collectFiles(this.options.rootDir, rule.applies_to.file_patterns);
-
     if (rule.check.kind === 'manual') {
-      // manual 类不执行机器检查，仅记录"须人工校验"info
       return [
         {
           rule_id: rule.id,
@@ -181,7 +201,10 @@ export class RuleEngine {
       ];
     }
 
-    // 优先调度已注册 plugin（plugin 可覆盖核心内置检查）
+    // 文件预过滤（按 applies_to.file_patterns）
+    const files = collectFiles(this.options.rootDir, rule.applies_to.file_patterns);
+
+    // 调度已注册 plugin（builtin-regex 或外部 plugin）
     const plugin = this.findPluginForRule(rule.id);
     if (plugin) {
       const input: RuleCheckInput = {
@@ -206,78 +229,22 @@ export class RuleEngine {
       ];
     }
 
-    // 核心内置检查：regex / structure 类
-    if (rule.check.kind === 'regex' && rule.check.expr) {
-      return this.runRegexCheck(rule, files);
-    }
-
-    if (rule.check.kind === 'structure' && rule.check.expr) {
-      // structure 类核心不实现具体语义（须 plugin），仅记录 advisory
-      return [
-        {
-          rule_id: rule.id,
-          file: '',
-          line: 0,
-          severity: 'info',
-          message: `${rule.id} structure 检查须 plugin 实现，核心仅记录意图: ${rule.check.expr}`,
-        },
-      ];
-    }
-
-    return [];
-  }
-
-  /**
-   * 核心内置 regex 检查。无需 plugin，扫描文件内容匹配正则。
-   */
-  private runRegexCheck(rule: DeclarativeRule, files: string[]): RuleFinding[] {
-    const findings: RuleFinding[] = [];
-    const { expr, negative } = rule.check;
-    if (!expr) return findings;
-
-    let regex: RegExp;
-    try {
-      regex = new RegExp(expr, 's');
-    } catch (e) {
-      return [
-        {
-          rule_id: rule.id,
-          file: '',
-          line: 0,
-          severity: 'warning',
-          message: `${rule.id} 正则无效: ${(e as Error).message}`,
-        },
-      ];
-    }
-
-    for (const file of files) {
-      let src: string;
-      try {
-        src = readFileSync(file, 'utf8');
-      } catch {
-        continue;
-      }
-      const matches = extractMatches(regex, src);
-      const isViolation = negative ? matches.length > 0 : matches.length === 0;
-      if (isViolation) {
-        for (const m of matches.slice(0, 10)) {
-          findings.push({
-            rule_id: rule.id,
-            file: relative(this.options.rootDir, file),
-            line: m.line,
-            severity: rule.severity,
-            message: `${rule.id} 违规：${rule.title}`,
-            fix_hint: rule.fix_hint,
-          });
-        }
-      }
-    }
-    return findings;
+    // 无 plugin 注册且非 plugin_required（仅 import-graph / ast 类，builtin-regex 未接管）
+    return [
+      {
+        rule_id: rule.id,
+        file: '',
+        line: 0,
+        severity: 'info',
+        message: `${rule.id} kind=${rule.check.kind} 须 plugin 实现，核心仅记录意图: ${rule.check.expr ?? ''}`,
+      },
+    ];
   }
 
   /**
    * META-003：声明漂移校验。
    * 声明式规则集里 check.plugin_required=true 的规则，对应 plugin 必须在 supported_rules 注册该 ID。
+   * 注意：builtin-regex plugin 自动接管非 plugin_required 的规则，不在本检查范围。
    */
   private checkMeta003(): string[] {
     const violations: string[] = [];

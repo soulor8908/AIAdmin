@@ -1,13 +1,14 @@
 // cli/inject-command.ts —— ai-spec inject 子命令
 // P2 主入口：探测 → 分析 → 逆向契约 → 注入计划 → 执行 → 安全网
 //
-// 用法（建议 5：dry-run 默认，--apply 才执行）：
+// 用法（问题 3：简化交互流程，--apply 直接执行）：
 //   ai-spec inject                # 默认 dry-run，只输出计划
-//   ai-spec inject --apply        # 确认后执行（须人工 review 计划后）
-//   ai-spec inject --apply --force  # 跳过确认（CI 场景）
-//   ai-spec inject --no-safety-net  # 跳过测试安全网
+//   ai-spec inject --apply        # 直接执行（安全网已保障）
+//   ai-spec inject --apply --no-safety-net  # 跳过安全网（开发者明确知情）
 //   ai-spec inject --severity advisory  # 指定默认级别
 //   ai-spec rollback              # 回滚最近一次注入
+//
+// 历史兼容：--force 已废弃（问题 3），保留为 no-op 避免旧脚本报错
 
 import { Command } from 'commander';
 import { detectProject, detectAndWriteProfile } from '../inject/detector/detector.js';
@@ -24,9 +25,10 @@ export function registerInjectCommand(program: Command): void {
   const inject = program
     .command('inject')
     .description('对既有项目注入 spec-first 基础设施（默认 dry-run，--apply 才执行）')
-    // 建议 5：dry-run 是默认行为，--apply 才真正执行
+    // 问题 3：dry-run 是默认行为，--apply 直接执行（不再要 --force 二次确认）
     .option('--apply', '确认执行（默认 dry-run，加此选项才写入）', false)
-    .option('--force', '跳过确认提示（CI 场景，须配合 --apply）', false)
+    // --force 已废弃（问题 3）：保留为 no-op，旧脚本不报错但不再阻断
+    .option('--force [deprecated]', '（已废弃）--apply 现直接执行，本选项为 no-op 兼容旧脚本', false)
     // 兼容旧用法：--dry-run 显式声明（无效果，但兼容）
     .option('--dry-run', '显式 dry-run（默认行为，无须指定）', false)
     .option('--severity <level>', '默认级别 (advisory|warning|blocking)', 'advisory')
@@ -56,7 +58,7 @@ export function registerInjectCommand(program: Command): void {
 
 async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
   const rootDir = process.cwd();
-  // 建议 5：默认 dry-run，--apply 才执行
+  // 问题 3：--apply 直接执行，--force 已废弃（no-op）
   const apply = cmdOpts.apply === true;
   const force = cmdOpts.force === true;
   const noSafetyNet = cmdOpts.safetyNet === false;
@@ -64,9 +66,13 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
   const noReverse = cmdOpts.reverse === false;
   const severity = (cmdOpts.severity as SeverityLevel) ?? 'advisory';
 
+  if (force) {
+    logger.warn('--force 已废弃（问题 3）：--apply 现直接执行，本选项为 no-op，后续版本将移除');
+  }
+
   logger.banner();
   logger.info(`目标目录：${rootDir}`);
-  logger.info(`模式：${apply ? '执行（写入 + 备份）' : 'dry-run（仅计划，--apply 才执行）'}`);
+  logger.info(`模式：${apply ? '执行（写入 + 备份' + (noSafetyNet ? '，无安全网' : '') + '）' : 'dry-run（仅计划，--apply 才执行）'}`);
 
   // 1. 探测
   logger.startStep('探测项目技术栈');
@@ -146,18 +152,9 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
   );
 
   // 6. 执行（仅 apply 模式）
+  // 问题 3：--apply 直接执行，不再要 --force 二次确认
+  // 安全网已保障（baseline 对比 + 自动回滚），如需跳过用 --no-safety-net
   if (apply) {
-    // --force 跳过确认（CI 场景），否则提示用户确认
-    if (!force) {
-      logger.blank();
-      logger.warn(`即将写入 ${plan.impact.new_files + plan.impact.modified_files} 个文件`);
-      logger.warn(`请先 review ${planDir}/inject-plan.md`);
-      logger.warn(`确认无误后，重新执行：ai-spec inject --apply --force`);
-      logger.blank();
-      logger.info('提示：本次未执行（未加 --force）');
-      return;
-    }
-
     logger.startStep('执行注入');
     const result = executeInjection(rootDir, plan);
     logger.endStep(`执行注入 (${result.written} 文件, ${result.backups.length} 备份)`, true);
@@ -188,7 +185,8 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
     logger.blank();
     logger.success('dry-run 计划已生成');
     logger.info(`查看：${planDir}/inject-plan.md`);
-    logger.info(`执行：ai-spec inject --apply --force`);
+    logger.info(`执行：ai-spec inject --apply`);
+    logger.info(`跳过安全网：ai-spec inject --apply --no-safety-net`);
   }
 }
 

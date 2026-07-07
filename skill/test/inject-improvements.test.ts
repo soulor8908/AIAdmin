@@ -21,7 +21,7 @@ describe('建议 7：contract-reverser 准确性标记', () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it('端点应标记 accuracy（inferred/partial/verified）', () => {
+  it('端点应标记 accuracy（inferred/partial/high_confidence，问题 6）', () => {
     // 造一个带 app.get 但无类型注解的 TS 项目
     writeFileSync(
       join(projectDir, 'server.ts'),
@@ -44,15 +44,15 @@ app.post('/users', async (req) => ({ id: 1 }));
 
     const result = reverseApi(projectDir, profile);
     expect(result.endpoints.length).toBeGreaterThanOrEqual(2);
-    // 每个端点都有 accuracy 字段
+    // 每个端点都有 accuracy 字段（问题 6：verified 仅人工赋值，机器不返回）
     for (const ep of result.endpoints) {
-      expect(['inferred', 'partial', 'verified']).toContain(ep.accuracy);
+      expect(['inferred', 'partial', 'high_confidence', 'verified']).toContain(ep.accuracy);
     }
     // 无类型的端点应为 inferred
     expect(result.endpoints.every((e) => e.accuracy === 'inferred')).toBe(true);
   });
 
-  it('accuracy_summary 应正确统计', () => {
+  it('accuracy_summary 应正确统计（问题 6：high_confidence 字段）', () => {
     writeFileSync(
       join(projectDir, 'server.ts'),
       `app.get('/a', () => {});
@@ -70,10 +70,12 @@ app.post('/b', () => {});
 
     const result = reverseApi(projectDir, profile);
     expect(result.accuracy_summary.inferred).toBe(2);
-    expect(result.accuracy_summary.verified).toBe(0);
+    // 问题 6：high_confidence 字段存在（机器不自动赋 verified）
+    expect(result.accuracy_summary.high_confidence).toBe(0);
+    expect(result.accuracy_summary.verified).toBe(0); // 机器不自动赋值
   });
 
-  it('OpenAPI 应含 accuracy 标记', () => {
+  it('OpenAPI 应含 accuracy 标记（问题 6：含 high_confidence）', () => {
     writeFileSync(
       join(projectDir, 'server.ts'),
       `app.get('/health', () => {});`,
@@ -89,10 +91,10 @@ app.post('/b', () => {});
 
     const result = reverseApi(projectDir, profile);
     expect(result.openapi.accuracy).toBeDefined();
-    expect(['inferred', 'partial', 'verified']).toContain(result.openapi.accuracy);
+    expect(['inferred', 'partial', 'high_confidence', 'verified']).toContain(result.openapi.accuracy);
   });
 
-  it('markdown 报告应含准确性汇总表', () => {
+  it('markdown 报告应含准确性汇总表（问题 6：high_confidence + verified 行）', () => {
     writeFileSync(
       join(projectDir, 'server.ts'),
       `app.get('/health', () => {});`,
@@ -109,6 +111,7 @@ app.post('/b', () => {});
     const result = reverseApi(projectDir, profile);
     expect(result.markdown_report).toContain('准确性汇总');
     expect(result.markdown_report).toContain('[inferred]');
+    expect(result.markdown_report).toContain('[high_confidence]');
     expect(result.markdown_report).toContain('[verified]');
   });
 });
@@ -123,7 +126,7 @@ describe('建议 5：inject 默认 dry-run', () => {
     cmd
       .command('inject')
       .option('--apply', '确认执行', false)
-      .option('--force', '跳过确认', false)
+      .option('--force [deprecated]', '（已废弃）no-op', false)
       .option('--dry-run', '兼容旧用法', false)
       .action(() => {});
 
@@ -134,13 +137,13 @@ describe('建议 5：inject 默认 dry-run', () => {
     expect(opts.force).toBe(false);
   });
 
-  it('inject --apply 应激活 apply 模式', async () => {
+  it('inject --apply 应激活 apply 模式（问题 3：直接执行，无须 --force）', async () => {
     const { Command } = await import('commander');
     const cmd = new Command();
     cmd
       .command('inject')
       .option('--apply', '确认执行', false)
-      .option('--force', '跳过确认', false)
+      .option('--force [deprecated]', '（已废弃）no-op', false)
       .action(() => {});
 
     await cmd.parseAsync(['node', 'test', 'inject', '--apply']);
@@ -148,13 +151,13 @@ describe('建议 5：inject 默认 dry-run', () => {
     expect(opts.apply).toBe(true);
   });
 
-  it('inject --apply --force 应激活强制执行', async () => {
+  it('inject --apply --force 仍兼容旧脚本（--force 为 no-op，问题 3）', async () => {
     const { Command } = await import('commander');
     const cmd = new Command();
     cmd
       .command('inject')
       .option('--apply', '确认执行', false)
-      .option('--force', '跳过确认', false)
+      .option('--force [deprecated]', '（已废弃）no-op', false)
       .action(() => {});
 
     await cmd.parseAsync(['node', 'test', 'inject', '--apply', '--force']);

@@ -125,7 +125,7 @@ notes: |
 1. 在 `adapters/<type>/<id>/` 下创建 `manifest.yaml`（参考已有适配器）
 2. 在 `files/` 下放模板文件（如 `server.ts.tmpl`）
 3. 更新 `cli/options.ts` 的 `STACK_OPTIONS` 加入新选项
-4. 如有特殊渲染逻辑，在 `cli/template-engine.ts` 加分支或调用 `loadAdapterFile`
+4. 如有特殊渲染逻辑，在 `cli/templates/<concern>.ts` 加分支（如 `root-files.ts` / `api-scaffold.ts` / `web-scaffold.ts` / `scripts.ts`）或调用 `loadAdapterFile`
 5. 跑 `npx tsx cli/index.ts test-proj --<type> <id> --yes --no-deps --no-git` 验证生成
 6. 在生成的项目里跑 `npm run typecheck && npm test` 验证三件套全绿
 
@@ -158,8 +158,9 @@ skill/
 │   ├── auth/             # 认证适配器 (jwt/session/oauth2/none)
 │   ├── ci/               # CI 适配器 (github-actions/gitlab-ci/none)
 │   └── architecture/     # 架构层映射 (layer-mapping.yaml)
-├── engine/              # 规则引擎 (核心 + plugin)
+├── engine/              # 规则引擎 (核心调度 + builtin-regex-plugin + 外部 plugin)
 ├── cli/                 # CLI 脚手架 (commander + enquirer)
+│   └── templates/       # 模板渲染拆分（root-files / api-scaffold / web-scaffold / scripts）
 ├── tools/               # 通用 CLI 工具 (gen-delta/gen-snapshot)
 ├── spi/                 # 适配器 SPI 定义
 └── test/                # DoD 验证套件
@@ -215,8 +216,27 @@ Options:
 - [x] P1-6 CI 配置生成（ai-spec-ci.yml + contract drift 占位）
 - [x] P1-7 文档（README + 快速上手 + 适配器开发指南）
 - [x] P1-8 发包准备（package.json bin + CHANGELOG）
+- [ ] P1-5 端到端 spec-first 流程冒烟（生成项目内验证）
 
-### Phase 2 / 3（规划中）
+### Phase 3（Skill 生态与智能化）✅
+
+- [x] P3-1 Skill 包格式（`skill.yaml` manifest + rules/templates/role_prompts/contracts/adapters 产物 globs）
+- [x] P3-2 本地 Registry（`installed.json` SSOT + builtin 目录扫描 + `ai-spec skill search/add/remove` CLI）
+- [x] P3-3 领域 Skill（`user-mgmt` + `audit-log` 完整 skill 包）
+- [x] P3-4 Skill 组合机制（命名空间隔离 + overrides + 隐式覆盖检测 + 依赖解析 + 冲突检测）
+- [x] P3-5 Spec 完整性评分器（9 章节 + 字段填充率 + 0-100 分 + ABCD 等级）
+
+### 优化迭代（0.1.0-phase1.1）✅
+
+- [x] 建议 1-4：experimental 防护 / E2E 冒烟 / engine 瘦身 / 渲染后占位符校验
+- [x] 建议 5-7：inject 默认 dry-run / skill 命名空间 / accuracy 标记
+- [x] 问题 1：engine 核心瘦身（`runRegexCheck` → `BuiltinRegexPlugin`，核心仅做调度）
+- [x] 问题 2：E2E npm install CI 稳定性（`--prefer-offline` + 失败重试）
+- [x] 问题 3：inject 交互流程简化（`--apply` 直接执行，`--force` 废弃为 no-op）
+- [x] 问题 5：template-engine.ts 拆分（846 行 → 93 行调度 + 5 个 templates/*.ts）
+- [x] 问题 6：contract-reverser accuracy（`verified` → `high_confidence`，`verified` 留给人工）
+
+### Phase 2（规划中）
 
 详见 [roadmap](../mvp/docs/workflow/skill-product-roadmap.md)。
 

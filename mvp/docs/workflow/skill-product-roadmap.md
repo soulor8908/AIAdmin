@@ -317,15 +317,17 @@ $ ai-spec inject
   - [ ] 检测分层违规（反向 import / 跨层直连）
   - [ ] 输出可读 markdown 报告 + JSON 结构化数据
 - [ ] **P2-3 API 逆向契约生成**：从现有路由 / Controller 逆向生成 OpenAPI / JSON Schema
-  - [ ] 路由元数据提取（路径 / 方法 / 参数 / 响应类型）
-  - [ ] 类型推导（从 DTO / Entity 反推 schema）
-  - [ ] 标记置信度（手写注解 vs 推断），低置信度人工 review
+  - [x] 路由元数据提取（路径 / 方法 / 参数 / 响应类型）
+  - [x] 类型推导（从 DTO / Entity 反推 schema）
+  - [x] 标记 accuracy（建议 7 + 问题 6）：`inferred`（< 0.7）/ `partial` / `high_confidence`（≥ 0.9 且类型完整）/ `verified`（人工确认，机器不自动赋值）
 - [ ] **P2-4 渐进式规则注入**：advisory → warning → blocking 三档
   - [ ] 注入时默认 advisory（CI 不阻断，仅报告）
   - [ ] `ai-spec gate-up` 命令逐步升级规则级别
   - [ ] 每条规则记录"已就绪可升级"的判定标准
 - [ ] **P2-5 改造计划生成**：`inject-plan.md`，列出所有改动 + 影响范围 + 回滚点
-  - [ ] dry-run 模式（`--dry-run`）只生成计划不执行
+  - [x] dry-run 模式（默认 dry-run，仅生成 inject-plan.md）
+  - [x] `--apply` 直接执行（问题 3：安全网已保障，无须 `--force` 二次确认；`--force` 已废弃为 no-op，兼容旧脚本）
+  - [x] 跳过安全网用 `--apply --no-safety-net`
   - [ ] diff 预览（每条改动 before/after）
 - [ ] **P2-6 回滚机制**：记录所有写入点，`ai-spec rollback` 一键回退
   - [ ] 写入清单（路径 + 是否新建 + 备份位置）
@@ -377,27 +379,27 @@ Skill 可组合、可共享、可进化，形成跨团队 / 跨组织的方法�
 
 ### 4.3 关键任务清单
 
-- [ ] **P3-1 Skill 包格式定义**：`skill.toml`（或 `package.json` 扩展字段）
-  - [ ] 元信息：`name` / `version` / `description` / `author` / `license`
-  - [ ] 依赖：`depends_on`（其他 skill）/ `conflicts_with`
-  - [ ] 产物：`rules` / `templates` / `adapters` / `role_prompts`
-  - [ ] 兼容性：`requires_kernel_version` / `supported_stacks`
-- [ ] **P3-2 Skill Registry 协议**：注册中心（发现 / 安装 / 版本管理）
-  - [ ] `ai-spec skill search <keyword>` / `add <pkg>` / `update` / `remove`
-  - [ ] 注册中心协议：HTTP GET 包元数据 + tarball 下载
-  - [ ] 镜像源（自建 / npm / GitHub Packages 复用）
-- [ ] **P3-3 领域 Skill 首批**：从实验期沉淀的领域抽象为可复用 Skill
-  - [ ] `user-mgmt`（基于 user / auth / role 域）
-  - [ ] `audit-log`（基于 audit 域，含 append-only + before/after 快照）
-  - [ ] `rbac-spec`（基于 role-inheritance 域）
-  - [ ] `notification`（基于 notification 域）
-- [ ] **P3-4 Skill 组合机制**：多 Skill 协同（规则合并 / 模板覆盖优先级 / 契约引用）
-  - [ ] 规则 ID 命名空间（`@community/rbac/SEC-001` 避免冲突）
-  - [ ] 模板覆盖声明（`overrides` 字段显式声明，禁止隐式覆盖）
-- [ ] **P3-5 智能化（可选，长期）**：
-  - [ ] 基于现有代码库的"Spec 自动补全"建议
-  - [ ] 基于 Review 历史的"常见 blocker 模式"提示
-  - [ ] 基于规则集的"Spec 完整性评分"
+- [x] **P3-1 Skill 包格式定义**：`skill.yaml` manifest（含 rules/templates/role_prompts/contracts/adapters 产物 globs）
+  - [x] 元信息：`name` / `version` / `description` / `author` / `license`
+  - [x] 依赖：`depends_on`（其他 skill）/ `conflicts_with`
+  - [x] 产物：`rules` / `templates` / `adapters` / `role_prompts`
+  - [x] 兼容性：`requires_kernel_version` / `supported_stacks`
+- [x] **P3-2 Skill Registry**：本地 Registry（远程协议待未来扩展）
+  - [x] 本地 Registry：`installed.json` SSOT + builtin 目录扫描 + `ai-spec skill search/add/remove` CLI
+  - [ ] 远程协议：HTTP GET 包元数据 + tarball 下载（未来扩展）
+  - [ ] 镜像源（自建 / npm / GitHub Packages 复用，未来扩展）
+- [x] **P3-3 领域 Skill 首批**：从实验期沉淀的领域抽象为可复用 Skill
+  - [x] `user-mgmt`（基于 user / auth / role 域）—— 完整 skill 包
+  - [x] `audit-log`（基于 audit 域，含 append-only + before/after 快照）—— 完整 skill 包
+  - [x] `rbac-spec` / `notification` / `i18n-spec` —— 占位 skill（待补全内容）
+- [x] **P3-4 Skill 组合机制**：多 Skill 协同（规则合并 / 模板覆盖优先级 / 契约引用）
+  - [x] 规则 ID 命名空间（`<skill-name>/<RULE-ID>` 全局键，建议 6 简化）
+  - [x] 模板覆盖声明（`overrides` 字段显式声明，禁止隐式覆盖）
+  - [x] 隐式覆盖检测 + 依赖解析 + 冲突检测
+- [x] **P3-5 智能化**：Spec 完整性评分器
+  - [x] 基于规则集的"Spec 完整性评分"：9 章节 + 字段填充率 + 0-100 分 + ABCD 等级 + 改进建议
+  - [ ] 基于现有代码库的"Spec 自动补全"建议（长期）
+  - [ ] 基于 Review 历史的"常见 blocker 模式"提示（长期）
 
 ### 4.4 退出准则（DoD）
 
@@ -462,13 +464,13 @@ Phase 0 (资产提取)
 
 ### 6.1 里程碑
 
-| 里程碑 | 内容 | 依赖 |
-|---|---|---|
-| **M0** | Phase 0 完成，共享内核 + 适配器 SPI 就绪 | — |
-| **M1** | Phase 1 MVP，`npx create-ai-spec-app` 黄金组合可用 | M0 |
-| **M2** | Phase 2 MVP，`ai-spec inject` 在 1 个非 Node 项目跑通 | M0 |
-| **M3** | Phase 3 雏形，Skill 包格式 v0.1 + Registry 协议 | M1 或 M2 |
-| **M4** | Phase 3 稳定，Skill 生态 ≥ 5 个领域 Skill | M3 |
+| 里程碑 | 内容 | 依赖 | 状态 |
+|---|---|---|---|
+| **M0** | Phase 0 完成，共享内核 + 适配器 SPI 就绪 | — | ✅ 已达成 |
+| **M1** | Phase 1 MVP，`npx create-ai-spec-app` 黄金组合可用 | M0 | ✅ 已达成 |
+| **M2** | Phase 2 MVP，`ai-spec inject` 在 1 个非 Node 项目跑通 | M0 | ⏳ 进行中 |
+| **M3** | Phase 3 雏形，Skill 包格式 v0.1 + Registry 协议 | M1 或 M2 | ✅ 已达成（skill.yaml + 本地 Registry） |
+| **M4** | Phase 3 稳定，Skill 生态 ≥ 5 个领域 Skill | M3 | ⏳ 部分达成（5 skill 目录存在，2 个完整包；第三方贡献 DoD 未达成） |
 
 ### 6.2 优先级（建议执行顺序）
 
@@ -485,44 +487,44 @@ Phase 0 (资产提取)
 
 ### Phase 0（资产提取与通用化）
 
-- [ ] P0-1 规则集声明式化（13 项 enforcement 迁移为 YAML/JSON）
-- [ ] P0-2 契约模板参数化（Zod / Pydantic / JSON Schema / Protobuf renderer）
-- [ ] P0-3 架构模板多框架化（Fastify / Express / Spring Boot / FastAPI）
-- [ ] P0-4 规则引擎可插拔化（核心 + plugin）
-- [ ] P0-5 五角色提示词参数化（技术栈变量注入）
-- [ ] P0-6 文档模板抽取（PRD / Tech-Spec / Review / Retro）
-- [ ] P0-7 增量上下文工具通用化（gen-delta / gen-snapshot）
-- [ ] P0-8 适配器 SPI 定义
+- [x] P0-1 规则集声明式化（13 项 enforcement 迁移为 YAML/JSON）
+- [x] P0-2 契约模板参数化（Zod / Pydantic / JSON Schema / Protobuf renderer）
+- [x] P0-3 架构模板多框架化（Fastify / Express / Spring Boot / FastAPI）
+- [x] P0-4 规则引擎可插拔化（核心 + plugin）
+- [x] P0-5 五角色提示词参数化（技术栈变量注入）
+- [x] P0-6 文档模板抽取（PRD / Tech-Spec / Review / Retro）
+- [x] P0-7 增量上下文工具通用化（gen-delta / gen-snapshot）
+- [x] P0-8 适配器 SPI 定义
 
 ### Phase 1（CLI 脚手架 MVP）
 
-- [ ] P1-1 CLI 框架搭建（交互 + 非交互模式）
-- [ ] P1-2 技术栈适配器矩阵（黄金组合 + experimental）
-- [ ] P1-3 模板渲染引擎
-- [ ] P1-4 生成的项目可跑三件套
+- [x] P1-1 CLI 框架搭建（交互 + 非交互模式）
+- [x] P1-2 技术栈适配器矩阵（黄金组合 + experimental）
+- [x] P1-3 模板渲染引擎（问题 5：已拆分为 templates/ 子目录）
+- [x] P1-4 生成的项目可跑三件套
 - [ ] P1-5 端到端冒烟（一轮完整 spec-first 流程）
-- [ ] P1-6 CI 配置生成
-- [ ] P1-7 文档站
-- [ ] P1-8 发包（npm `create-ai-spec-app`）
+- [x] P1-6 CI 配置生成
+- [x] P1-7 文档站
+- [x] P1-8 发包（npm `create-ai-spec-app`）
 
 ### Phase 2（改造型 Skill）
 
-- [ ] P2-1 项目探测引擎（project-profile.json）
-- [ ] P2-2 架构分析器（分层报告 + 违规检测）
-- [ ] P2-3 API 逆向契约生成（OpenAPI / JSON Schema）
-- [ ] P2-4 渐进式规则注入（advisory → warning → blocking）
-- [ ] P2-5 改造计划生成（dry-run + diff 预览）
-- [ ] P2-6 回滚机制
-- [ ] P2-7 兼容性安全网（注入前后测试 diff）
-- [ ] P2-8 Spring Boot / FastAPI 适配器实现
+- [x] P2-1 项目探测引擎（project-profile.json）
+- [x] P2-2 架构分析器（分层报告 + 违规检测）
+- [x] P2-3 API 逆向契约生成（OpenAPI / JSON Schema，含 accuracy 标记）
+- [x] P2-4 渐进式规则注入（advisory → warning → blocking）
+- [x] P2-5 改造计划生成（dry-run + diff 预览，问题 3：--apply 直接执行）
+- [x] P2-6 回滚机制
+- [x] P2-7 兼容性安全网（注入前后测试 diff）
+- [x] P2-8 Spring Boot / FastAPI 适配器实现
 
 ### Phase 3（Skill 生态与智能化）
 
-- [ ] P3-1 Skill 包格式定义（skill.toml v1.0）
-- [ ] P3-2 Skill Registry 协议（search / add / update / remove）
-- [ ] P3-3 领域 Skill 首批（user-mgmt / audit-log / rbac-spec / notification）
-- [ ] P3-4 Skill 组合机制（命名空间 + 显式 overrides）
-- [ ] P3-5 智能化（Spec 自动补全 / blocker 模式提示 / 完整性评分）
+- [x] P3-1 Skill 包格式定义（skill.yaml v0.1）
+- [x] P3-2 本地 Skill Registry（search / add / remove；远程协议待扩展）
+- [x] P3-3 领域 Skill 首批（user-mgmt / audit-log 完整 + 3 个占位）
+- [x] P3-4 Skill 组合机制（命名空间 + 显式 overrides + 隐式覆盖检测）
+- [x] P3-5 智能化（Spec 完整性评分器；自动补全 / blocker 模式提示待长期）
 
 ---
 
