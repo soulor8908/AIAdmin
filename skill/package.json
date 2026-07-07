@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:dod": "vitest run --dir test",
-    "engine:parity": "vitest run test/parity-13-enforcements.test.ts",
+    "test:schema": "vitest run test/rule-schema-consistency.test.ts",
     "typecheck": "tsc --noEmit",
     "cli:dev": "tsx cli/index.ts"
   },

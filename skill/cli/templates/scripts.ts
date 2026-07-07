@@ -53,9 +53,16 @@ const CONTRACT_DRIFT_SCRIPT = `#!/usr/bin/env node
 // 完整实现（P1-3 阶段）：grep contracts/*.ts 的 Schema export 与 docs/spec/*.md 的契约声明，
 // 报告"Spec 声明但 contracts 未实现"或"contracts 实现但 Spec 未声明"的漂移。
 
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 
-const contractsDir = 'packages/contracts/src/schemas';
+// 从 .ai-spec/config.json 读取 contractsDir，缺省回退到 'packages/contracts/src/schemas'
+let contractsDir = 'packages/contracts/src/schemas';
+try {
+  const cfg = JSON.parse(readFileSync('.ai-spec/config.json', 'utf8'));
+  contractsDir = cfg.contractsDir ?? contractsDir;
+} catch {
+  // config 不存在时用默认值
+}
 const specDir = 'docs/spec';
 
 if (!existsSync(contractsDir)) {

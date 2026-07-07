@@ -81,7 +81,7 @@ function renderReadme(opts: GenerateOptions): WriteOp {
   const lines = [
     `# ${opts.project_name}`,
     '',
-    '> 由 [create-ai-spec-app](https://github.com/soulor8908/AIAdmin/tree/main/skill) 生成。',
+    '> 由 [create-ai-spec-app](https://github.com/soulor8908/ai-spec-skill) 生成。',
     '',
     '## 技术栈',
     '',
@@ -188,9 +188,11 @@ function renderTsconfig(opts: GenerateOptions): WriteOp {
 }
 
 function renderAiSpecConfig(opts: GenerateOptions): WriteOp {
+  const isTs = opts.stack.backend.endsWith('-ts');
   const cfg = {
     version: '0.1.0-phase1',
     stack: opts.stack,
+    contractsDir: isTs ? 'packages/contracts/src/schemas' : 'contracts',
     gates: {
       G1_prd: '人工校验 + PR 模板 checklist',
       G3_spec: 'tsc + contract drift 检测',
