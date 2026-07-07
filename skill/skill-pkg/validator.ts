@@ -33,10 +33,12 @@ export function validateSkillManifest(manifest: SkillManifest): SkillValidationR
   if (!pkg.description) warnings.push('[package] description 为空（建议填写以便 search）');
   if (!pkg.author) warnings.push('[package] author 为空');
 
-  // 2. name 命名空间格式：@<ns>/<name>
-  if (pkg.name && !/^@[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/.test(pkg.name)) {
+  // 2. name 格式：简单名（YAGNI，建议 6）或命名空间形式 @<ns>/<name>
+  // 建议 6：当前阶段去掉 @core/ 前缀，直接用 user-mgmt / audit-log
+  // 命名空间在 skill 数量 > 20 且确实出现 ID 冲突时再引入
+  if (pkg.name && !/^[a-z][a-z0-9-]*$/.test(pkg.name) && !/^@[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/.test(pkg.name)) {
     errors.push(
-      `[package] name "${pkg.name}" 不符合命名空间格式（须为 @<ns>/<name>，全小写 + 连字符）`,
+      `[package] name "${pkg.name}" 不合法（须为简单名 user-mgmt 或命名空间 @ns/name，全小写 + 连字符）`,
     );
   }
 
@@ -57,11 +59,8 @@ export function validateSkillManifest(manifest: SkillManifest): SkillValidationR
     }
   }
 
-  // 6. depends_on 引用合法
+  // 6. depends_on 引用合法（建议 6：允许简单名，不再强制命名空间）
   for (const dep of deps.depends_on) {
-    if (!dep.name.startsWith('@')) {
-      warnings.push(`[dependencies] depends_on name "${dep.name}" 不含命名空间`);
-    }
     if (!dep.version_range) {
       warnings.push(`[dependencies] depends_on ${dep.name} 缺少 version_range`);
     }

@@ -1,6 +1,6 @@
 # BA 角色提示词补充：audit-log 域
 
-> 本补充由 @core/audit-log skill 提供，叠加到 kernel/roles/ba.md 之上。
+> 本补充由 audit-log skill 提供，叠加到 kernel/roles/ba.md 之上。
 
 ## 域特化关注点
 

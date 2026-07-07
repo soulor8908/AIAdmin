@@ -3,7 +3,7 @@
 //
 // 设计原则：
 // - 与 adapter manifest 同源（同一 yaml schema 风格），但 skill 是更大的"方法论包"
-// - 命名空间避免规则 ID 冲突：@core/user-mgmt 的 SEC-001 → 全局键 @core/user-mgmt/SEC-001
+// - 命名空间避免规则 ID 冲突：user-mgmt 的 SEC-001 → 全局键 user-mgmt/SEC-001（建议 6：当前阶段用简单名）
 // - overrides 显式声明覆盖行为，禁止隐式覆盖（P3-4 双向绑定）
 
 /**
@@ -11,7 +11,7 @@
  * 对应 skill.yaml 的 [package] 段。
  */
 export interface SkillPackageMeta {
-  /** 全局唯一名称，含命名空间：'@core/user-mgmt' / '@community/rbac-spec' */
+  /** 全局唯一名称，简单名（'user-mgmt'）或命名空间形式（'@ns/name'，建议 6：当前阶段用简单名） */
   name: string;
   /** 语义化版本 */
   version: string;

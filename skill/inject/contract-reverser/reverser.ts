@@ -9,7 +9,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 import type { ProjectProfile } from '../detector/types.js';
-import type { ReversedEndpoint, ReversedOpenApi, ReverseResult } from './types.js';
+import type { ReversedEndpoint, ReversedOpenApi, ReverseResult, AccuracyTag } from './types.js';
 
 interface RouteCall {
   method: string;
@@ -17,6 +17,18 @@ interface RouteCall {
   handler?: string;
   requestType?: string;
   responseType?: string;
+}
+
+/**
+ * 计算准确性标记（建议 7）。
+ * - verified：置信度 ≥ 0.9 且 request/response 类型都已知
+ * - partial：置信度 0.7-0.9 或仅知单一类型
+ * - inferred：置信度 < 0.7 或类型全无
+ */
+function computeAccuracy(confidence: number, hasRequest: boolean, hasResponse: boolean): AccuracyTag {
+  if (confidence >= 0.9 && hasRequest && hasResponse) return 'verified';
+  if (confidence >= 0.7 && (hasRequest || hasResponse)) return 'partial';
+  return 'inferred';
 }
 
 /**
@@ -45,24 +57,47 @@ export function reverseApi(rootDir: string, profile: ProjectProfile): ReverseRes
     warnings.push('未找到路由 / Controller，可能项目未实现 HTTP 端点');
   }
 
-  // 转 ReversedEndpoint
-  const endpoints: ReversedEndpoint[] = calls.map((c) => ({
-    method: c.method.toUpperCase(),
-    path: c.path,
-    handler_file: c.handler,
-    request_schema: c.requestType ? { $ref: `#/components/schemas/${c.requestType}` } : undefined,
-    response_schema: c.responseType ? { $ref: `#/components/schemas/${c.responseType}` } : undefined,
-    confidence: c.requestType && c.responseType ? 0.9 : c.handler ? 0.7 : 0.5,
-    notes: !c.requestType && !c.responseType ? '未提取到请求/响应类型，需人工 review' : undefined,
-  }));
+  // 转 ReversedEndpoint（建议 7：加 accuracy 标记）
+  const endpoints: ReversedEndpoint[] = calls.map((c) => {
+    const confidence = c.requestType && c.responseType ? 0.9 : c.handler ? 0.7 : 0.5;
+    const hasReq = !!c.requestType;
+    const hasResp = !!c.responseType;
+    const accuracy = computeAccuracy(confidence, hasReq, hasResp);
+    return {
+      method: c.method.toUpperCase(),
+      path: c.path,
+      handler_file: c.handler,
+      request_schema: c.requestType ? { $ref: `#/components/schemas/${c.requestType}` } : undefined,
+      response_schema: c.responseType ? { $ref: `#/components/schemas/${c.responseType}` } : undefined,
+      confidence,
+      accuracy,
+      notes: accuracy === 'inferred' ? '未提取到请求/响应类型，需人工 review' : undefined,
+    };
+  });
 
-  // 生成 OpenAPI
+  // 汇总 accuracy
+  const accuracySummary = {
+    inferred: endpoints.filter((e) => e.accuracy === 'inferred').length,
+    partial: endpoints.filter((e) => e.accuracy === 'partial').length,
+    verified: endpoints.filter((e) => e.accuracy === 'verified').length,
+  };
+  if (accuracySummary.inferred > 0) {
+    warnings.push(`${accuracySummary.inferred} 个端点为 inferred（置信度 < 0.7），需人工 review 后改为 verified`);
+  }
+
+  // 生成 OpenAPI（带 accuracy 标记）
   const openapi = buildOpenApi(endpoints, profile);
 
   // markdown 报告
-  const md = renderMarkdown(endpoints, warnings);
+  const md = renderMarkdown(endpoints, warnings, accuracySummary);
 
-  return { endpoints, openapi, markdown_report: md, warnings };
+  return {
+    endpoints,
+    openapi,
+    markdown_report: md,
+    warnings,
+    accuracy_summary: accuracySummary,
+  };
 }
 
 // ============ TS 路由提取 ============
@@ -151,6 +186,9 @@ function buildOpenApi(endpoints: ReversedEndpoint[], profile: ProjectProfile): R
     if (!paths[ep.path]) paths[ep.path] = {};
     paths[ep.path][ep.method.toLowerCase()] = {
       summary: ep.handler_file ? `Handler: ${ep.handler_file}` : 'Unknown handler',
+      // 建议 7：每个端点标记 accuracy（OpenAPI extension 字段 x-ai-spec-accuracy）
+      'x-ai-spec-accuracy': ep.accuracy,
+      'x-ai-spec-confidence': ep.confidence,
       responses: {
         '200': {
           description: '成功响应',
@@ -166,6 +204,10 @@ function buildOpenApi(endpoints: ReversedEndpoint[], profile: ProjectProfile): R
         : undefined,
     };
   }
+  // 整体 accuracy：所有 verified → verified；否则 inferred 或 partial
+  const allVerified = endpoints.length > 0 && endpoints.every((e) => e.accuracy === 'verified');
+  const anyInferred = endpoints.some((e) => e.accuracy === 'inferred');
+  const overallAccuracy: AccuracyTag = allVerified ? 'verified' : anyInferred ? 'inferred' : 'partial';
   return {
     openapi: '3.0.3',
     info: {
@@ -173,25 +215,41 @@ function buildOpenApi(endpoints: ReversedEndpoint[], profile: ProjectProfile): R
       version: '0.1.0',
     },
     paths,
+    accuracy: overallAccuracy,
   };
 }
 
 // ============ Markdown 报告 ============
 
-function renderMarkdown(endpoints: ReversedEndpoint[], warnings: string[]): string {
+function renderMarkdown(
+  endpoints: ReversedEndpoint[],
+  warnings: string[],
+  accuracySummary: { inferred: number; partial: number; verified: number },
+): string {
   const lines: string[] = [];
   lines.push('# API 逆向契约报告');
   lines.push('');
   lines.push(`> 自动生成 · ${new Date().toISOString()}`);
   lines.push('');
+  // 建议 7：accuracy 汇总
+  if (endpoints.length > 0) {
+    lines.push('## 准确性汇总');
+    lines.push('');
+    lines.push('| 标记 | 数量 | 含义 |');
+    lines.push('|---|---|---|');
+    lines.push(`| [verified] | ${accuracySummary.verified} | 类型完整，置信度 ≥ 0.9，可直接使用 |`);
+    lines.push(`| [partial] | ${accuracySummary.partial} | 部分类型已知，需补充 |`);
+    lines.push(`| [inferred] | ${accuracySummary.inferred} | 推断生成，置信度 < 0.7，须人工 review |`);
+    lines.push('');
+  }
   if (endpoints.length === 0) {
     lines.push('未提取到任何 API 端点。');
   } else {
-    lines.push('| 方法 | 路径 | 处理文件 | 置信度 | 备注 |');
-    lines.push('|---|---|---|---|---|');
+    lines.push('| 方法 | 路径 | 处理文件 | 置信度 | 准确性 | 备注 |');
+    lines.push('|---|---|---|---|---|---|');
     for (const ep of endpoints) {
       lines.push(
-        `| ${ep.method} | ${ep.path} | ${ep.handler_file ?? '-'} | ${ep.confidence.toFixed(2)} | ${ep.notes ?? ''} |`,
+        `| ${ep.method} | ${ep.path} | ${ep.handler_file ?? '-'} | ${ep.confidence.toFixed(2)} | [${ep.accuracy}] | ${ep.notes ?? ''} |`,
       );
     }
   }

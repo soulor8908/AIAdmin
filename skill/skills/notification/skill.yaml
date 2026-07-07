@@ -2,7 +2,7 @@
 # 占位 manifest。
 
 package:
-  name: '@core/notification'
+  name: 'notification'
   version: '0.1.0'
   description: '通知域 Skill: 邮件 / 短信 / 站内信 / 推送的 spec-first 规则'
   author: 'ai-spec'

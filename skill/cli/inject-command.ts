@@ -1,13 +1,13 @@
 // cli/inject-command.ts —— ai-spec inject 子命令
 // P2 主入口：探测 → 分析 → 逆向契约 → 注入计划 → 执行 → 安全网
 //
-// 用法：
-//   ai-spec inject                              # 全流程交互
-//   ai-spec inject --dry-run                     # 只生成计划，不写入
-//   ai-spec inject --no-safety-net               # 跳过测试安全网
-//   ai-spec inject --severity advisory           # 指定默认级别
-//   ai-spec inject --gate-up ARCH-001:warning    # 升级规则级别
-//   ai-spec rollback                             # 回滚最近一次注入
+// 用法（建议 5：dry-run 默认，--apply 才执行）：
+//   ai-spec inject                # 默认 dry-run，只输出计划
+//   ai-spec inject --apply        # 确认后执行（须人工 review 计划后）
+//   ai-spec inject --apply --force  # 跳过确认（CI 场景）
+//   ai-spec inject --no-safety-net  # 跳过测试安全网
+//   ai-spec inject --severity advisory  # 指定默认级别
+//   ai-spec rollback              # 回滚最近一次注入
 
 import { Command } from 'commander';
 import { detectProject, detectAndWriteProfile } from '../inject/detector/detector.js';
@@ -23,8 +23,12 @@ import type { InjectionConfig, SeverityLevel } from '../inject/rule-injector/typ
 export function registerInjectCommand(program: Command): void {
   const inject = program
     .command('inject')
-    .description('对既有项目注入 spec-first 基础设施')
-    .option('--dry-run', '只生成计划，不写入', false)
+    .description('对既有项目注入 spec-first 基础设施（默认 dry-run，--apply 才执行）')
+    // 建议 5：dry-run 是默认行为，--apply 才真正执行
+    .option('--apply', '确认执行（默认 dry-run，加此选项才写入）', false)
+    .option('--force', '跳过确认提示（CI 场景，须配合 --apply）', false)
+    // 兼容旧用法：--dry-run 显式声明（无效果，但兼容）
+    .option('--dry-run', '显式 dry-run（默认行为，无须指定）', false)
     .option('--severity <level>', '默认级别 (advisory|warning|blocking)', 'advisory')
     .option('--no-safety-net', '跳过测试安全网', false)
     .option('--no-analyze', '跳过架构分析', false)
@@ -52,7 +56,9 @@ export function registerInjectCommand(program: Command): void {
 
 async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
   const rootDir = process.cwd();
-  const dryRun = cmdOpts.dryRun === true;
+  // 建议 5：默认 dry-run，--apply 才执行
+  const apply = cmdOpts.apply === true;
+  const force = cmdOpts.force === true;
   const noSafetyNet = cmdOpts.safetyNet === false;
   const noAnalyze = cmdOpts.analyze === false;
   const noReverse = cmdOpts.reverse === false;
@@ -60,7 +66,7 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
 
   logger.banner();
   logger.info(`目标目录：${rootDir}`);
-  logger.info(`模式：${dryRun ? 'dry-run（仅计划）' : '执行（写入 + 备份）'}`);
+  logger.info(`模式：${apply ? '执行（写入 + 备份）' : 'dry-run（仅计划，--apply 才执行）'}`);
 
   // 1. 探测
   logger.startStep('探测项目技术栈');
@@ -109,9 +115,9 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
     }
   }
 
-  // 4. 安全网 baseline（注入前）
+  // 4. 安全网 baseline（注入前，仅 apply 模式）
   let baseline = undefined;
-  if (!noSafetyNet && !dryRun) {
+  if (!noSafetyNet && apply) {
     logger.startStep('捕获测试 baseline');
     try {
       baseline = loadBaseline(rootDir) ?? captureBaseline(rootDir, profile);
@@ -122,16 +128,15 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
     }
   }
 
-  // 5. 注入计划
+  // 5. 注入计划（dry-run 模式也生成，供 review）
   logger.startStep('生成注入计划');
   const config: InjectionConfig = {
     out_dir: '.ai-spec',
     default_level: severity,
     overrides: {},
-    dry_run: dryRun,
+    dry_run: !apply,  // apply=false 时 dry_run=true
   };
   const plan = planInjection(rootDir, profile, config);
-  // 写入计划到 .ai-spec/inject-plan.md
   const planDir = join(rootDir, '.ai-spec');
   if (!existsSync(planDir)) mkdirSync(planDir, { recursive: true });
   writeFileSync(join(planDir, 'inject-plan.md'), plan.markdown);
@@ -140,8 +145,19 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
     true,
   );
 
-  // 6. 执行（非 dry-run）
-  if (!dryRun) {
+  // 6. 执行（仅 apply 模式）
+  if (apply) {
+    // --force 跳过确认（CI 场景），否则提示用户确认
+    if (!force) {
+      logger.blank();
+      logger.warn(`即将写入 ${plan.impact.new_files + plan.impact.modified_files} 个文件`);
+      logger.warn(`请先 review ${planDir}/inject-plan.md`);
+      logger.warn(`确认无误后，重新执行：ai-spec inject --apply --force`);
+      logger.blank();
+      logger.info('提示：本次未执行（未加 --force）');
+      return;
+    }
+
     logger.startStep('执行注入');
     const result = executeInjection(rootDir, plan);
     logger.endStep(`执行注入 (${result.written} 文件, ${result.backups.length} 备份)`, true);
@@ -172,7 +188,7 @@ async function runInject(cmdOpts: Record<string, unknown>): Promise<void> {
     logger.blank();
     logger.success('dry-run 计划已生成');
     logger.info(`查看：${planDir}/inject-plan.md`);
-    logger.info(`执行：去掉 --dry-run 重跑`);
+    logger.info(`执行：ai-spec inject --apply --force`);
   }
 }
 

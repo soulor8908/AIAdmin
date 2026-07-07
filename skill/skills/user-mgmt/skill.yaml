@@ -2,7 +2,7 @@
 # 沉淀自 mvp/ 实验期 user / auth / role 域的 spec-first 规则与模板。
 
 package:
-  name: '@core/user-mgmt'
+  name: 'user-mgmt'
   version: '0.1.0'
   description: '用户管理域 Skill：注册 / 登录 / 角色 / 权限的 spec-first 规则与模板'
   author: 'ai-spec'

@@ -2,7 +2,7 @@
 # 沉淀自 mvp/ 实验期 audit 域（append-only + before/after 快照 + redaction）。
 
 package:
-  name: '@core/audit-log'
+  name: 'audit-log'
   version: '0.1.0'
   description: '审计日志域 Skill：append-only 写入 + before/after 快照 + PII 脱敏'
   author: 'ai-spec'
