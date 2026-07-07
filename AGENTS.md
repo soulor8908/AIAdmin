@@ -97,14 +97,39 @@ npm test            # vitest run（1272 用例）
 - `[advisory]` 项：允许偏离，但必须 PR 描述含"反向同步 Spec：{{项}}"，并实际编辑 Tech-Spec 对应章节
 - **伪同步检测**（R18 S-21）：仅在代码注释声明"已反向同步"但 Spec 文件未实际编辑 = 违规
 
-### @ai-spec/skill 消费（Phase 2 新增）
+### @ai-spec/skill 消费（Phase 2 新增，P0/P1 review 修复后）
 
 AIAdmin 通过 npm 依赖 `@ai-spec/skill`（独立仓库 [soulor8908/ai-spec-skill](https://github.com/soulor8908/ai-spec-skill)）消费 spec-first 工作流方法论资产。
 
 **依赖关系**：
 - `mvp/package.json`：`"@ai-spec/skill": "github:soulor8908/ai-spec-skill#main"`
-- 包提供：RuleEngine / loadRules / BuiltinRegexPlugin / InjectPipeline / 三个契约 renderer / scoreSpec
+- 包提供（主入口 `@ai-spec/skill`）：RuleEngine / loadRules / BuiltinRegexPlugin / InjectPipeline / 三个契约 renderer / scoreSpec / getBuiltinRulesDir
+- 子路径按需导入（P0.3 新增）：`@ai-spec/skill/engine`、`@ai-spec/skill/inject`、`@ai-spec/skill/adapters`、`@ai-spec/skill/intelligence`
 - 包内 `src/kernel/rules/*.yaml` 为 13 项 enforcement 的声明式 SSOT
+- 包内 `src/adapters/` 含适配器 manifest + 模板（P1.11 修正：files 白名单已包含，路径经 `getPackageRoot()` 解析）
+
+**dist/ 分发机制**（P0.1 修正）：
+- `dist/` 不入 git（.gitignore 排除），通过 `prepare` 脚本在 `npm install` 时自动 `tsc` 构建
+- npm 对 git 依赖会安装 devDeps 并执行 `prepare`，消费方无须手动 build
+- 更新包后须 `npm cache clean --force` + 重装，否则 npm 可能用缓存的旧 tarball
+
+**RuleEngine 构造签名**（P0.2 修正，README 已对齐）：
+```ts
+// 正确：构造需 rootDir + profile；BuiltinRegexPlugin 由 engine 自动注册
+const engine = new RuleEngine({
+  rootDir: process.cwd(),
+  profile: { language: 'typescript', overall_confidence: 1.0, signals: [] },
+});
+const result = await engine.run();  // 无参，options 在构造时给定
+```
+
+**BuiltinRegexPlugin 用法**（P1.6 修正）：
+- 无参构造：`new BuiltinRegexPlugin()` 内部 auto-load 包内 kernel/rules
+- 仍接受显式 rules：`new BuiltinRegexPlugin(rules)`（测试场景用）
+
+**InjectPipeline 用法**（P0.4/P1.5 修正）：
+- 公共 API 仅暴露 `InjectPipeline` 类 + 类型，底层函数（detectProject/analyzeArchitecture 等）不再从公共导出
+- CLI（`cli/inject-command.ts`）通过 `onStage` 回调接入交互日志，不再重复编排逻辑（DRY）
 
 **check-rules.mjs 委托**（`mvp/scripts/check-rules.mjs`）：
 - 规则**定义**委托 @ai-spec/skill：启动时 `loadRules(getBuiltinRulesDir())` 加载 22 条声明式规则
@@ -119,8 +144,8 @@ AIAdmin 通过 npm 依赖 `@ai-spec/skill`（独立仓库 [soulor8908/ai-spec-sk
 **更新 @ai-spec/skill 包**：
 ```bash
 # 1. 在 ai-spec-skill 仓库改代码 → push main
-# 2. AIAdmin 拉最新版：
-cd mvp && npm update @ai-spec/skill
+# 2. AIAdmin 拉最新版（须清缓存，否则用旧 tarball）：
+cd mvp && npm cache clean --force && npm install
 # 3. 跑 parity 测试验证：
 npx vitest run apps/api/test/skill-parity.test.ts
 # 4. 跑 lint:rules 验证 SKILL-PARITY 对齐：
