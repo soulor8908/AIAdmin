@@ -8,6 +8,7 @@ import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSy
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GenerateOptions } from './options.js';
+import { isExperimental } from './options.js';
 import type { WriteOp } from '../spi/adapter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,11 +32,11 @@ export async function renderProject(opts: GenerateOptions): Promise<RenderResult
   writes.push(...renderContracts(opts));
 
   // 4. apps/api/（按 backend 渲染）
-  writes.push(...renderAppsApi(opts));
+  writes.push(...renderAppsApi(opts, warnings));
 
   // 5. apps/web/（按 frontend 渲染）
   if (opts.stack.frontend !== 'none') {
-    writes.push(...renderAppsWeb(opts));
+    writes.push(...renderAppsWeb(opts, warnings));
   }
 
   // 6. scripts/（工具脚本）
@@ -43,7 +44,7 @@ export async function renderProject(opts: GenerateOptions): Promise<RenderResult
 
   // 7. .github/workflows/（按 ci 渲染）
   if (opts.stack.ci !== 'none') {
-    writes.push(...renderCi(opts));
+    writes.push(...renderCi(opts, warnings));
   }
 
   // 8. docs/（PRD/Tech-Spec/Review/Retro 目录占位）
@@ -68,6 +69,24 @@ export async function renderProject(opts: GenerateOptions): Promise<RenderResult
     deduped.set(w.path, w);
   }
   const finalWrites = [...deduped.values()];
+
+  // 建议 4：渲染后占位符残留检测
+  // 检查"生成代码"是否含未替换 {{...}} 占位符
+  // 注意：.ai-spec/ 下是 kernel 拷贝的模板/角色提示词，本就是模板格式（含 {{var}}），不检测
+  // .tmpl 文件是适配器模板源文件，也不检测
+  for (const w of finalWrites) {
+    // 跳过模板源文件（本就是模板）
+    if (w.path.startsWith('.ai-spec/')) continue;
+    if (w.path.endsWith('.hbs')) continue;
+    if (w.path.endsWith('.tmpl')) continue;
+    // 检测未替换占位符
+    const leftover = w.content.match(/\{\{[a-zA-Z_-]+\}\}/g);
+    if (leftover) {
+      warnings.push(
+        `文件 ${w.path} 含未替换占位符：${[...new Set(leftover)].join(', ')}（建议 4：渲染后验证）`,
+      );
+    }
+  }
 
   return { writes: finalWrites, warnings };
 }
@@ -340,13 +359,14 @@ function renderContracts(opts: GenerateOptions): WriteOp[] {
 
 // ============ 4. apps/api/ ============
 
-function renderAppsApi(opts: GenerateOptions): WriteOp[] {
+function renderAppsApi(opts: GenerateOptions, warnings: string[]): WriteOp[] {
   const writes: WriteOp[] = [];
   const isTs = opts.stack.backend.endsWith('-ts');
 
   if (isTs) {
     // server.ts 从适配器目录加载（fastify-ts / express-ts 真正差异）
-    const serverTemplate = loadAdapterFile('backend', opts.stack.backend, 'server.ts.tmpl');
+    // 缺失 files/ 视为开发期问题，直接抛错而非静默 fallback（建议 1）
+    const serverTemplate = loadAdapterFileOrThrow('backend', opts.stack.backend, 'server.ts.tmpl');
     writes.push({
       path: 'apps/api/src/server.ts',
       content: serverTemplate,
@@ -390,12 +410,67 @@ function renderAppsApi(opts: GenerateOptions): WriteOp[] {
       reason: 'P1-2 api 子包（按 backend 动态依赖）',
     });
   } else if (opts.stack.backend === 'fastapi') {
-    writes.push({
-      path: 'app/main.py',
-      content: PY_MAIN,
-      is_new: true,
-      reason: 'P1-1 fastapi 骨架',
-    });
+    // FastAPI：从适配器目录加载 main.py.tmpl / requirements.txt.tmpl（P2-8 已提供）
+    if (adapterFileExists('backend', 'fastapi', 'main.py.tmpl')) {
+      writes.push({
+        path: 'app/main.py',
+        content: renderAdapterTemplate(loadAdapterFileOrThrow('backend', 'fastapi', 'main.py.tmpl'), opts),
+        is_new: true,
+        reason: 'P2-8 fastapi 适配器 main.py',
+      });
+      writes.push({
+        path: 'requirements.txt',
+        content: renderAdapterTemplate(loadAdapterFileOrThrow('backend', 'fastapi', 'requirements.txt.tmpl'), opts),
+        is_new: true,
+        reason: 'P2-8 fastapi 依赖清单',
+      });
+    } else {
+      // 兜底：内联骨架（兼容旧版）
+      writes.push({ path: 'app/main.py', content: PY_MAIN, is_new: true, reason: 'P1-1 fastapi 骨架（兜底）' });
+      warnings.push('fastapi 适配器目录缺 files/main.py.tmpl，使用内联兜底骨架');
+    }
+  } else if (opts.stack.backend === 'spring-boot') {
+    // Spring Boot：从 P2-8 适配器目录加载 Java 模板（不再静默不生成）
+    if (!adapterFileExists('backend', 'spring-boot', 'server.java.tmpl')) {
+      warnings.push(
+        'spring-boot 适配器缺 files/server.java.tmpl，Java 骨架无法生成（experimental 适配器防护，建议 1）',
+      );
+    } else {
+      const groupName = opts.project_name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'demoapp';
+      const artifactId = groupName;
+      const renderedServer = renderAdapterTemplate(
+        loadAdapterFileOrThrow('backend', 'spring-boot', 'server.java.tmpl'),
+        opts,
+      ).replace('{{group-name}}', groupName).replace('{{artifact-id}}', artifactId);
+      writes.push({
+        path: `src/main/java/com/example/${artifactId}/Application.java`,
+        content: renderedServer,
+        is_new: true,
+        reason: 'P2-8 spring-boot 适配器 Application.java',
+      });
+      const renderedHealth = renderAdapterTemplate(
+        loadAdapterFileOrThrow('backend', 'spring-boot', 'health.java.tmpl'),
+        opts,
+      ).replace('{{group-name}}', groupName).replace('{{artifact-id}}', artifactId);
+      writes.push({
+        path: `src/main/java/com/example/${artifactId}/controller/HealthController.java`,
+        content: renderedHealth,
+        is_new: true,
+        reason: 'P2-8 spring-boot 适配器 HealthController',
+      });
+      writes.push({
+        path: 'pom.xml',
+        content: renderAdapterTemplate(
+          loadAdapterFileOrThrow('backend', 'spring-boot', 'pom.xml.tmpl'),
+          opts,
+        ).replace('{{project-name}}', opts.project_name),
+        is_new: true,
+        reason: 'P2-8 spring-boot 适配器 pom.xml',
+      });
+    }
+  } else {
+    // 未知 backend：experimental 防护，显式警告而非静默
+    warnings.push(`backend="${opts.stack.backend}" 无对应适配器 files/，apps/api 未生成（experimental 防护）`);
   }
 
   return writes;
@@ -403,14 +478,18 @@ function renderAppsApi(opts: GenerateOptions): WriteOp[] {
 
 // ============ 5. apps/web/ ============
 
-function renderAppsWeb(opts: GenerateOptions): WriteOp[] {
+function renderAppsWeb(opts: GenerateOptions, warnings: string[]): WriteOp[] {
   const writes: WriteOp[] = [];
   if (opts.stack.frontend !== 'react-vite') {
+    // experimental 前端防护：显式警告 + 写入说明文件（不再静默 fallback）
+    warnings.push(
+      `frontend="${opts.stack.frontend}" 为 experimental，未生成 React 骨架（experimental 适配器防护，建议 1）`,
+    );
     writes.push({
       path: '.ai-spec/experimental-frontend.txt',
-      content: `前端栈 ${opts.stack.frontend} 在 MVP 期为 experimental，未生成骨架。\n`,
+      content: `前端栈 ${opts.stack.frontend} 在 MVP 期为 experimental，未生成骨架。\n如需使用，请手动配置。\n`,
       is_new: true,
-      reason: 'P1-1 experimental 前端占位',
+      reason: 'P1-1 experimental 前端占位（显式警告）',
     });
     return writes;
   }
@@ -492,13 +571,17 @@ function renderScripts(opts: GenerateOptions): WriteOp[] {
 
 // ============ 7. .github/workflows/ ============
 
-function renderCi(opts: GenerateOptions): WriteOp[] {
+function renderCi(opts: GenerateOptions, warnings: string[]): WriteOp[] {
   if (opts.stack.ci !== 'github-actions') {
+    // experimental CI 防护：显式警告
+    warnings.push(
+      `ci="${opts.stack.ci}" 为 experimental，未生成 CI 配置（experimental 适配器防护，建议 1）`,
+    );
     return [{
       path: '.ai-spec/experimental-ci.txt',
-      content: `CI 平台 ${opts.stack.ci} 在 MVP 期为 experimental，未生成配置。\n`,
+      content: `CI 平台 ${opts.stack.ci} 在 MVP 期为 experimental，未生成配置。\n如需使用，请手动配置。\n`,
       is_new: true,
-      reason: 'P1-1 experimental CI 占位',
+      reason: 'P1-1 experimental CI 占位（显式警告）',
     }];
   }
   return [{
@@ -604,12 +687,36 @@ function normalizePkgName(name: string): string {
  * 路径：adapters/<type>/<id>/files/<fileName>
  * 失败时抛错（适配器缺失是开发期问题，不应静默回退）。
  */
-function loadAdapterFile(type: string, id: string, fileName: string): string {
+function loadAdapterFileOrThrow(type: string, id: string, fileName: string): string {
   const path = join(__dirname, '..', 'adapters', type, id, 'files', fileName);
   if (!existsSync(path)) {
-    throw new Error(`适配器模板缺失：adapters/${type}/${id}/files/${fileName}`);
+    throw new Error(`适配器模板缺失：adapters/${type}/${id}/files/${fileName}（experimental 适配器防护，建议 1）`);
   }
   return readFileSync(path, 'utf8');
+}
+
+/** 旧别名：保持向后兼容 */
+const loadAdapterFile = loadAdapterFileOrThrow;
+
+/**
+ * 检查适配器文件是否存在（不抛错）。
+ */
+function adapterFileExists(type: string, id: string, fileName: string): boolean {
+  const path = join(__dirname, '..', 'adapters', type, id, 'files', fileName);
+  return existsSync(path);
+}
+
+/**
+ * 渲染适配器模板：替换 {{var}} 占位符。
+ * 当前实现最小化（只替换 project-name），未来可扩展为 handlebars。
+ *
+ * 建议 4：渲染后校验，无 {{...}} 残留（在 renderProject 末尾统一检测）。
+ */
+function renderAdapterTemplate(template: string, opts: GenerateOptions): string {
+  let result = template;
+  result = result.replace(/\{\{project-name\}\}/g, opts.project_name);
+  result = result.replace(/\{\{project_name\}\}/g, opts.project_name);
+  return result;
 }
 
 // ============ 内联模板字符串 ============

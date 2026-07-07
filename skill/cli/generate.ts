@@ -6,7 +6,8 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import type { GenerateOptions } from './options.js';
+import type { GenerateOptions, StackKey } from './options.js';
+import { isExperimental, countExperimental } from './options.js';
 import { renderProject } from './template-engine.js';
 import { logger } from './log.js';
 
@@ -35,6 +36,23 @@ export async function generateProject(opts: GenerateOptions): Promise<GenerateRe
     logger.warn(`目录已存在但无 package.json，将合并：${outDir}`);
   } else {
     mkdirSync(outDir, { recursive: true });
+  }
+
+  // 1.5 experimental 适配器防护（建议 1）
+  // 列出所有 experimental 选择，若未显式 --yes 确认则警告
+  const experimentalChoices: string[] = [];
+  for (const key of ['backend', 'db', 'frontend', 'auth', 'ci'] as StackKey[]) {
+    if (isExperimental(key, opts.stack[key])) {
+      experimentalChoices.push(`${key}=${opts.stack[key]}`);
+    }
+  }
+  if (experimentalChoices.length > 0) {
+    const msg = `experimental 选型：${experimentalChoices.join(', ')}（可能存在缺陷，建议 1）`;
+    if (opts.yes) {
+      warnings.push(msg);
+    } else {
+      logger.warn(msg);
+    }
   }
 
   // 2. 渲染项目文件（P1-3 template-engine 接管）

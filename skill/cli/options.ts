@@ -60,6 +60,26 @@ export const GOLDEN_COMBO: StackSelection = {
 };
 
 /**
+ * 判断某个 stack 选项是否为 experimental。
+ * experimental 适配器可能缺完整 files/，调用方应据此加显式确认。
+ */
+export function isExperimental(category: StackKey, value: string): boolean {
+  const opts = STACK_OPTIONS[category] as ReadonlyArray<{ value: string; experimental?: boolean }>;
+  return opts.find((o) => o.value === value)?.experimental === true;
+}
+
+/**
+ * 统计 stack 中 experimental 选项数量。
+ */
+export function countExperimental(stack: StackSelection): number {
+  let n = 0;
+  for (const key of Object.keys(STACK_OPTIONS) as StackKey[]) {
+    if (isExperimental(key, stack[key])) n++;
+  }
+  return n;
+}
+
+/**
  * 完整生成选项（含项目元数据）。
  */
 export interface GenerateOptions {

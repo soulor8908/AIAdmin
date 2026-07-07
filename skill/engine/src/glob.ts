@@ -179,3 +179,26 @@ export function extractMatches(regex: RegExp, source: string): Array<{ line: num
   }
   return result;
 }
+
+/**
+ * 收集规则适用文件清单（按多个 glob 模式匹配 + 去重）。
+ * 抽自 engine.ts，使核心只做"调度 + 报告"，文件扫描集中在 glob.ts（建议 3）。
+ *
+ * @param rootDir 项目根目录
+ * @param patterns glob 模式数组
+ * @returns 去重后的绝对路径数组
+ */
+export function collectFiles(rootDir: string, patterns: string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const pattern of patterns) {
+    const matched = matchGlob(rootDir, pattern);
+    for (const f of matched) {
+      if (!seen.has(f)) {
+        seen.add(f);
+        result.push(f);
+      }
+    }
+  }
+  return result;
+}

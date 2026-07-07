@@ -23,7 +23,7 @@ import type {
   RuleCheckInput,
   ProjectProfile,
 } from '../../spi/adapter.js';
-import { matchGlob, extractMatches } from './glob.js';
+import { extractMatches, collectFiles } from './glob.js';
 
 export interface EngineOptions {
   /** 规则目录（默认 'kernel/rules'） */
@@ -165,8 +165,8 @@ export class RuleEngine {
    * - import-graph / ast kind：须 plugin
    */
   private async executeRule(rule: DeclarativeRule): Promise<RuleFinding[]> {
-    // 文件预过滤（按 applies_to.file_patterns）
-    const files = this.collectFiles(rule.applies_to.file_patterns);
+    // 文件预过滤（按 applies_to.file_patterns，建议 3：抽到 glob.ts）
+    const files = collectFiles(this.options.rootDir, rule.applies_to.file_patterns);
 
     if (rule.check.kind === 'manual') {
       // manual 类不执行机器检查，仅记录"须人工校验"info
@@ -273,24 +273,6 @@ export class RuleEngine {
       }
     }
     return findings;
-  }
-
-  /**
-   * 收集规则适用文件清单（按 glob 模式）。
-   */
-  private collectFiles(patterns: string[]): string[] {
-    const result: string[] = [];
-    const seen = new Set<string>();
-    for (const pattern of patterns) {
-      const matched = matchGlob(this.options.rootDir, pattern);
-      for (const f of matched) {
-        if (!seen.has(f)) {
-          seen.add(f);
-          result.push(f);
-        }
-      }
-    }
-    return result;
   }
 
   /**
